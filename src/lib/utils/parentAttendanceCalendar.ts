@@ -15,9 +15,9 @@ export const DAY_STYLES: Record<
   { bg: string; text: string; border: string; icon: string; label: string }
 > = {
   present: {
-    bg: '#EAF4E0',
-    text: '#2E6B1A',
-    border: '#A8D88A',
+    bg: '#E8EEF7',
+    text: '#1A305E',
+    border: '#B8C5DB',
     icon: '✓',
     label: 'tiempo',
   },
@@ -29,23 +29,23 @@ export const DAY_STYLES: Record<
     label: 'tarde',
   },
   absent: {
-    bg: '#FDEAEA',
-    text: '#8B1F1F',
-    border: '#F2A0A0',
+    bg: '#FCEEEF',
+    text: '#B11E2A',
+    border: '#E8B4B8',
     icon: '✗',
     label: 'falta',
   },
   norecord: {
-    bg: '#F7F8FA',
+    bg: '#F4F6FA',
     text: '#6B7280',
-    border: '#E8EAF0',
+    border: '#D9E0EC',
     icon: '',
     label: '',
   },
   noclass: {
-    bg: '#F1F2F5',
+    bg: '#EEF1F6',
     text: '#9095A3',
-    border: '#DDE0E8',
+    border: '#D9E0EC',
     icon: '',
     label: '',
   },
@@ -133,10 +133,10 @@ export function computeMonthMetrics(
 
 export function topStripGradient(present: number, late: number, absent: number): string {
   const total = present + late + absent;
-  if (total === 0) return 'linear-gradient(to right, #DDE0E8, #DDE0E8)';
+  if (total === 0) return 'linear-gradient(to right, #D9E0EC, #D9E0EC)';
   const g = (present / total) * 100;
   const a = (late / total) * 100;
-  return `linear-gradient(to right, #A8D88A 0%, #A8D88A ${g}%, #F5C97A ${g}%, #F5C97A ${g + a}%, #F2A0A0 ${g + a}%, #F2A0A0 100%)`;
+  return `linear-gradient(to right, #B8C5DB 0%, #B8C5DB ${g}%, #F5C97A ${g}%, #F5C97A ${g + a}%, #E8B4B8 ${g + a}%, #E8B4B8 100%)`;
 }
 
 export function dayDetailCopy(

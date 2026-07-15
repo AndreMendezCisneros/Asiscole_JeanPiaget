@@ -254,7 +254,7 @@ export function ParentAttendanceDashboard({
                       onClick={() => setSelectedDay(isSelected ? null : dayKey)}
                       className={cn(
                         'flex min-h-[44px] flex-col items-center justify-center rounded-[10px] border px-0.5 py-1 sm:min-h-[52px]',
-                        isToday && 'outline outline-2 outline-[#3B82F6] outline-offset-2 bg-white'
+                        isToday && 'outline outline-2 outline-[#1A305E] outline-offset-2 bg-white'
                       )}
                       style={{
                         background: isToday ? '#FFFFFF' : style.bg,

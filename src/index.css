@@ -3993,9 +3993,9 @@
 .parent-portal-page {
   min-height: 100%;
   background:
-    radial-gradient(1200px 500px at 5% -10%, hsl(var(--primary) / 0.12), transparent 60%),
-    radial-gradient(900px 420px at 95% 0%, hsl(var(--accent) / 0.09), transparent 55%),
-    radial-gradient(600px 300px at 50% 100%, hsl(var(--success) / 0.05), transparent 50%),
+    radial-gradient(1200px 500px at 5% -10%, hsl(var(--primary) / 0.14), transparent 60%),
+    radial-gradient(900px 420px at 95% 0%, hsl(var(--accent) / 0.1), transparent 55%),
+    radial-gradient(600px 300px at 50% 100%, hsl(var(--primary) / 0.06), transparent 50%),
     linear-gradient(180deg, hsl(var(--background-alt) / 0.55) 0%, hsl(var(--background)) 30%);
 }
 

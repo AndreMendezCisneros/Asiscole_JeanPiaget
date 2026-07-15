@@ -7,6 +7,7 @@ import { useParentPortalOptional } from '@/contexts/ParentPortalContext';
 import { toast } from 'sonner';
 import { useParentShellAnimation } from '@/hooks/useParentPortalAnimations';
 import { GuardyMark } from '@/components/brand/GuardyMark';
+import { SCHOOL_NAME } from '@/config/siteSeo';
 
 interface ParentLayoutProps {
   children: ReactNode;
@@ -14,9 +15,9 @@ interface ParentLayoutProps {
 
 function parentHeaderSubtitle(childCount: number): string {
   if (childCount > 1) {
-    return `${childCount} hijos/as a cargo · Colegio Jean Piaget`;
+    return `${childCount} hijos/as a cargo · ${SCHOOL_NAME}`;
   }
-  return 'Portal familiar · Colegio Jean Piaget';
+  return `Portal familiar · ${SCHOOL_NAME}`;
 }
 
 /** Layout simple para apoderados: una sola cabecera, sin menú lateral de personal */
