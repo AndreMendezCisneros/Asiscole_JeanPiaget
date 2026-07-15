@@ -1,0 +1,12 @@
+[Unit]
+Description=Timer diario calentamiento chips WhatsApp SIE
+
+[Timer]
+# 09:30 hora Perú, con hasta 30 min de jitter (09:30–10:00)
+OnCalendar=*-*-* 09:30:00 America/Lima
+RandomizedDelaySec=1800
+Persistent=true
+Unit=sie-wpp-warmup.service
+
+[Install]
+WantedBy=timers.target

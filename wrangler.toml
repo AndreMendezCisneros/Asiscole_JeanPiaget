@@ -1,0 +1,29 @@
+# SIE — frontend estático en Cloudflare Workers (Assets)
+# Compatible con Vite 5.x. NO usar el preset "Framework: Vite" del dashboard.
+#
+# Dashboard Cloudflare → Build:
+#   Build command:    npm ci && npm run build:cf:ci
+#   Deploy command:   (vacío)
+#   SKIP_DEPENDENCY_INSTALL = true
+
+name = "sie"
+main = "worker/index.ts"
+compatibility_date = "2024-09-23"
+send_metrics = false
+
+# URL del API OpenWA en el VPS (HTTP; el navegador usa /sc-proxy en el mismo dominio).
+[vars]
+OPENWA_UPSTREAM = "http://178.104.115.2/api"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+# Worker primero en todas las rutas; /sc-proxy lo maneja el script, el resto pasa a ASSETS.
+run_worker_first = true
+
+# index.html sin caché; assets con hash sí (ver public/_headers)
+html_handling = "auto-trailing-slash"
+
+[observability]
+enabled = false

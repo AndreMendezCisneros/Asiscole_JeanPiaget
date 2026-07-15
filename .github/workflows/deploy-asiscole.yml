@@ -1,0 +1,26 @@
+# Despliegue automático a asiscole.com al hacer push a main.
+# Requiere secrets: VPS_HOST, VPS_SSH_PRIVATE_KEY (Settings → Secrets → Actions)
+
+name: Deploy asiscole.com
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-asiscole
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build y publicar en VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          script_stop: true
+          script: /opt/sie/deploy.sh

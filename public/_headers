@@ -1,0 +1,79 @@
+/*
+  # OWASP A02:2025 — Security Misconfiguration
+  # Aplicado a todas las respuestas del servidor.
+
+  # Fuerza HTTPS por 1 año e incluye subdominios (HSTS)
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+
+  # Evita que el navegador infiera el MIME type incorrecto (MIME sniffing)
+  X-Content-Type-Options: nosniff
+
+  # Nunca enviar el Referer a sitios externos; a mismo origen solo el origen
+  Referrer-Policy: strict-origin-when-cross-origin
+
+  # Deshabilitar APIs de hardware innecesarias
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=(), bluetooth=()
+
+  # Aísla la ventana del navegador de otros contextos (mitiga Spectre/Meltdown)
+  Cross-Origin-Opener-Policy: same-origin
+
+  # Bloquea recursos cross-origin no declarados explícitamente (mitiga data exfiltration)
+  Cross-Origin-Resource-Policy: same-origin
+
+  # Prohíbe cargar esta app dentro de iframes en cualquier origen (clickjacking)
+  X-Frame-Options: DENY
+
+  # Deshabilitar el XSS Auditor antiguo (es explotable; la protección real viene del CSP)
+  X-XSS-Protection: 0
+
+  # CSP — OWASP A05:2025 Injection / A08 Integrity
+  # - default-src 'self': solo recursos del mismo origen por defecto
+  # - script-src: solo self + GTM (necesario para Analytics); sin 'unsafe-eval'
+  # - style-src: 'unsafe-inline' requerido por Tailwind CSS en runtime
+  # - require-trusted-types-for 'script': previene DOM XSS (A05)
+  # - upgrade-insecure-requests: fuerza HTTP→HTTPS automáticamente
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: blob:; media-src 'self' blob: data:; connect-src 'self' https://spdugaykkcgpcfslcpac.supabase.co wss://spdugaykkcgpcfslcpac.supabase.co https://www.google-analytics.com https://region1.google-analytics.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+
+# index.html y rutas SPA: nunca cachear (usuario recibe versión nueva tras deploy)
+/index.html
+  Cache-Control: no-store, no-cache, must-revalidate
+  Pragma: no-cache
+
+/build-version.json
+  Cache-Control: no-store, no-cache, must-revalidate
+
+# Scripts de arranque sin hash en public/
+/route-login.js
+  Cache-Control: no-store, no-cache, must-revalidate
+
+/trusted-types.js
+  Cache-Control: no-store, no-cache, must-revalidate
+
+# Assets con hash (Vite): cachear agresivamente (inmutable por diseño)
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Favicons / imágenes estáticas: caché corto
+/*.ico
+  Cache-Control: public, max-age=86400
+
+/*.svg
+  Cache-Control: public, max-age=86400
+
+/*.png
+  Cache-Control: public, max-age=86400
+
+/whatsapp-preview.jpg
+  Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Resource-Policy: cross-origin
+  Content-Type: image/jpeg
+
+/og-asiscole.png
+  Cross-Origin-Resource-Policy: cross-origin
+
+/*.jpg
+  Cache-Control: public, max-age=86400
+
+# Service Workers nunca deben cachearse (deben actualizarse en cada visita)
+/sw.js
+  Cache-Control: no-store

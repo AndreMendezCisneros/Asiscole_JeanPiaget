@@ -1,0 +1,78 @@
+# Caddyfile para asiscole.com en VPS Hetzner (178.104.115.2)
+# Let's Encrypt automático + cabeceras de seguridad (Lighthouse / OWASP)
+
+asiscole.com, www.asiscole.com {
+	encode gzip zstd
+
+	# Cabeceras de seguridad globales
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), microphone=(), camera=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		X-Frame-Options "DENY"
+		-Server
+	}
+
+	# CSP estricta (SPA + proxy WPPConnect /wpp-api)
+	@sie_app not path /wpp-api* /api/* /wpp-notify*
+	# Sin require-trusted-types-for: tablets con WebView antiguo quedan en blanco si lo exige el CSP
+	header @sie_app Content-Security-Policy "default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: blob:; media-src 'self' blob: data:; connect-src 'self' https://spdugaykkcgpcfslcpac.supabase.co wss://spdugaykkcgpcfslcpac.supabase.co https://www.google-analytics.com https://region1.google-analytics.com; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; upgrade-insecure-requests"
+
+	# SPA (/incidents, /dashboard, …) y JS de arranque sin hash: revalidar siempre.
+	# Antes solo / e /index.html tenían no-cache; /incidents se cacheaba con etag.
+	@app_shell {
+		not path /assets/*
+		not path /wpp-api*
+		not path /wpp-notify*
+		not path /api/*
+		not path /whatsapp-preview.jpg
+		not path *.ico *.svg *.png *.jpg *.jpeg *.webp
+	}
+	header @app_shell Cache-Control "no-cache, no-store, must-revalidate"
+
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+
+	@static path *.ico *.svg *.png *.jpg *.webp
+	header @static Cache-Control "public, max-age=86400"
+
+	@wa_preview path /whatsapp-preview.jpg
+	header @wa_preview {
+		Cache-Control "public, max-age=31536000, immutable"
+		Cross-Origin-Resource-Policy "cross-origin"
+	}
+
+	# WPPConnect Server (WhatsApp)
+	# Swagger (/wpp-api-docs) llama rutas /api/... — deben llegar a WPPConnect, no al SPA.
+	handle /wpp-notify* {
+		uri strip_prefix /wpp-notify
+		reverse_proxy 127.0.0.1:3100
+	}
+
+	handle /api/* {
+		reverse_proxy 127.0.0.1:21465
+	}
+
+	@wpp_api_root path /wpp-api /wpp-api/
+	handle @wpp_api_root {
+		redir /wpp-api-docs/ permanent
+	}
+
+	handle /wpp-api* {
+		uri replace /wpp-api /api
+		reverse_proxy 127.0.0.1:21465
+	}
+
+	handle /assets/* {
+		root * /opt/sie/dist
+		file_server
+	}
+
+	handle {
+		root * /opt/sie/dist
+		try_files {path} /index.html
+		file_server
+	}
+}

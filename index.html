@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>SIE Asiscole | Sistema de Incidencias y Asistencia Escolar — Colegio Jean Piaget</title>
+    <meta
+      name="description"
+      content="Plataforma web para gestión de incidencias disciplinarias, control de asistencia escolar, registro por código de barras, semáforo de reincidencia y reportes para el Colegio Jean Piaget."
+    />
+    <meta
+      name="keywords"
+      content="incidencias escolares, asistencia escolar, control de faltas, Colegio Jean Piaget, Asiscole, SIE, gestión educativa, portal padres"
+    />
+    <meta name="author" content="Colegio Jean Piaget" />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#1A305E" />
+    <link rel="canonical" href="https://asiscole.com/" />
+    <link rel="preconnect" href="https://spdugaykkcgpcfslcpac.supabase.co" crossorigin="anonymous" />
+    <link rel="dns-prefetch" href="https://spdugaykkcgpcfslcpac.supabase.co" />
+
+    <meta property="og:title" content="SIE Asiscole | Incidencias y Asistencia Escolar — Colegio Jean Piaget" />
+    <meta
+      property="og:description"
+      content="Sistema integral de incidencias, asistencia y reportes para el Colegio Jean Piaget."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://asiscole.com/" />
+    <meta property="og:locale" content="es_PE" />
+    <meta property="og:site_name" content="Asiscole" />
+    <meta property="og:image" content="https://asiscole.com/whatsapp-preview.jpg?v=1" />
+    <meta property="og:image:secure_url" content="https://asiscole.com/whatsapp-preview.jpg?v=1" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="SIE Asiscole — Sistema de Incidencias Escolares, Colegio Jean Piaget" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="SIE Asiscole — Colegio Jean Piaget" />
+    <meta
+      name="twitter:description"
+      content="Gestión de incidencias disciplinarias y control de asistencia escolar."
+    />
+    <meta name="twitter:image" content="https://asiscole.com/whatsapp-preview.jpg?v=1" />
+
+    <script type="application/ld+json" src="/schema-org.json"></script>
+
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicon-180.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <script src="/route-login.js" defer></script>
+    <style>
+      html.route-login,
+      html.route-login body {
+        background: #0a1628;
+        color: #e2e8f0;
+        min-height: 100%;
+      }
+      html.route-login #root:empty {
+        display: flex;
+        min-height: 100vh;
+        min-height: 100dvh;
+        align-items: center;
+        justify-content: center;
+      }
+      html.route-login #root:empty::after {
+        content: 'Cargando SIE…';
+        font-family: system-ui, sans-serif;
+        font-size: 1rem;
+        color: #94a3b8;
+      }
+    </style>
+    <script src="/trusted-types.js"></script>
+  </head>
+
+  <body>
+    <noscript>
+      <h1>SIE Asiscole — Sistema de Incidencias y Asistencia Escolar</h1>
+      <p>
+        Plataforma del Colegio Jean Piaget para registrar incidencias disciplinarias,
+        controlar la asistencia diaria, consultar llegadas y generar reportes escolares.
+      </p>
+      <p><a href="/login">Iniciar sesión</a> · <a href="/portal-padres">Portal de padres</a></p>
+    </noscript>
+    <a
+      href="#main-content"
+      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground"
+    >
+      Saltar al contenido principal
+    </a>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

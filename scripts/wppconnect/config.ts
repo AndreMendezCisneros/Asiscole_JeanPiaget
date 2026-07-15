@@ -1,0 +1,102 @@
+import type { ServerOptions } from './types/ServerOptions';
+
+/**
+ * WPPConnect Server — producción VPS asiscole.com
+ * secretKey se sustituye en instalar-wppconnect-vps.sh
+ */
+export default {
+  secretKey: 'WPPCONNECT_SECRET_PLACEHOLDER',
+  host: 'http://127.0.0.1',
+  port: '21465',
+  deviceName: 'Asiscole SIE',
+  poweredBy: 'Colegio Jean Piaget',
+  // false: cada chip se inicia bajo demanda (evita colgar al vincular el 2.º celular)
+  startAllSession: false,
+  tokenStoreType: 'file',
+  maxListeners: 30,
+  customUserDataDir: './userDataDir/',
+  webhook: {
+    url: 'http://host.docker.internal:3099/wpp-webhook',
+    autoDownload: false,
+    uploadS3: false,
+    readMessage: true,
+    allUnreadOnStart: false,
+    listenAcks: true,
+    onPresenceChanged: false,
+    onParticipantsChanged: false,
+    onReactionMessage: false,
+    onPollResponse: false,
+    onRevokedMessage: false,
+    onLabelUpdated: false,
+    onSelfMessage: false,
+    ignore: ['status@broadcast'],
+  },
+  websocket: {
+    autoDownload: false,
+    uploadS3: false,
+  },
+  chatwoot: {
+    sendQrCode: false,
+    sendStatus: false,
+  },
+  archive: {
+    enable: false,
+    waitTime: 10,
+    daysToArchive: 45,
+  },
+  log: {
+    level: 'info',
+    logger: ['console', 'file'],
+  },
+  createOptions: {
+    autoClose: 0,
+    deviceSyncTimeout: 0,
+    disableWelcome: true,
+    browserArgs: [
+      '--no-proxy-server',
+      '--proxy-server=direct://',
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-web-security',
+      '--aggressive-cache-discard',
+      '--disable-application-cache',
+      '--disable-background-networking',
+      '--disable-extensions',
+      '--disable-sync',
+      '--disable-translate',
+      '--hide-scrollbars',
+      '--mute-audio',
+      '--no-first-run',
+      '--disable-features=LeakyPeeker',
+    ],
+    linkPreviewApiServers: null,
+  },
+  mapper: {
+    enable: false,
+    prefix: 'sie-',
+  },
+  db: {
+    mongodbDatabase: 'tokens',
+    mongodbCollection: '',
+    mongodbUser: '',
+    mongodbPassword: '',
+    mongodbHost: '',
+    mongoIsRemote: true,
+    mongoURLRemote: '',
+    mongodbPort: 27017,
+    redisHost: 'localhost',
+    redisPort: 6379,
+    redisPassword: '',
+    redisDb: 0,
+    redisPrefix: 'sie',
+  },
+  aws_s3: {
+    region: 'sa-east-1' as const,
+    access_key_id: null,
+    secret_key: null,
+    defaultBucketName: null,
+    endpoint: null,
+    forcePathStyle: null,
+  },
+} as unknown as ServerOptions;

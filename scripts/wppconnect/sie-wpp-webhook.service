@@ -1,0 +1,14 @@
+[Unit]
+Description=SIE WPPConnect webhook (sendSeen)
+After=network.target docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/sie/app
+EnvironmentFile=/opt/sie/.env.wppconnect
+ExecStart=/usr/bin/node /opt/sie/app/scripts/wppconnect/webhook-server.mjs
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

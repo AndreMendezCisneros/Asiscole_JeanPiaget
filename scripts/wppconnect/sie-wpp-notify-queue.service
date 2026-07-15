@@ -1,0 +1,16 @@
+[Unit]
+Description=SIE WPPConnect notify queue (multi-chip round-robin)
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/sie/app
+EnvironmentFile=/opt/sie/.env.wppconnect
+Environment=WPPCONNECT_NOTIFY_PORT=3100
+ExecStart=/usr/bin/node /opt/sie/app/scripts/wppconnect/notify-queue.mjs
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

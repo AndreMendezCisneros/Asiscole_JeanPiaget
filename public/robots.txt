@@ -1,0 +1,23 @@
+User-agent: *
+Allow: /
+Allow: /login
+Allow: /portal-padres
+Disallow: /dashboard
+Disallow: /tutor-scanner
+Disallow: /register
+Disallow: /incidents
+Disallow: /students
+Disallow: /faults
+Disallow: /reports
+Disallow: /attendance-report
+Disallow: /audit
+Disallow: /system-config
+Disallow: /arrival-control
+Disallow: /parent-meetings
+Disallow: /parent-portal
+Disallow: /justify-faults
+Disallow: /llegada/
+Disallow: /api/
+Disallow: /dashboard
+
+Sitemap: https://asiscole.com/sitemap.xml

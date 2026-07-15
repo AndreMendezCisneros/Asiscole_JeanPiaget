@@ -1,0 +1,21 @@
+# Caddyfile del VPS OpenWA (178.104.115.2) — configuración activa.
+# HTTP /api sin redirect (Worker Cloudflare); HTTPS para dashboard.
+
+http://178.104.115.2 {
+	handle /api* {
+		reverse_proxy 127.0.0.1:2785
+	}
+	handle {
+		redir https://178.104.115.2{uri} permanent
+	}
+}
+
+https://178.104.115.2 {
+	tls internal
+	handle /api* {
+		reverse_proxy 127.0.0.1:2785
+	}
+	handle {
+		reverse_proxy 127.0.0.1:2886
+	}
+}

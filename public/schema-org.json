@@ -1,0 +1,36 @@
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebApplication",
+      "name": "SIE Asiscole",
+      "alternateName": "Sistema de Incidencias Escolares",
+      "url": "https://asiscole.com/",
+      "applicationCategory": "EducationalApplication",
+      "operatingSystem": "Web",
+      "inLanguage": "es-PE",
+      "description": "Plataforma de incidencias, asistencia escolar y reportes para el Colegio Jean Piaget.",
+      "provider": {
+        "@type": "EducationalOrganization",
+        "name": "Colegio Jean Piaget",
+        "url": "https://asiscole.com/"
+      }
+    },
+    {
+      "@type": "EducationalOrganization",
+      "@id": "https://asiscole.com/#organization",
+      "name": "Colegio Jean Piaget",
+      "url": "https://asiscole.com/",
+      "sameAs": ["https://asiscole.com/"]
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://asiscole.com/#website",
+      "url": "https://asiscole.com/",
+      "name": "SIE Asiscole",
+      "description": "Sistema de incidencias y asistencia escolar",
+      "publisher": { "@id": "https://asiscole.com/#organization" },
+      "inLanguage": "es-PE"
+    }
+  ]
+}

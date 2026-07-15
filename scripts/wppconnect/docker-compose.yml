@@ -1,0 +1,23 @@
+# WPPConnect Server — SIE / asiscole.com
+# Puerto solo en localhost; Caddy expone /wpp-api hacia el exterior.
+
+services:
+  wppconnect:
+    container_name: sie-wppconnect
+    restart: unless-stopped
+    build:
+      context: ./wppconnect-server
+    volumes:
+      - wppconnect_tokens:/usr/src/wpp-server/tokens
+      - wppconnect_userdata:/usr/src/wpp-server/userDataDir
+    ports:
+      - '127.0.0.1:21465:21465'
+    shm_size: '1gb'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    environment:
+      - NODE_ENV=production
+
+volumes:
+  wppconnect_tokens:
+  wppconnect_userdata:
