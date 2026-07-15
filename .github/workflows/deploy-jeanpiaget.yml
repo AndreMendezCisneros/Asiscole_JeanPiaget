@@ -1,0 +1,71 @@
+# Despliegue automático Jean Piaget → jeanpiaget.asiscole.com
+# Secrets (mismos que Asiscole si es el mismo VPS):
+#   VPS_HOST              → 178.104.115.2
+#   VPS_SSH_PRIVATE_KEY   → clave privada SSH del root del VPS
+
+name: Deploy jeanpiaget.asiscole.com
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-jeanpiaget
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync código al VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          source: "."
+          target: "/opt/sie-jp/app"
+          overwrite: true
+          strip_components: 0
+
+      - name: Build y publicar
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd /opt/sie-jp/app
+            if [[ ! -f /opt/sie-jp/.env.build ]]; then
+              echo "ERROR: falta /opt/sie-jp/.env.build"
+              exit 1
+            fi
+            set -a
+            # shellcheck disable=SC1091
+            source /opt/sie-jp/.env.build
+            set +a
+            npm ci --no-audit --no-fund
+            export VITE_BUILD_ID="$(git rev-parse --short HEAD 2>/dev/null || date +%s)"
+            npm run build
+            mkdir -p /opt/sie-jp/dist
+            rsync -a --delete dist/ /opt/sie-jp/dist/
+            # Caddy JP (no toca Asiscole)
+            if [[ -x /opt/sie-jp/deploy.sh ]]; then
+              SKIP_GIT=1 FORCE=0 bash -c 'true'
+              # Solo refrescar sitio Caddy sin rebuild de nuevo
+              mkdir -p /etc/caddy/sites.d
+              HOST="$(echo "${VITE_SUPABASE_URL:-}" | sed -E 's|https?://||; s|/.*||')"
+              SRC="/opt/sie-jp/app/scripts/jeanpiaget/jeanpiaget-caddy.caddy"
+              if [[ -f "$SRC" && -n "$HOST" ]]; then
+                sed "s/__SUPABASE_HOST__/${HOST}/g" "$SRC" > /etc/caddy/sites.d/10-jeanpiaget.caddy
+                sed -i 's/\r$//' /etc/caddy/sites.d/10-jeanpiaget.caddy
+                caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy || true
+              fi
+            fi
+            echo "Deploy JP OK $(date -Iseconds)"
