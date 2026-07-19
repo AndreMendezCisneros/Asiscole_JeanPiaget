@@ -1,0 +1,18 @@
+[Unit]
+Description=SIE JP WPPConnect notify queue (chips Jean Piaget, anti-baneo)
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/sie-jp/app
+EnvironmentFile=/opt/sie-jp/.env.wppconnect
+Environment=WPPCONNECT_ENV_FILE=/opt/sie-jp/.env.wppconnect
+Environment=WPPCONNECT_NOTIFY_PORT=3102
+Environment=WPPCONNECT_ROUND_ROBIN_STATE=/opt/sie-jp/.wpp-round-robin-state.json
+ExecStart=/usr/bin/node /opt/sie-jp/app/scripts/wppconnect/notify-queue.mjs
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
