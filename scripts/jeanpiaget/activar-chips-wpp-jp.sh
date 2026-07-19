@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Activa chips WPPConnect SOLO para Jean Piaget (cola propia + anti-baneo).
-# Reutiliza el Docker WPPConnect de San Ramón (:21465) con sesiones jp-chip-*.
+# Reutiliza el Docker WPPConnect (:21465) con sesiones sie-chip-* (mismos chips; sin jp-chip).
 # Uso: bash scripts/jeanpiaget/activar-chips-wpp-jp.sh
 set -euo pipefail
 
@@ -39,19 +39,20 @@ if [[ -z "$SECRET" ]]; then
 fi
 
 NOTIFY_SECRET="$(openssl rand -hex 16)"
-SESSIONS="jp-chip-01,jp-chip-02,jp-chip-03"
+SESSIONS="sie-chip-01,sie-chip-02,sie-chip-03,sie-chip-04"
 
 umask 077
 cat > "$ENV_FILE" <<EOF
-# Jean Piaget — chips propios (anti-baneo igual que San Ramón)
+# Jean Piaget — mismos chips sie-chip-* (frontend/marca JP; WhatsApp compartido)
 WPPCONNECT_SECRET_KEY=${SECRET}
 WPPCONNECT_INTERNAL_API=${API_INTERNAL}
-WPPCONNECT_SESSION=jp-chip-01
+WPPCONNECT_SESSION=sie-chip-01
 WPPCONNECT_SESSIONS=${SESSIONS}
 WPPCONNECT_NOTIFY_PORT=3102
 WPPCONNECT_NOTIFY_SECRET=${NOTIFY_SECRET}
 WPPCONNECT_ROUND_ROBIN_STATE=${JP_ROOT}/.wpp-round-robin-state.json
 WPPCONNECT_SCHOOL_NAME="Colegio Jean Piaget"
+WPPCONNECT_NOTIFY_TO_SELF=true
 VITE_APP_URL=https://jeanpiaget.asiscole.com
 
 # Anti-baneo (humano)
@@ -60,14 +61,14 @@ WPPCONNECT_TYPING_MAX_MS=12000
 WPPCONNECT_JITTER_MIN_MS=8000
 WPPCONNECT_JITTER_MAX_MS=15000
 WPPCONNECT_MAX_PER_HOUR_PER_CHIP=120
-WPPCONNECT_CHIP_HOURLY_LIMITS=jp-chip-03=2
+WPPCONNECT_CHIP_HOURLY_LIMITS=sie-chip-04=2
 WPPCONNECT_RATE_TIMEZONE=America/Lima
 EOF
 chmod 600 "$ENV_FILE"
 
 # Generar bearer para el chip principal (frontend) y tokens de sesiones
 FIRST_TOKEN=""
-for sess in jp-chip-01 jp-chip-02 jp-chip-03; do
+for sess in sie-chip-01 sie-chip-02 sie-chip-03 sie-chip-04; do
   echo "Token sesión ${sess}..."
   JSON=$(curl -sf -X POST "${API_INTERNAL}/${sess}/${SECRET}/generate-token" || true)
   TOK=$(echo "$JSON" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
@@ -132,7 +133,7 @@ setk("VITE_META_WA_ENABLED", "false")
 setk("VITE_WPPCONNECT_ENABLED", "true")
 setk("VITE_WPPCONNECT_ROTATION", "true")
 setk("VITE_WPPCONNECT_API_URL", "/wpp-api")
-setk("VITE_WPPCONNECT_SESSION", "jp-chip-01")
+setk("VITE_WPPCONNECT_SESSION", "sie-chip-01")
 setk("VITE_WPPCONNECT_NOTIFY_URL", "/wpp-notify")
 setk("VITE_OPENWA_ENABLED", "false")
 # token y notify key desde env file
@@ -167,4 +168,4 @@ echo "Sesiones: ${SESSIONS}"
 echo "Anti-baneo: typing 10–12s, jitter 8–15s, máx 120/h (chip-03=2/h)"
 echo ""
 echo "Siguiente: vincular QR de cada chip:"
-echo "  bash /opt/sie-jp/app/scripts/jeanpiaget/mostrar-qr-chip-jp.sh jp-chip-01"
+echo "  bash /opt/sie-jp/app/scripts/jeanpiaget/mostrar-qr-chip-jp.sh sie-chip-01"

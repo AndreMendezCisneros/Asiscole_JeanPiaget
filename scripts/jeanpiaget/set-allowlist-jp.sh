@@ -34,7 +34,7 @@ lines = []
 seen_s = seen_a = False
 for line in p.read_text(encoding="utf-8", errors="ignore").splitlines():
     if line.startswith("WPPCONNECT_SESSIONS="):
-        lines.append("WPPCONNECT_SESSIONS=jp-chip-01")
+        lines.append("WPPCONNECT_SESSIONS=sie-chip-01")
         seen_s = True
     elif line.startswith("WPPCONNECT_ALLOWLIST_PHONES="):
         lines.append("WPPCONNECT_ALLOWLIST_PHONES=$JOIN")
@@ -42,12 +42,12 @@ for line in p.read_text(encoding="utf-8", errors="ignore").splitlines():
     else:
         lines.append(line)
 if not seen_s:
-    lines.append("WPPCONNECT_SESSIONS=jp-chip-01")
+    lines.append("WPPCONNECT_SESSIONS=sie-chip-01")
 if not seen_a:
     lines.append("WPPCONNECT_ALLOWLIST_PHONES=$JOIN")
 p.write_text("\\n".join(lines) + "\\n", encoding="utf-8")
 print("OK allowlist:", "$JOIN")
-print("OK sessions: jp-chip-01 (un solo chip)")
+print("OK sessions: sie-chip-01 (un solo chip)")
 PY
 
 systemctl restart sie-jp-wpp-notify-queue

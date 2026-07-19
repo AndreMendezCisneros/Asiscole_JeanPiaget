@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Muestra / guarda QR de un chip Jean Piaget.
-# Uso: bash scripts/jeanpiaget/mostrar-qr-chip-jp.sh jp-chip-01
+# Uso: bash scripts/jeanpiaget/mostrar-qr-chip-jp.sh sie-chip-01
 set -euo pipefail
 
-SESSION="${1:-jp-chip-01}"
+SESSION="${1:-sie-chip-01}"
 ENV_FILE="/opt/sie-jp/.env.wppconnect"
 OUT="/tmp/wpp-qr-${SESSION}.png"
 

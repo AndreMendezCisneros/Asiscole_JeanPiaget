@@ -27,7 +27,7 @@ def norm(p: str) -> str:
         d = "51" + d
     return d
 
-chips = ["jp-chip-01", "jp-chip-02", "jp-chip-03", "jp-chip-04"]
+chips = ["sie-chip-01", "sie-chip-02", "sie-chip-03", "sie-chip-04"]
 blocks = []
 for i, chip in enumerate(chips):
     phones = [norm(x) for x in raw[i * 6 : (i + 1) * 6]]
