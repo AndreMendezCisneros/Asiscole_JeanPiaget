@@ -1436,7 +1436,6 @@ export const arrivalService = {
   fetchArrivalLimits,
   invalidateArrivalLimitCache,
   fetchPublicArrivalLimits,
-  fetchPublicArrivalLimits,
   getPublicArrivalInfo,
   getPublicInfoByDNI,
   fetchMonthArrivalsForStudent,
