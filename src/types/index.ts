@@ -1,16 +1,6 @@
 // Tipos que coinciden con el esquema de la base de datos
-export type UserRole = 'Supervisor' | 'Tutor' | 'Director' | 'Admin' | 'Padre' | 'Docente';
+export type UserRole = 'Supervisor' | 'Tutor' | 'Director' | 'Admin' | 'Padre';
 export type EducationalLevel = 'Primaria' | 'Secundaria';
-
-export interface DocenteClassroom {
-  level: EducationalLevel;
-  grade: string;
-  section: string;
-}
-
-export interface DocenteAssignments {
-  classrooms: DocenteClassroom[];
-}
 
 export type ReincidenceLevel = 0 | 1 | 2 | 3 | 4 | 5;
 
@@ -25,8 +15,7 @@ export interface BimestreInfo {
   label: string;
 }
 
-/** Categoría de falta; valores por defecto en DEFAULT_FAULT_CATEGORIES + personalizadas en configuración */
-export type FaultCategory = string;
+export type FaultCategory = 'Conducta' | 'Uniforme' | 'Académica' | 'Puntualidad';
 
 export type FaultSeverity = 'Leve' | 'Grave';
 
@@ -78,6 +67,8 @@ export interface CatalogoFaltaDB {
   es_grave: boolean;
   puntos_reincidencia: number;
   descripcion: string | null;
+  /** Recomendación para el apoderado (WhatsApp / comunicado) */
+  recomendacion?: string | null;
   activo: boolean;
   orden_visualizacion: number;
   fecha_creacion: string;
@@ -160,6 +151,8 @@ export interface FaultType {
   id: number;
   name: string;
   description: string | null;
+  /** Recomendación para el apoderado según el tipo de falta */
+  recommendation?: string | null;
   category: FaultCategory;
   severity: FaultSeverity;
   points: number;

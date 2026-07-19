@@ -30,6 +30,7 @@ const INCIDENT_LIST_SELECT = `
     es_grave,
     puntos_reincidencia,
     descripcion,
+    recomendacion,
     activo
   ),
   usuarios_registro:id_usuario_registro (
@@ -57,6 +58,7 @@ const INCIDENT_FULL_SELECT = `
     es_grave,
     puntos_reincidencia,
     descripcion,
+    recomendacion,
     activo
   ),
   usuarios_registro:id_usuario_registro (
@@ -278,13 +280,26 @@ export const incidentsService = {
       });
 
       if (options?.minimal) {
-        const { data, error } = await insertQuery.select('id_incidencia').single();
+        const { data, error } = await insertQuery
+          .select('id_incidencia, fecha_hora_registro, nivel_reincidencia, observaciones, estado')
+          .single();
         if (error) {
           console.error('Error al crear incidencia:', error);
           return { incident: null, error: error.message };
         }
         return {
-          incident: { id: data.id_incidencia } as Incident,
+          incident: {
+            id: data.id_incidencia,
+            studentId: incident.studentId,
+            faultTypeId: incident.faultTypeId,
+            registeredBy: incident.registeredBy,
+            registeredAt: data.fecha_hora_registro,
+            observations: data.observaciones ?? incident.observations ?? null,
+            reincidenceLevel: (data.nivel_reincidencia ?? 0) as Incident['reincidenceLevel'],
+            hasEvidence: false,
+            evidenceCount: 0,
+            status: (data.estado || 'Activa') as Incident['status'],
+          },
           error: null,
         };
       }
@@ -309,6 +324,7 @@ export const incidentsService = {
             es_grave,
             puntos_reincidencia,
             descripcion,
+            recomendacion,
             activo
           ),
           usuarios_registro:id_usuario_registro (
@@ -610,6 +626,7 @@ export const incidentsService = {
         id: falta.id_falta,
         name: falta.nombre_falta,
         description: falta.descripcion,
+        recommendation: falta.recomendacion ?? null,
         category: falta.categoria,
         severity: falta.es_grave ? 'Grave' : 'Leve',
         points: falta.puntos_reincidencia,

@@ -103,6 +103,19 @@ WPPCONNECT_MAX_PER_HOUR_PER_CHIP=250
 WPPCONNECT_CHIP_HOURLY_LIMITS=sie-chip-04=2
 ```
 
+### Autoenvío al chip (San Ramón)
+
+Con `WPPCONNECT_NOTIFY_TO_SELF` (activo por defecto), cada aviso **no** va al apoderado: el chip elegido se envía a **sí mismo** (SIM vinculado):
+
+1. Mensaje con el **número del apoderado** (desde BD)
+2. Mensaje **personalizado** de llegada, **salida** o **incidencia** (falta + recomendación del catálogo)
+
+El mapa `WPPCONNECT_CHIP_PHONES` (6 números por chip) solo decide **qué chip** atiende. Cargar mapa:
+
+```bash
+bash /opt/sie/app/scripts/wppconnect/set-chip-phones-sr.sh
+```
+
 Build del frontend (`.env.build`):
 
 ```env

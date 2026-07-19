@@ -2,28 +2,22 @@ import { supabase } from '../supabaseClient';
 import { FaultType, CatalogoFaltaDB, FaultCategory } from '@/types';
 import { getCached, invalidateCache, setCached } from '@/lib/utils/memoryCache';
 import { ensureSupabaseReady } from '@/lib/supabaseWarmup';
-import { configService } from './configService';
-import {
-  DEFAULT_FAULT_CATEGORIES,
-  FAULT_CATEGORIES_CONFIG_KEY,
-  mergeFaultCategories,
-} from '@/lib/constants/faultCategories';
 
 const FAULTS_CACHE_KEY = 'faults:active';
 const FAULTS_CACHE_TTL = 30 * 60 * 1000; // 30 minutos
 
-function mapCategoriaError(error: { code?: string; message?: string } | null): string {
-  const msg = error?.message ?? 'Error al guardar la falta';
-  if (
-    error?.code === '22P02' ||
-    /invalid input value for enum categoria_falta/i.test(msg)
-  ) {
-    return (
-      'La categoría no está permitida en la base de datos. ' +
-      'Ejecute scripts/PATCH_CATEGORIA_FALTA_TEXT.sql en Supabase y reintente.'
-    );
-  }
-  return msg;
+function mapFault(falta: CatalogoFaltaDB): FaultType {
+  return {
+    id: falta.id_falta,
+    name: falta.nombre_falta,
+    description: falta.descripcion,
+    recommendation: falta.recomendacion ?? null,
+    category: falta.categoria,
+    severity: falta.es_grave ? 'Grave' : 'Leve',
+    points: falta.puntos_reincidencia,
+    active: falta.activo,
+    ordenVisualizacion: falta.orden_visualizacion,
+  };
 }
 
 /**
@@ -61,16 +55,7 @@ export const faultsService = {
         return { faults: [], error: error.message };
       }
 
-      const faults: FaultType[] = (data || []).map((falta: CatalogoFaltaDB) => ({
-        id: falta.id_falta,
-        name: falta.nombre_falta,
-        description: falta.descripcion,
-        category: falta.categoria,
-        severity: falta.es_grave ? 'Grave' : 'Leve',
-        points: falta.puntos_reincidencia,
-        active: falta.activo,
-        ordenVisualizacion: falta.orden_visualizacion,
-      }));
+      const faults: FaultType[] = (data || []).map((falta: CatalogoFaltaDB) => mapFault(falta));
 
       if (activeOnly && faults.length > 0) {
         setCached(FAULTS_CACHE_KEY, faults, FAULTS_CACHE_TTL);
@@ -102,16 +87,7 @@ export const faultsService = {
         return { faults: [], error: error.message };
       }
 
-      const faults: FaultType[] = (data || []).map((falta: CatalogoFaltaDB) => ({
-        id: falta.id_falta,
-        name: falta.nombre_falta,
-        description: falta.descripcion,
-        category: falta.categoria,
-        severity: falta.es_grave ? 'Grave' : 'Leve',
-        points: falta.puntos_reincidencia,
-        active: falta.activo,
-        ordenVisualizacion: falta.orden_visualizacion,
-      }));
+      const faults: FaultType[] = (data || []).map((falta: CatalogoFaltaDB) => mapFault(falta));
 
       return { faults, error: null };
     } catch (error: any) {
@@ -135,18 +111,7 @@ export const faultsService = {
         return { fault: null, error: 'Falta no encontrada' };
       }
 
-      const fault: FaultType = {
-        id: data.id_falta,
-        name: data.nombre_falta,
-        description: data.descripcion,
-        category: data.categoria,
-        severity: data.es_grave ? 'Grave' : 'Leve',
-        points: data.puntos_reincidencia,
-        active: data.activo,
-        ordenVisualizacion: data.orden_visualizacion,
-      };
-
-      return { fault, error: null };
+      return { fault: mapFault(data as CatalogoFaltaDB), error: null };
     } catch (error: any) {
       console.error('Error en getById:', error);
       return { fault: null, error: error.message || 'Error al obtener falta' };
@@ -161,7 +126,8 @@ export const faultsService = {
     categoria: FaultCategory;
     es_grave: boolean;
     puntos_reincidencia: number;
-    descripcion?: string;
+    descripcion?: string | null;
+    recomendacion?: string | null;
     orden_visualizacion?: number;
   }): Promise<{ fault: FaultType | null; error: string | null }> {
     try {
@@ -176,22 +142,11 @@ export const faultsService = {
         .single();
 
       if (error) {
-        return { fault: null, error: mapCategoriaError(error) };
+        return { fault: null, error: error.message };
       }
 
-      const newFault: FaultType = {
-        id: data.id_falta,
-        name: data.nombre_falta,
-        description: data.descripcion,
-        category: data.categoria,
-        severity: data.es_grave ? 'Grave' : 'Leve',
-        points: data.puntos_reincidencia,
-        active: data.activo,
-        ordenVisualizacion: data.orden_visualizacion,
-      };
-
       invalidateCache(FAULTS_CACHE_KEY);
-      return { fault: newFault, error: null };
+      return { fault: mapFault(data as CatalogoFaltaDB), error: null };
     } catch (error: any) {
       console.error('Error en create:', error);
       return { fault: null, error: error.message || 'Error al crear falta' };
@@ -208,7 +163,8 @@ export const faultsService = {
       categoria: FaultCategory;
       es_grave: boolean;
       puntos_reincidencia: number;
-      descripcion: string;
+      descripcion: string | null;
+      recomendacion: string | null;
       orden_visualizacion: number;
       activo: boolean;
     }>
@@ -220,7 +176,7 @@ export const faultsService = {
         .eq('id_falta', id);
 
       if (error) {
-        return { success: false, error: mapCategoriaError(error) };
+        return { success: false, error: error.message };
       }
 
       invalidateCache(FAULTS_CACHE_KEY);
@@ -229,75 +185,6 @@ export const faultsService = {
       console.error('Error en update:', error);
       return { success: false, error: error.message || 'Error al actualizar falta' };
     }
-  },
-
-  /**
-   * Categorías guardadas en configuración (sin fusionar con faltas existentes)
-   */
-  async getStoredCategories(): Promise<{ categories: string[]; error: string | null }> {
-    try {
-      const { config, error } = await configService.getByKey(FAULT_CATEGORIES_CONFIG_KEY);
-      if (error) {
-        return { categories: [...DEFAULT_FAULT_CATEGORIES], error };
-      }
-      if (!config?.value) {
-        return { categories: [...DEFAULT_FAULT_CATEGORIES], error: null };
-      }
-      const parsed = JSON.parse(config.value) as unknown;
-      if (!Array.isArray(parsed)) {
-        return { categories: [...DEFAULT_FAULT_CATEGORIES], error: null };
-      }
-      const categories = parsed.filter(
-        (c): c is string => typeof c === 'string' && c.trim().length > 0,
-      );
-      return { categories: mergeFaultCategories(categories, []), error: null };
-    } catch {
-      return { categories: [...DEFAULT_FAULT_CATEGORIES], error: null };
-    }
-  },
-
-  /**
-   * Lista completa de categorías (config + faltas en catálogo)
-   */
-  async getCategories(faults: FaultType[]): Promise<{ categories: string[]; error: string | null }> {
-    const { categories: stored, error } = await this.getStoredCategories();
-    return { categories: mergeFaultCategories(stored, faults), error };
-  },
-
-  /**
-   * Agregar una categoría personalizada
-   */
-  async addCategory(
-    name: string,
-    faults: FaultType[],
-  ): Promise<{ categories: string[]; error: string | null }> {
-    const trimmed = name.trim();
-    if (trimmed.length < 2) {
-      return { categories: [], error: 'La categoría debe tener al menos 2 caracteres' };
-    }
-    if (trimmed.length > 50) {
-      return { categories: [], error: 'Máximo 50 caracteres' };
-    }
-
-    const { categories: stored } = await this.getStoredCategories();
-    const current = mergeFaultCategories(stored, faults);
-    const normalized = trimmed.toLowerCase();
-    if (current.some((c) => c.toLowerCase() === normalized)) {
-      return { categories: current, error: 'Esa categoría ya existe' };
-    }
-
-    const next = mergeFaultCategories([...stored, trimmed], faults);
-    const { error } = await configService.upsertByKey({
-      key: FAULT_CATEGORIES_CONFIG_KEY,
-      value: JSON.stringify(next),
-      description: 'Categorías del catálogo de faltas',
-    });
-
-    if (error) {
-      return { categories: stored, error };
-    }
-
-    return { categories: next, error: null };
   },
 
   /**

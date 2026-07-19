@@ -32,7 +32,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { getReincidenceLevelDescription, getSuggestedAction } from '@/lib/utils/reincidenceUtils';
 import { toast } from 'sonner';
 import { staffNotify } from '@/lib/utils/staffNotify';
-import { studentsService, incidentsService, evidenceService } from '@/lib/services';
+import { studentsService, incidentsService, evidenceService, whatsappService } from '@/lib/services';
 import { authService } from '@/lib/services';
 import { ErrorDialog } from '@/components/ui/error-dialog';
 import { useErrorDialog } from '@/hooks/useErrorDialog';
@@ -247,6 +247,9 @@ export const RegisterIncident = () => {
         return;
       }
 
+      const studentForWa = selectedStudent;
+      const faultForWa = faults.find((f) => f.id.toString() === selectedFault) || null;
+
       if (evidenceFiles.length > 0) {
         setUploadProgress({ current: 0, total: evidenceFiles.length });
         let uploaded = 0;
@@ -279,6 +282,22 @@ export const RegisterIncident = () => {
           '¡Incidencia registrada!',
           `Nº ${incident.id} · ${selectedStudent.fullName}`
         );
+      }
+
+      if (whatsappService.isEnabled() && studentForWa && faultForWa) {
+        const notifyIncident = {
+          ...incident,
+          student: studentForWa,
+          faultType: faultForWa,
+        };
+        void whatsappService.notifyParentIncident(studentForWa, notifyIncident, faultForWa).then((wa) => {
+          if (!isMountedRef.current) return;
+          if (!wa.ok && wa.error) {
+            toast.warning(`WhatsApp: ${wa.error}`, { duration: 4500 });
+          } else if (wa.skipped) {
+            toast.info('WhatsApp: aviso de incidencia ya enviado hace poco', { duration: 2200 });
+          }
+        });
       }
 
       // Reset form

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -26,7 +27,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Search, Plus, Edit, Loader2, BookOpen, FolderPlus } from 'lucide-react';
+import { Search, Plus, Edit, Loader2, BookOpen } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
   StaffKpiStat,
@@ -45,7 +46,6 @@ import { toast } from 'sonner';
 import { faultsService } from '@/lib/services';
 import { FaultType } from '@/types';
 import { useFaultsQuery, useInvalidateFaults } from '@/hooks/queries/useFaultsQuery';
-import { DEFAULT_FAULT_CATEGORIES } from '@/lib/constants/faultCategories';
 
 const faultFormSchema = z.object({
   nombre_falta: z.string()
@@ -54,7 +54,12 @@ const faultFormSchema = z.object({
   descripcion: z.string()
     .max(500, 'Máximo 500 caracteres')
     .optional(),
-  categoria: z.string().min(1, 'La categoría es requerida').max(50, 'Máximo 50 caracteres'),
+  recomendacion: z.string()
+    .max(800, 'Máximo 800 caracteres')
+    .optional(),
+  categoria: z.enum(['Conducta', 'Uniforme', 'Académica', 'Puntualidad'] as const, {
+    required_error: 'La categoría es requerida',
+  }),
   es_grave: z.boolean(),
   puntos_reincidencia: z.number()
     .min(1, 'Los puntos deben ser al menos 1')
@@ -66,7 +71,8 @@ type FaultFormValues = z.infer<typeof faultFormSchema>;
 const faultFormDefaults: FaultFormValues = {
   nombre_falta: '',
   descripcion: '',
-  categoria: DEFAULT_FAULT_CATEGORIES[0],
+  recomendacion: '',
+  categoria: 'Conducta',
   es_grave: false,
   puntos_reincidencia: 1,
 };
@@ -75,14 +81,11 @@ export const FaultsCatalog = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState<FaultCategory | 'all'>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState('');
   const [editingFault, setEditingFault] = useState<FaultType | null>(null);
-  const [categoryList, setCategoryList] = useState<string[]>([...DEFAULT_FAULT_CATEGORIES]);
   const { data: faults = [], isLoading, refetch } = useFaultsQuery(false);
   const invalidateFaults = useInvalidateFaults();
   const [submitting, setSubmitting] = useState(false);
-  const [addingCategory, setAddingCategory] = useState(false);
+  // Estado temporal para Select dentro del Dialog
   const [tempCategoria, setTempCategoria] = useState<FaultCategory | undefined>(undefined);
 
   const form = useForm<FaultFormValues>({
@@ -90,66 +93,67 @@ export const FaultsCatalog = () => {
     defaultValues: faultFormDefaults,
   });
 
-  useEffect(() => {
-    void (async () => {
-      const { categories } = await faultsService.getCategories(faults);
-      setCategoryList(categories);
-    })();
-  }, [faults]);
-
-  const filterCategories = useMemo(
-    (): Array<{ value: FaultCategory | 'all'; label: string }> => [
-      { value: 'all', label: 'Todas' },
-      ...categoryList.map((c) => ({ value: c, label: c })),
-    ],
-    [categoryList],
-  );
-
   const filteredFaults = faults.filter(fault => {
     const matchesSearch = fault.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         fault.description?.toLowerCase().includes(searchTerm.toLowerCase());
+                         fault.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         fault.recommendation?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = activeCategory === 'all' || fault.category === activeCategory;
     return matchesSearch && matchesCategory;
   });
 
-  const resetFormForCreate = () => {
+  const categories: Array<{ value: FaultCategory | 'all', label: string }> = [
+    { value: 'all', label: 'Todas' },
+    { value: 'Conducta', label: 'Conducta' },
+    { value: 'Uniforme', label: 'Uniforme' },
+    { value: 'Académica', label: 'Académica' },
+    { value: 'Puntualidad', label: 'Puntualidad' },
+  ];
+
+  const openCreateDialog = () => {
     setEditingFault(null);
     form.reset(faultFormDefaults);
-    setTempCategoria(DEFAULT_FAULT_CATEGORIES[0]);
+    setTempCategoria('Conducta');
+    setDialogOpen(true);
   };
 
   const openEditDialog = (fault: FaultType) => {
+    const categoria = (
+      ['Conducta', 'Uniforme', 'Académica', 'Puntualidad'].includes(fault.category)
+        ? fault.category
+        : 'Conducta'
+    ) as FaultCategory;
     setEditingFault(fault);
     form.reset({
       nombre_falta: fault.name,
-      descripcion: fault.description ?? '',
-      categoria: fault.category,
+      descripcion: fault.description || '',
+      recomendacion: fault.recommendation || '',
+      categoria,
       es_grave: fault.severity === 'Grave',
       puntos_reincidencia: fault.points,
     });
-    setTempCategoria(fault.category);
+    setTempCategoria(categoria);
     setDialogOpen(true);
   };
 
   const onSubmit = async (data: FaultFormValues) => {
-    const isEdit = editingFault !== null;
     setSubmitting(true);
-
-    if (isEdit && editingFault) {
+    if (editingFault) {
       const { success, error } = await faultsService.update(editingFault.id, {
         nombre_falta: data.nombre_falta,
         categoria: data.categoria,
         es_grave: data.es_grave,
         puntos_reincidencia: data.puntos_reincidencia,
-        descripcion: data.descripcion || undefined,
+        descripcion: data.descripcion || null,
+        recomendacion: data.recomendacion?.trim() || null,
       });
-
       if (error || !success) {
-        toast.error(error ?? 'No se pudo actualizar la falta');
+        toast.error(error || 'No se pudo actualizar la falta');
       } else {
-        toast.success('Falta actualizada exitosamente');
+        toast.success('Falta actualizada');
         setDialogOpen(false);
-        resetFormForCreate();
+        setEditingFault(null);
+        form.reset(faultFormDefaults);
+        setTempCategoria(undefined);
         invalidateFaults();
         void refetch();
       }
@@ -160,6 +164,7 @@ export const FaultsCatalog = () => {
         es_grave: data.es_grave,
         puntos_reincidencia: data.puntos_reincidencia,
         descripcion: data.descripcion || null,
+        recomendacion: data.recomendacion?.trim() || null,
       });
 
       if (error) {
@@ -167,29 +172,13 @@ export const FaultsCatalog = () => {
       } else {
         toast.success('Falta agregada exitosamente');
         setDialogOpen(false);
-        resetFormForCreate();
+        form.reset(faultFormDefaults);
+        setTempCategoria('Conducta');
         invalidateFaults();
         void refetch();
       }
     }
-
     setSubmitting(false);
-  };
-
-  const handleAddCategory = async () => {
-    setAddingCategory(true);
-    const { categories, error } = await faultsService.addCategory(newCategoryName, faults);
-    setAddingCategory(false);
-
-    if (error) {
-      toast.error(error);
-      return;
-    }
-
-    setCategoryList(categories);
-    setNewCategoryName('');
-    setCategoryDialogOpen(false);
-    toast.success('Categoría agregada');
   };
 
   if (isLoading && faults.length === 0) {
@@ -203,7 +192,6 @@ export const FaultsCatalog = () => {
   }
 
   const graveCount = faults.filter((f) => f.severity === 'Grave').length;
-  const isEditing = editingFault !== null;
 
   return (
     <div className="app-page app-page-shell">
@@ -214,214 +202,181 @@ export const FaultsCatalog = () => {
         description="Defina tipos de falta, severidad y puntos asignados para el cálculo de reincidencia"
         accent="secondary"
       >
-        <div className="flex flex-wrap gap-2">
-          <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <FolderPlus className="w-4 h-4 mr-2" />
-                Nueva Categoría
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Agregar categoría</DialogTitle>
-                <DialogDescription>
-                  Cree una categoría nueva para organizar las faltas del catálogo.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-2">
-                <Label htmlFor="new-category">Nombre de la categoría</Label>
-                <Input
-                  id="new-category"
-                  value={newCategoryName}
-                  onChange={(e) => setNewCategoryName(e.target.value)}
-                  placeholder="Ej. Tecnología"
-                  maxLength={50}
-                />
-              </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setCategoryDialogOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button
-                  type="button"
-                  variant="success"
-                  disabled={addingCategory || newCategoryName.trim().length < 2}
-                  onClick={() => void handleAddCategory()}
-                >
-                  {addingCategory ? (
-                    <span className="flex items-center">
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Guardando...
-                    </span>
-                  ) : (
-                    'Guardar categoría'
+        <Dialog 
+          open={dialogOpen} 
+          onOpenChange={(open) => {
+            setDialogOpen(open);
+            if (!open) {
+              setEditingFault(null);
+              form.reset(faultFormDefaults);
+              setTempCategoria(undefined);
+            }
+          }}
+        >
+          <DialogTrigger asChild>
+            <Button variant="warning" onClick={openCreateDialog}>
+              <Plus className="w-4 h-4 mr-2" />
+              Nueva Falta
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{editingFault ? 'Editar Falta' : 'Agregar Nueva Falta'}</DialogTitle>
+              <DialogDescription>
+                {editingFault
+                  ? 'Actualice la información y la recomendación que se enviará por WhatsApp.'
+                  : 'Complete la información de la nueva falta. Incluya una recomendación para el apoderado.'}
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="nombre_falta"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nombre de la Falta</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Uso inadecuado del uniforme" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
                   )}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+                />
 
-          <Dialog
-            open={dialogOpen}
-            onOpenChange={(open) => {
-              setDialogOpen(open);
-              if (open) {
-                if (!editingFault) {
-                  resetFormForCreate();
-                }
-              } else {
-                resetFormForCreate();
-                setTempCategoria(undefined);
-              }
-            }}
-          >
-            <DialogTrigger asChild>
-              <Button variant="warning" onClick={() => resetFormForCreate()}>
-                <Plus className="w-4 h-4 mr-2" />
-                Nueva Falta
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>{isEditing ? 'Editar Falta' : 'Agregar Nueva Falta'}</DialogTitle>
-                <DialogDescription>
-                  {isEditing
-                    ? 'Modifique los datos de la falta seleccionada.'
-                    : 'Complete la información de la nueva falta. Todos los campos son obligatorios.'}
-                </DialogDescription>
-              </DialogHeader>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="descripcion"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Descripción (Opcional)</FormLabel>
+                      <FormControl>
+                        <Textarea 
+                          placeholder="Descripción detallada de la falta y su contexto..."
+                          className="min-h-[100px]"
+                          {...field}
+                          value={field.value || ''}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="recomendacion"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Recomendación para apoderado (WhatsApp)</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Ej.: Conversar en casa sobre el respeto a las normas del aula y acompañar al estudiante en la reflexión..."
+                          className="min-h-[100px]"
+                          {...field}
+                          value={field.value || ''}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
-                    name="nombre_falta"
+                    name="categoria"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Nombre de la Falta</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Uso inadecuado del uniforme" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="descripcion"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Descripción (Opcional)</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Descripción detallada de la falta y su contexto..."
-                            className="min-h-[100px]"
-                            {...field}
-                            value={field.value || ''}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="categoria"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Categoría</FormLabel>
-                          <Select
-                            value={tempCategoria ?? field.value}
-                            onValueChange={(value) => {
-                              setTempCategoria(value);
-                              field.onChange(value);
-                            }}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Seleccionar categoría" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {categoryList.map((cat) => (
-                                <SelectItem key={cat} value={cat}>
-                                  {cat}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="puntos_reincidencia"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Puntos</FormLabel>
+                        <FormLabel>Categoría</FormLabel>
+                        <Select 
+                          value={tempCategoria || undefined}
+                          onValueChange={(value) => {
+                            const categoriaValue = value as FaultCategory;
+                            setTempCategoria(categoriaValue);
+                            field.onChange(categoriaValue);
+                          }}
+                        >
                           <FormControl>
-                            <Input
-                              type="number"
-                              placeholder="1"
-                              {...field}
-                              onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                            />
+                            <SelectTrigger>
+                              <SelectValue placeholder="Seleccionar categoría" />
+                            </SelectTrigger>
                           </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  <FormField
-                    control={form.control}
-                    name="es_grave"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                        <div className="space-y-0.5">
-                          <FormLabel className="text-base">Falta Grave</FormLabel>
-                          <div className="text-sm text-muted-foreground">
-                            Marque si esta falta es considerada grave
-                          </div>
-                        </div>
-                        <FormControl>
-                          <input
-                            type="checkbox"
-                            checked={field.value}
-                            onChange={field.onChange}
-                            className="h-4 w-4"
-                          />
-                        </FormControl>
+                          <SelectContent>
+                            <SelectItem value="Conducta">Conducta</SelectItem>
+                            <SelectItem value="Uniforme">Uniforme</SelectItem>
+                            <SelectItem value="Académica">Académica</SelectItem>
+                            <SelectItem value="Puntualidad">Puntualidad</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
                       </FormItem>
                     )}
                   />
+                  <FormField
+                    control={form.control}
+                    name="puntos_reincidencia"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Puntos</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            placeholder="1" 
+                            {...field}
+                            onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
-                  <DialogFooter>
-                    <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                      Cancelar
-                    </Button>
-                    <Button type="submit" variant="success" disabled={submitting}>
-                      {submitting ? (
-                        <span className="flex items-center">
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Guardando...
-                        </span>
-                      ) : isEditing ? (
-                        'Guardar cambios'
-                      ) : (
-                        'Guardar Falta'
-                      )}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
-        </div>
+                <FormField
+                  control={form.control}
+                  name="es_grave"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                      <div className="space-y-0.5">
+                        <FormLabel className="text-base">Falta Grave</FormLabel>
+                        <div className="text-sm text-muted-foreground">
+                          Marque si esta falta es considerada grave
+                        </div>
+                      </div>
+                      <FormControl>
+                        <input
+                          type="checkbox"
+                          checked={field.value}
+                          onChange={field.onChange}
+                          className="h-4 w-4"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button type="submit" variant="success" disabled={submitting}>
+                    {submitting ? (
+                      <span className="flex items-center">
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Guardando...
+                      </span>
+                    ) : editingFault ? (
+                      'Guardar cambios'
+                    ) : (
+                      'Guardar Falta'
+                    )}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
       </PageHeader>
 
       <div className="app-kpi-grid !grid-cols-1 sm:!grid-cols-3">
@@ -460,7 +415,7 @@ export const FaultsCatalog = () => {
           <StaffSegmentedControl
             value={activeCategory}
             onValueChange={(v) => setActiveCategory(v as FaultCategory | 'all')}
-            options={filterCategories}
+            options={categories}
             listClassName="sm:grid-cols-5"
             aria-label="Filtrar por categoría"
           />
@@ -490,6 +445,7 @@ export const FaultsCatalog = () => {
                   size="icon"
                   className="shrink-0"
                   aria-label="Editar falta"
+                  type="button"
                   onClick={() => openEditDialog(fault)}
                 >
                   <Edit className="h-4 w-4" />
@@ -498,6 +454,12 @@ export const FaultsCatalog = () => {
               <p className="mt-3 flex-1 text-sm text-muted-foreground line-clamp-3">
                 {fault.description || 'Sin descripción'}
               </p>
+              {fault.recommendation ? (
+                <p className="mt-2 text-xs text-muted-foreground line-clamp-2">
+                  <span className="font-medium text-foreground">Recomendación: </span>
+                  {fault.recommendation}
+                </p>
+              ) : null}
               <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-3 text-sm">
                 <Badge variant={fault.active ? 'default' : 'secondary'}>
                   {fault.active ? 'Activa' : 'Inactiva'}
