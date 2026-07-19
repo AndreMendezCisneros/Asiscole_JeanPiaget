@@ -39,7 +39,7 @@ if [[ -z "$SECRET" ]]; then
 fi
 
 NOTIFY_SECRET="$(openssl rand -hex 16)"
-SESSIONS="sie-chip-01,sie-chip-02,sie-chip-03,sie-chip-04"
+SESSIONS="sie-chip-04,sie-chip-07,sie-chip-01,sie-chip-06"
 
 umask 077
 cat > "$ENV_FILE" <<EOF
@@ -68,7 +68,7 @@ chmod 600 "$ENV_FILE"
 
 # Generar bearer para el chip principal (frontend) y tokens de sesiones
 FIRST_TOKEN=""
-for sess in sie-chip-01 sie-chip-02 sie-chip-03 sie-chip-04; do
+for sess in sie-chip-04 sie-chip-07 sie-chip-01 sie-chip-06; do
   echo "Token sesión ${sess}..."
   JSON=$(curl -sf -X POST "${API_INTERNAL}/${sess}/${SECRET}/generate-token" || true)
   TOK=$(echo "$JSON" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
