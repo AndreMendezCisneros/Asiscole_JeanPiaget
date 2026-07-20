@@ -57,9 +57,14 @@ env_path = Path(os.environ["JP_ENV_FILE"])
 if not env_path.exists():
     raise SystemExit(f"No existe {env_path}. Defina WPPCONNECT_ENV_FILE o cree el archivo.")
 
+relay_map = (
+    "sie-chip-04:sie-chip-07|sie-chip-07:sie-chip-04|"
+    "sie-chip-01:sie-chip-06|sie-chip-06:sie-chip-01"
+)
+
 lines = env_path.read_text(encoding="utf-8", errors="ignore").splitlines()
 out = []
-seen_s = seen_m = seen_a = seen_sess = False
+seen_s = seen_m = seen_a = seen_sess = seen_r = False
 for line in lines:
     if line.startswith("WPPCONNECT_SESSIONS="):
         out.append(f"WPPCONNECT_SESSIONS={sessions}")
@@ -70,6 +75,9 @@ for line in lines:
     elif line.startswith("WPPCONNECT_CHIP_PHONES="):
         out.append(f"WPPCONNECT_CHIP_PHONES='{mapping}'")
         seen_m = True
+    elif line.startswith("WPPCONNECT_CHIP_RELAY_MAP="):
+        out.append(f"WPPCONNECT_CHIP_RELAY_MAP={relay_map}")
+        seen_r = True
     elif line.startswith("WPPCONNECT_ALLOWLIST_PHONES="):
         out.append("WPPCONNECT_ALLOWLIST_PHONES=")
         seen_a = True
@@ -81,11 +89,14 @@ if not seen_sess:
     out.append("WPPCONNECT_SESSION=sie-chip-01")
 if not seen_m:
     out.append(f"WPPCONNECT_CHIP_PHONES='{mapping}'")
+if not seen_r:
+    out.append(f"WPPCONNECT_CHIP_RELAY_MAP={relay_map}")
 if not seen_a:
     out.append("WPPCONNECT_ALLOWLIST_PHONES=")
 env_path.write_text("\n".join(out) + "\n", encoding="utf-8")
 print("Guardado en", env_path)
 print("WPPCONNECT_CHIP_PHONES=", mapping)
+print("WPPCONNECT_CHIP_RELAY_MAP=", relay_map)
 PY
 
 if systemctl is-active --quiet sie-jp-wpp-notify-queue 2>/dev/null; then
