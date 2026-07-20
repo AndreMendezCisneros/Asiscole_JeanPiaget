@@ -5,6 +5,9 @@ import { readFileSync, existsSync } from 'node:fs';
 
 const tokenCache = new Map();
 
+/** Timeout corto en chequeos: sin esto, chips colgados → Cloudflare 524. */
+const DEFAULT_FETCH_TIMEOUT_MS = Number(process.env.WPPCONNECT_FETCH_TIMEOUT_MS || 8_000);
+
 export function loadEnvFileSync(path) {
   if (!existsSync(path)) return;
   for (const line of readFileSync(path, 'utf8').split('\n')) {
@@ -24,17 +27,28 @@ export function loadEnvFileSync(path) {
   }
 }
 
+function fetchWithTimeout(url, init = {}, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
 export function createWppClient(options = {}) {
   const apiBase = (options.apiBase || process.env.WPPCONNECT_INTERNAL_API || 'http://127.0.0.1:21465/api').replace(
     /\/$/,
     '',
   );
   const secretKey = options.secretKey || process.env.WPPCONNECT_SECRET_KEY || '';
+  const fetchTimeoutMs = Number(options.fetchTimeoutMs || DEFAULT_FETCH_TIMEOUT_MS);
 
   async function getToken(session) {
     const cached = tokenCache.get(session);
     if (cached && cached.expires > Date.now()) return cached.token;
-    const res = await fetch(`${apiBase}/${session}/${secretKey}/generate-token`, { method: 'POST' });
+    const res = await fetchWithTimeout(
+      `${apiBase}/${session}/${secretKey}/generate-token`,
+      { method: 'POST' },
+      fetchTimeoutMs,
+    );
     const json = await res.json().catch(() => ({}));
     const token = json.token || '';
     if (!token) throw new Error(`No token for ${session}`);
@@ -44,15 +58,19 @@ export function createWppClient(options = {}) {
 
   async function apiPost(session, route, body) {
     const token = await getToken(session);
-    const res = await fetch(`${apiBase}/${session}${route}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
+    const res = await fetchWithTimeout(
+      `${apiBase}/${session}${route}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(body),
       },
-      body: JSON.stringify(body),
-    });
+      Math.max(fetchTimeoutMs, 60_000),
+    );
     const raw = await res.text().catch(() => res.statusText);
     if (!res.ok) {
       const err = new Error(raw.slice(0, 200) || `HTTP ${res.status}`);
@@ -68,9 +86,13 @@ export function createWppClient(options = {}) {
 
   async function apiGet(session, route) {
     const token = await getToken(session);
-    const res = await fetch(`${apiBase}/${session}${route}`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-    });
+    const res = await fetchWithTimeout(
+      `${apiBase}/${session}${route}`,
+      {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      },
+      fetchTimeoutMs,
+    );
     const raw = await res.text().catch(() => res.statusText);
     if (!res.ok) {
       const err = new Error(raw.slice(0, 200) || `HTTP ${res.status}`);

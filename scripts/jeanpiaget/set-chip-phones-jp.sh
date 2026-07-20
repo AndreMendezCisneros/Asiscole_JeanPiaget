@@ -68,7 +68,7 @@ for line in lines:
         out.append("WPPCONNECT_SESSION=sie-chip-01")
         seen_sess = True
     elif line.startswith("WPPCONNECT_CHIP_PHONES="):
-        out.append(f"WPPCONNECT_CHIP_PHONES={mapping}")
+        out.append(f"WPPCONNECT_CHIP_PHONES='{mapping}'")
         seen_m = True
     elif line.startswith("WPPCONNECT_ALLOWLIST_PHONES="):
         out.append("WPPCONNECT_ALLOWLIST_PHONES=")
@@ -80,7 +80,7 @@ if not seen_s:
 if not seen_sess:
     out.append("WPPCONNECT_SESSION=sie-chip-01")
 if not seen_m:
-    out.append(f"WPPCONNECT_CHIP_PHONES={mapping}")
+    out.append(f"WPPCONNECT_CHIP_PHONES='{mapping}'")
 if not seen_a:
     out.append("WPPCONNECT_ALLOWLIST_PHONES=")
 env_path.write_text("\n".join(out) + "\n", encoding="utf-8")
