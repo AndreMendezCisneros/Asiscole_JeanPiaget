@@ -142,10 +142,23 @@ export function createWppClient(options = {}) {
 
   async function sendMessage(session, phone, message, sendOptions = {}) {
     const typingMs = sendOptions.typingMs ?? typingDelayMs();
-    await apiPost(session, '/typing', { phone, isGroup: false, value: true }).catch(() => {});
+    const digits = String(phone || '').replace(/\D/g, '');
+    const phoneArg = digits || phone;
+    await apiPost(session, '/typing', { phone: phoneArg, isGroup: false, value: true }).catch(() => {});
     await new Promise((r) => setTimeout(r, typingMs));
-    const result = await apiPost(session, '/send-message', { phone, message, isGroup: false });
-    await apiPost(session, '/typing', { phone, isGroup: false, value: false }).catch(() => {});
+    const result = await apiPost(session, '/send-message', {
+      phone: phoneArg,
+      message,
+      isGroup: false,
+    });
+    await apiPost(session, '/typing', { phone: phoneArg, isGroup: false, value: false }).catch(() => {});
+    if (result && (result.status === 'Error' || result.status === 'error')) {
+      const err = new Error(
+        typeof result === 'object' ? JSON.stringify(result).slice(0, 300) : String(result),
+      );
+      err.status = 500;
+      throw err;
+    }
     return result;
   }
 
