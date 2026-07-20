@@ -85,9 +85,8 @@ const { chipToPhones: CHIP_PHONES, phoneToChip: PHONE_TO_CHIP } = parseChipPhone
 );
 const CHIP_ROUTING = PHONE_TO_CHIP.size > 0;
 /**
- * Notificar al SIM del chip asignado (staff ve el WA del chip).
- * WhatsApp NO permite autoenvío (msg_not_found): otro chip conectado envía HACIA ese SIM.
- * Mensajes: (1) número apoderado (2) texto. Mapa CHIP_PHONES elige el chip “casa”.
+ * Cada chip se autoenvía a su propio SIM (mapa CHIP_PHONES elige el chip).
+ * Mensajes: (1) número apoderado (2) texto. Sin relay entre chips.
  */
 const NOTIFY_TO_SELF = process.env.WPPCONNECT_NOTIFY_TO_SELF !== 'false';
 
@@ -118,26 +117,6 @@ async function resolveChipSelfPhone(session) {
   if (!phone) return null;
   selfPhoneCache.set(session, { phone, expires: Date.now() + 10 * 60 * 1000 });
   return phone;
-}
-
-/** Otro chip conectado (WA bloquea enviar a uno mismo). */
-async function pickRelaySender(excludeSession) {
-  for (let i = 0; i < SESSIONS.length; i++) {
-    const idx = (stateIndex() + i) % SESSIONS.length;
-    const session = SESSIONS[idx];
-    if (session === excludeSession) continue;
-    if (!canSendOnSession(session)) continue;
-    if (await wpp.isConnected(session)) return session;
-  }
-  return null;
-}
-
-function stateIndex() {
-  try {
-    return loadRoundRobinState().index || 0;
-  } catch {
-    return 0;
-  }
 }
 
 const wpp = createWppClient({ typingMinMs: TYPING_MIN, typingMaxMs: TYPING_MAX });
@@ -241,8 +220,11 @@ async function failoverSessions(excludeSession) {
 }
 
 async function deliver(job, session) {
-  const typingMs = wpp.typingDelayMs();
-  await wpp.sendMessage(session, job.phone, job.message, { typingMs });
+  const typingMs = job.notifyToSelf ? 0 : wpp.typingDelayMs();
+  await wpp.sendMessage(session, job.phone, job.message, {
+    typingMs,
+    toSelf: Boolean(job.notifyToSelf),
+  });
   recordSend(session);
   return session;
 }
@@ -258,8 +240,8 @@ async function processQueue(session) {
       usedSession = await deliver(job, usedSession);
       console.log(
         `[notify-queue] OK ${usedSession} -> ${job.phone}` +
-          (job.notifyToSelf && job.homeSession
-            ? ` (relay→${job.homeSession}; apoderado=${job.apoderadoPhone || ''})`
+          (job.notifyToSelf && job.apoderadoPhone
+            ? ` (self; apoderado=${job.apoderadoPhone})`
             : '') +
           ` estudiante=${job.studentId}`,
       );
@@ -376,31 +358,15 @@ async function handleEnqueue(body) {
   }
 
   let destPhone = apoderadoPhone;
-  let homeSession = assignedSession;
-  let sendSession = assignedSession;
-
   if (NOTIFY_TO_SELF) {
-    destPhone = await resolveChipSelfPhone(homeSession);
+    destPhone = await resolveChipSelfPhone(assignedSession);
     if (!destPhone) {
       return {
         status: 503,
         json: {
-          error: `No se pudo leer el número propio de ${homeSession}`,
+          error: `No se pudo leer el número propio de ${assignedSession}`,
           queued: false,
-          session: homeSession,
-        },
-      };
-    }
-    // WA no permite autoenvío: otro chip envía hacia el SIM del chip casa.
-    sendSession = await pickRelaySender(homeSession);
-    if (!sendSession) {
-      return {
-        status: 503,
-        json: {
-          error: `No hay otro chip conectado para avisar a ${homeSession}`,
-          queued: false,
-          session: homeSession,
-          destPhone,
+          session: assignedSession,
         },
       };
     }
@@ -412,8 +378,7 @@ async function handleEnqueue(body) {
       apoderadoPhone,
       message,
       studentId: student.id || student.fullName,
-      assignedSession: sendSession,
-      homeSession,
+      assignedSession,
       lockChip,
       enqueuedAt: Date.now(),
       notifyToSelf: NOTIFY_TO_SELF,
@@ -425,14 +390,13 @@ async function handleEnqueue(body) {
     json: {
       queued: true,
       messageCount: messages.length,
-      session: sendSession,
-      homeSession,
+      session: assignedSession,
       destPhone,
       apoderadoPhone,
       notifyToSelf: NOTIFY_TO_SELF,
       sessions: SESSIONS.length,
       chipRouting: CHIP_ROUTING,
-      phonesOnChip: CHIP_ROUTING ? CHIP_PHONES.get(homeSession)?.size || 0 : null,
+      phonesOnChip: CHIP_ROUTING ? CHIP_PHONES.get(assignedSession)?.size || 0 : null,
     },
   };
 }
@@ -545,6 +509,6 @@ server.listen(PORT, '127.0.0.1', () => {
     );
   }
   console.log(
-    `[notify-queue] destino: ${NOTIFY_TO_SELF ? 'SIM del chip casa vía relay (otro chip envía; WA no permite autoenvío)' : 'teléfono del apoderado'}`,
+    `[notify-queue] destino: ${NOTIFY_TO_SELF ? 'autoenvío al SIM del mismo chip (número apoderado + mensaje)' : 'teléfono del apoderado'}`,
   );
 });

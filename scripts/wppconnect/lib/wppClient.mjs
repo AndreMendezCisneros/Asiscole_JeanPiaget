@@ -33,6 +33,14 @@ function fetchWithTimeout(url, init = {}, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS) 
   return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
 }
 
+function isSendError(result) {
+  return Boolean(result && (result.status === 'Error' || result.status === 'error'));
+}
+
+function sendErrorMessage(result) {
+  return typeof result === 'object' ? JSON.stringify(result).slice(0, 300) : String(result);
+}
+
 export function createWppClient(options = {}) {
   const apiBase = (options.apiBase || process.env.WPPCONNECT_INTERNAL_API || 'http://127.0.0.1:21465/api').replace(
     /\/$/,
@@ -107,8 +115,6 @@ export function createWppClient(options = {}) {
   }
 
   async function isConnected(session) {
-    // check-connection-session a veces cuelga o falla aunque la sesión envíe bien.
-    // Fallback: status-session === CONNECTED.
     try {
       const json = await apiGet(session, '/check-connection-session');
       if (json.status === true || json.message === 'Connected' || json.connected === true) {
@@ -132,6 +138,35 @@ export function createWppClient(options = {}) {
     return raw || null;
   }
 
+  /** WID / chat id propio para autoenvío (mejor que solo dígitos). */
+  async function getSelfChatId(session) {
+    try {
+      const json = await apiGet(session, '/get-phone-number');
+      const resp = String(json.response ?? json.phone ?? json.number ?? '').trim();
+      if (resp.includes('@')) return resp;
+      const digits = resp.replace(/\D/g, '');
+      if (digits) return `${digits}@c.us`;
+    } catch {
+      /* ignore */
+    }
+    try {
+      const host = await apiGet(session, '/host-device');
+      const wid =
+        host?.response?.wid?._serialized ||
+        host?.response?.id?._serialized ||
+        host?.wid?._serialized ||
+        host?.id ||
+        null;
+      if (typeof wid === 'string' && wid.includes('@')) return wid;
+      const digits = String(wid || '').replace(/\D/g, '');
+      if (digits) return `${digits}@c.us`;
+    } catch {
+      /* ignore */
+    }
+    const digits = await getPhoneNumber(session);
+    return digits ? `${digits}@c.us` : null;
+  }
+
   function typingDelayMs() {
     const min = Number(process.env.WPPCONNECT_TYPING_MIN_MS || options.typingMinMs || 10_000);
     const max = Number(process.env.WPPCONNECT_TYPING_MAX_MS || options.typingMaxMs || 12_000);
@@ -140,27 +175,82 @@ export function createWppClient(options = {}) {
     return lo + Math.floor(Math.random() * (hi - lo + 1));
   }
 
-  async function sendMessage(session, phone, message, sendOptions = {}) {
-    const typingMs = sendOptions.typingMs ?? typingDelayMs();
-    const digits = String(phone || '').replace(/\D/g, '');
-    const phoneArg = digits || phone;
-    await apiPost(session, '/typing', { phone: phoneArg, isGroup: false, value: true }).catch(() => {});
-    await new Promise((r) => setTimeout(r, typingMs));
-    const result = await apiPost(session, '/send-message', {
+  async function trySend(session, phoneArg, message) {
+    return apiPost(session, '/send-message', {
       phone: phoneArg,
       message,
       isGroup: false,
     });
-    await apiPost(session, '/typing', { phone: phoneArg, isGroup: false, value: false }).catch(() => {});
-    if (result && (result.status === 'Error' || result.status === 'error')) {
-      const err = new Error(
-        typeof result === 'object' ? JSON.stringify(result).slice(0, 300) : String(result),
-      );
-      err.status = 500;
-      throw err;
-    }
-    return result;
   }
 
-  return { getToken, apiGet, apiPost, isConnected, getPhoneNumber, sendMessage, typingDelayMs };
+  async function sendMessage(session, phone, message, sendOptions = {}) {
+    const toSelf = Boolean(sendOptions.toSelf);
+    const typingMs = toSelf ? 0 : (sendOptions.typingMs ?? typingDelayMs());
+    const digits = String(phone || '').replace(/\D/g, '');
+
+    /** Orden de destinos a probar (autoenvío es frágil en WA). */
+    const candidates = [];
+    if (toSelf) {
+      const selfId = await getSelfChatId(session).catch(() => null);
+      if (selfId) candidates.push(selfId);
+      if (digits) {
+        candidates.push(digits);
+        candidates.push(`${digits}@c.us`);
+      }
+    } else if (digits) {
+      candidates.push(digits);
+    } else if (phone) {
+      candidates.push(phone);
+    }
+
+    const unique = [...new Set(candidates.filter(Boolean))];
+    if (!unique.length) throw new Error('Sin destino de teléfono');
+
+    // Preparar chat / validar número (best-effort)
+    const primary = unique[0];
+    const checkPhone = digits || String(primary).replace(/@c\.us$/i, '');
+    if (checkPhone) {
+      await apiPost(session, '/check-number-status', { phone: checkPhone }).catch(() => {});
+      await apiPost(session, '/open-chat', { phone: checkPhone }).catch(() => {});
+    }
+
+    if (typingMs > 0) {
+      await apiPost(session, '/typing', { phone: unique[0], isGroup: false, value: true }).catch(() => {});
+      await new Promise((r) => setTimeout(r, typingMs));
+    }
+
+    let lastErr = null;
+    for (const phoneArg of unique) {
+      try {
+        const result = await trySend(session, phoneArg, message);
+        if (isSendError(result)) {
+          lastErr = new Error(sendErrorMessage(result));
+          lastErr.status = 500;
+          continue;
+        }
+        if (typingMs > 0) {
+          await apiPost(session, '/typing', { phone: phoneArg, isGroup: false, value: false }).catch(() => {});
+        }
+        return result;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+
+    if (typingMs > 0) {
+      await apiPost(session, '/typing', { phone: unique[0], isGroup: false, value: false }).catch(() => {});
+    }
+    throw lastErr || new Error('No se pudo enviar el mensaje');
+  }
+
+  return {
+    getToken,
+    apiGet,
+    apiPost,
+    isConnected,
+    getPhoneNumber,
+    getSelfChatId,
+    sendMessage,
+    typingDelayMs,
+  };
 }
