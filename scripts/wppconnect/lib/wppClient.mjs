@@ -107,9 +107,20 @@ export function createWppClient(options = {}) {
   }
 
   async function isConnected(session) {
+    // check-connection-session a veces cuelga o falla aunque la sesión envíe bien.
+    // Fallback: status-session === CONNECTED.
     try {
       const json = await apiGet(session, '/check-connection-session');
-      return json.status === true || json.message === 'Connected' || json.connected === true;
+      if (json.status === true || json.message === 'Connected' || json.connected === true) {
+        return true;
+      }
+    } catch {
+      // ignore; intentar status-session
+    }
+    try {
+      const st = await apiGet(session, '/status-session');
+      const status = String(st.status || st.message || '').toUpperCase();
+      return status === 'CONNECTED' || status === 'INCHAT' || status === 'MAIN';
     } catch {
       return false;
     }
