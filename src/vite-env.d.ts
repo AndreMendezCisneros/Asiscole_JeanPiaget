@@ -18,7 +18,7 @@ interface ImportMetaEnv {
   readonly VITE_META_WA_ENABLED?: string;
   readonly VITE_META_WA_API_URL?: string;
   readonly VITE_META_WA_NOTIFY_KEY?: string;
-  /** Nombre del colegio en mensajes WhatsApp (ej. Colegio Jean Piaget) */
+  /** Nombre del colegio en mensajes WhatsApp (ej. Asis Academy) */
   readonly VITE_SCHOOL_NAME?: string;
   /** Tu WhatsApp: recibe el número del apoderado + el mensaje de llegada */
   readonly VITE_WHATSAPP_OPERATOR_PHONE?: string;

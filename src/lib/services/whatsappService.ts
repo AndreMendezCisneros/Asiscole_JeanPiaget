@@ -20,7 +20,7 @@ const MOBILE_INGEST_URL = (
 ).replace(/\/$/, '');
 const MOBILE_INGEST_KEY = import.meta.env.VITE_MOBILE_INGEST_KEY || '';
 const MOBILE_INGEST_TENANT =
-  (import.meta.env.VITE_MOBILE_INGEST_TENANT as string | undefined)?.trim() || 'jean_piaget';
+  (import.meta.env.VITE_MOBILE_INGEST_TENANT as string | undefined)?.trim() || 'asis_academy';
 
 /**
  * URL final del POST. Acepta:
@@ -52,9 +52,9 @@ const WPPCONNECT_NOTIFY_URL = (
 ).replace(/\/$/, '');
 const WPPCONNECT_NOTIFY_KEY = import.meta.env.VITE_WPPCONNECT_NOTIFY_KEY || '';
 
-/** Nombre del colegio en textos WhatsApp (JP: Colegio Jean Piaget). */
+/** Nombre del colegio en textos WhatsApp (fallback: Asis Academy). */
 const SCHOOL_NAME =
-  (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() || 'I.E. San Ramón';
+  (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() || 'Asis Academy';
 
 const GREETING_VARIANTS = [
   'Hola,',

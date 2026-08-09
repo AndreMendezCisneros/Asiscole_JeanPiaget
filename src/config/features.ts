@@ -1,4 +1,4 @@
-/** JP: activo por defecto. Solo se apaga con VITE_*=false. */
+/** Activo por defecto. Solo se apaga con VITE_*=false. */
 function envFlagDefaultOn(raw: string | undefined): boolean {
   if (raw === undefined || raw.trim() === '') return true;
   return raw === 'true';

@@ -5,31 +5,31 @@
       "@type": "WebApplication",
       "name": "SIE Asiscole",
       "alternateName": "Sistema de Incidencias Escolares",
-      "url": "https://asiscole.com/",
+      "url": "https://asisacademy.com/",
       "applicationCategory": "EducationalApplication",
       "operatingSystem": "Web",
       "inLanguage": "es-PE",
-      "description": "Plataforma de incidencias, asistencia escolar y reportes para el Colegio Jean Piaget.",
+      "description": "Plataforma de incidencias, asistencia escolar y reportes para Asis Academy.",
       "provider": {
         "@type": "EducationalOrganization",
-        "name": "Colegio Jean Piaget",
-        "url": "https://asiscole.com/"
+        "name": "Asis Academy",
+        "url": "https://asisacademy.com/"
       }
     },
     {
       "@type": "EducationalOrganization",
-      "@id": "https://asiscole.com/#organization",
-      "name": "Colegio Jean Piaget",
-      "url": "https://asiscole.com/",
-      "sameAs": ["https://asiscole.com/"]
+      "@id": "https://asisacademy.com/#organization",
+      "name": "Asis Academy",
+      "url": "https://asisacademy.com/",
+      "sameAs": ["https://asisacademy.com/"]
     },
     {
       "@type": "WebSite",
-      "@id": "https://asiscole.com/#website",
-      "url": "https://asiscole.com/",
+      "@id": "https://asisacademy.com/#website",
+      "url": "https://asisacademy.com/",
       "name": "SIE Asiscole",
       "description": "Sistema de incidencias y asistencia escolar",
-      "publisher": { "@id": "https://asiscole.com/#organization" },
+      "publisher": { "@id": "https://asisacademy.com/#organization" },
       "inLanguage": "es-PE"
     }
   ]

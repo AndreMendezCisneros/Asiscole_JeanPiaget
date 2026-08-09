@@ -9,7 +9,7 @@ export default {
   host: 'http://127.0.0.1',
   port: '21465',
   deviceName: 'Asiscole SIE',
-  poweredBy: 'Colegio Jean Piaget',
+  poweredBy: 'Asis Academy',
   // false: cada chip se inicia bajo demanda (evita colgar al vincular el 2.º celular)
   startAllSession: false,
   tokenStoreType: 'file',

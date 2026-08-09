@@ -71,7 +71,7 @@ export function usePageMeta() {
     upsertMeta('og:image:type', 'image/jpeg', 'property');
     upsertMeta('og:image:width', '1200', 'property');
     upsertMeta('og:image:height', '630', 'property');
-    upsertMeta('og:image:alt', 'SIE Asiscole — Sistema de Incidencias Escolares, Colegio Jean Piaget', 'property');
+    upsertMeta('og:image:alt', 'SIE Asiscole — Sistema de Incidencias Escolares, Asis Academy', 'property');
     upsertMeta('twitter:card', 'summary_large_image');
     upsertMeta('twitter:title', meta.title);
     upsertMeta('twitter:description', meta.description);

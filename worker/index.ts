@@ -91,11 +91,11 @@ function buildSocialPreviewHtml(pathname: string, origin: string): string {
   const pageUrl = `${origin}${pathname}`;
   const isArrival = pathname.startsWith('/llegada/');
   const title = isArrival
-    ? 'Consulta de asistencia | Colegio Jean Piaget — Asiscole'
-    : 'Portal de padres | Consulta de asistencia — Colegio Jean Piaget';
+    ? 'Consulta de asistencia | Asis Academy — Asiscole'
+    : 'Portal de padres | Consulta de asistencia — Asis Academy';
   const description = isArrival
-    ? 'Registro de llegada del estudiante. Consulte la asistencia diaria en el Sistema de Incidencias Escolares del Colegio Jean Piaget.'
-    : 'Consulte la asistencia diaria de su hijo o hija en el Colegio Jean Piaget ingresando el DNI del estudiante.';
+    ? 'Registro de llegada del estudiante. Consulte la asistencia diaria en el Sistema de Incidencias Escolares de Asis Academy.'
+    : 'Consulte la asistencia diaria de su hijo o hija en Asis Academy ingresando el DNI del estudiante.';
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -114,7 +114,7 @@ function buildSocialPreviewHtml(pathname: string, origin: string): string {
   <meta property="og:image:type" content="image/jpeg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="SIE Asiscole — Sistema de Incidencias Escolares, Colegio Jean Piaget" />
+  <meta property="og:image:alt" content="SIE Asiscole — Sistema de Incidencias Escolares, Asis Academy" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:image" content="${WHATSAPP_PREVIEW_IMAGE}" />
   <link rel="canonical" href="${escapeHtml(pageUrl)}" />
