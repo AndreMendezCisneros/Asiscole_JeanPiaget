@@ -1,5 +1,11 @@
-export function parseTalleresEnabled(raw: string | undefined): boolean {
+/** JP: activo por defecto. Solo se apaga con VITE_*=false. */
+function envFlagDefaultOn(raw: string | undefined): boolean {
+  if (raw === undefined || raw.trim() === '') return true;
   return raw === 'true';
+}
+
+export function parseTalleresEnabled(raw: string | undefined): boolean {
+  return envFlagDefaultOn(raw);
 }
 
 export function isTalleresEnabled(): boolean {
@@ -7,7 +13,7 @@ export function isTalleresEnabled(): boolean {
 }
 
 export function parsePensionesEnabled(raw: string | undefined): boolean {
-  return raw === 'true';
+  return envFlagDefaultOn(raw);
 }
 
 export function isPensionesEnabled(): boolean {
