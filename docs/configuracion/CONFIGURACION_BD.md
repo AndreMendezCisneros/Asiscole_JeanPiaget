@@ -2,7 +2,7 @@
 
 ## Estado de la Conexión
 
-✅ **URL de Supabase configurada**: `https://spdugaykkcgpcfslcpac.supabase.co`
+✅ **URL de Supabase**: configurar `VITE_SUPABASE_URL` en `.env.local` (ver `.env.example`)
 ✅ **API Key configurada**: Clave anónima configurada en `src/lib/supabaseClient.ts`
 
 ## Pasos para Completar la Configuración

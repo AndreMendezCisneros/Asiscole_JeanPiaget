@@ -447,10 +447,10 @@ Estas capacidades aparecen en varios módulos:
 
 | Si necesitas… | Lee este archivo |
 |---------------|------------------|
-| Uso paso a paso (manual de usuario) | `MANUAL_DE_USUARIO.md` |
-| Detalles técnicos y arquitectura | `DOCUMENTACION_SISTEMA.md` |
-| Cómo instalar y configurar Supabase | `CONFIGURACION_COMPLETA.md` |
-| Cómo funciona la reincidencia por dentro | `EXPLICACION_SISTEMA_REINCIDENCIA.md` |
+| Uso paso a paso (manual de usuario) | [`MANUAL_DE_USUARIO.md`](./MANUAL_DE_USUARIO.md) |
+| Detalles técnicos y arquitectura | [`DOCUMENTACION_SISTEMA.md`](./DOCUMENTACION_SISTEMA.md) |
+| Cómo instalar y configurar Supabase | [`CONFIGURACION_COMPLETA.md`](../configuracion/CONFIGURACION_COMPLETA.md) |
+| Cómo funciona la reincidencia por dentro | [`EXPLICACION_SISTEMA_REINCIDENCIA.md`](../tecnico/EXPLICACION_SISTEMA_REINCIDENCIA.md) |
 
 ---
 

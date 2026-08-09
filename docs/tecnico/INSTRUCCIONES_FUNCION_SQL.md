@@ -4,7 +4,7 @@
 
 Estás recibiendo este error:
 ```
-POST https://spdugaykkcgpcfslcpac.supabase.co/rest/v1/rpc/validar_password 404 (Not Found)
+POST https://YOUR_PROJECT.supabase.co/rest/v1/rpc/validar_password 404 (Not Found)
 Could not find the function public.validar_password(p_password, p_username) in the schema cache
 ```
 
@@ -64,7 +64,7 @@ GRANT EXECUTE ON FUNCTION validar_password TO anon;
 GRANT EXECUTE ON FUNCTION validar_password TO authenticated;
 ```
 
-**O** usa el archivo `FUNCION_VALIDAR_PASSWORD_BCRYPT.sql` que ya tiene esta versión.
+**O** usa el archivo `sql/schema/FUNCION_VALIDAR_PASSWORD_BCRYPT.sql` que ya tiene esta versión.
 
 ### Paso 3: Ejecutar la Consulta
 
@@ -141,5 +141,5 @@ Si todo está correcto, deberías poder iniciar sesión sin errores.
 2. Usar bcrypt para hashear contraseñas
 3. Comparar usando `crypt()`
 
-Ver el archivo `FUNCIONES_SQL_REQUERIDAS.sql` para la versión de producción con bcrypt.
+Ver el archivo `sql/schema/FUNCIONES_SQL_REQUERIDAS.sql` para la versión de producción con bcrypt.
 

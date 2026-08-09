@@ -160,11 +160,11 @@ export function ParentAttendanceDashboard({
             imageClassName="object-cover rounded-2xl"
             fallbackClassName="rounded-2xl bg-[#F1F2F5] text-2xl font-semibold text-[#6B7280] sm:text-3xl"
           />
-          <h1 className="mt-3 text-xl font-semibold text-[#1A1D23] leading-snug">{student.fullName}</h1>
+          <h1 className="mt-3 text-xl font-semibold text-[#0F172A] leading-snug">{student.fullName}</h1>
           {nivel && <p className="mt-1 text-[13px] text-[#6B7280]">{nivel}</p>}
-          <p className="mt-2 text-[11px] font-medium text-[#9095A3]">
+          <p className="mt-2 text-[11px] font-medium text-[#475569]">
             Hora límite de llegada ({student.level || 'nivel'}):{' '}
-            <span className="font-mono text-[#1A1D23]">{studentArrivalLimit}</span>
+            <span className="font-mono text-[#0F172A]">{studentArrivalLimit}</span>
           </p>
         </div>
 
@@ -205,7 +205,7 @@ export function ParentAttendanceDashboard({
             >
               ‹
             </button>
-            <p className="text-[15px] font-semibold capitalize text-[#1A1D23]">{monthTitle}</p>
+            <p className="text-[15px] font-semibold capitalize text-[#0F172A]">{monthTitle}</p>
             <button
               type="button"
               onClick={() => shiftMonth(1)}
@@ -220,7 +220,7 @@ export function ParentAttendanceDashboard({
             {WEEKDAY_LABELS.map((label) => (
               <div
                 key={label}
-                className="pb-1.5 text-center text-[10px] font-medium uppercase tracking-[0.05em] text-[#9095A3]"
+                className="pb-1.5 text-center text-[10px] font-medium uppercase tracking-[0.05em] text-[#475569]"
               >
                 {label}
               </div>
@@ -254,7 +254,7 @@ export function ParentAttendanceDashboard({
                       onClick={() => setSelectedDay(isSelected ? null : dayKey)}
                       className={cn(
                         'flex min-h-[44px] flex-col items-center justify-center rounded-[10px] border px-0.5 py-1 sm:min-h-[52px]',
-                        isToday && 'outline outline-2 outline-[#1A305E] outline-offset-2 bg-white'
+                        isToday && 'outline outline-2 outline-[#5B21E6] outline-offset-2 bg-white'
                       )}
                       style={{
                         background: isToday ? '#FFFFFF' : style.bg,
@@ -297,7 +297,7 @@ export function ParentAttendanceDashboard({
               }}
             >
               <div className="flex flex-wrap items-center gap-2">
-                <p className="text-lg font-semibold capitalize text-[#1A1D23]">
+                <p className="text-lg font-semibold capitalize text-[#0F172A]">
                   {format(parseISO(selectedDay), "d 'de' MMMM", { locale: es })}
                 </p>
                 <span

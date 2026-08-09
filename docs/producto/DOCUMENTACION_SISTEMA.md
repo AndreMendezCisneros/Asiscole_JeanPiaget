@@ -275,7 +275,7 @@ Cliente Supabase: `src/lib/supabaseClient.ts`.
 ### Funciones RPC
 
 - `validar_password` — validación de credenciales (texto plano en desarrollo; bcrypt en producción).
-- Otras funciones según scripts en `FUNCIONES_SQL_REQUERIDAS.sql`.
+- Otras funciones según scripts en `sql/schema/FUNCIONES_SQL_REQUERIDAS.sql`.
 
 ---
 
@@ -289,7 +289,7 @@ Mecanismo automático que clasifica el comportamiento del estudiante en **nivele
 4. El total se compara con umbrales para asignar el nivel.
 5. El frontend muestra el nivel con `ReincidenceBadge` (colores por severidad).
 
-Documentación detallada: `EXPLICACION_SISTEMA_REINCIDENCIA.md`.
+Documentación detallada: [`EXPLICACION_SISTEMA_REINCIDENCIA.md`](../tecnico/EXPLICACION_SISTEMA_REINCIDENCIA.md).
 
 ---
 
@@ -303,11 +303,11 @@ Documentación detallada: `EXPLICACION_SISTEMA_REINCIDENCIA.md`.
 | Sanitización XSS | `sanitize.ts` en login y formularios |
 | Bloqueo de cuenta | Tras 5 intentos fallidos en BD |
 | Headers HTTP | CSP, X-Frame-Options, etc. en `index.html` |
-| Row Level Security | Pendiente/configurable en Supabase (`CONFIGURACION_RLS_PADRES.md`) |
+| Row Level Security | Pendiente/configurable en Supabase ([`CONFIGURACION_RLS_PADRES.md`](../configuracion/CONFIGURACION_RLS_PADRES.md)) |
 
-Documentación: `MEJORAS_SEGURIDAD.md`.
+Documentación: [`MEJORAS_SEGURIDAD.md`](../tecnico/MEJORAS_SEGURIDAD.md).
 
-> **Producción:** usar bcrypt para contraseñas (`FUNCION_VALIDAR_PASSWORD_BCRYPT.sql`), configurar RLS y no dejar contraseñas en texto plano.
+> **Producción:** usar bcrypt para contraseñas (`sql/schema/FUNCION_VALIDAR_PASSWORD_BCRYPT.sql`), configurar RLS y no dejar contraseñas en texto plano.
 
 ---
 
@@ -332,8 +332,9 @@ mock-flow-designer-06014/
 │   │   ├── constants/         # Colores, tema
 │   │   └── supabaseClient.ts
 │   └── types/index.ts         # Tipos TS alineados al esquema BD
-├── *.sql                      # Migraciones y correcciones
-├── *.md                       # Documentación operativa
+├── docs/                      # Documentación (producto, técnico, WhatsApp, …)
+├── sql/                       # Scripts SQL organizados (schema, migraciones, datos)
+├── scripts/                   # Parches PATCH_*/RLS_* y utilidades VPS
 ├── package.json
 ├── vite.config.ts
 └── tailwind.config.ts
@@ -363,20 +364,20 @@ mock-flow-designer-06014/
 
 | Archivo | Propósito |
 |---------|-----------|
-| `FUNCIONES_SQL_REQUERIDAS.sql` | Función `validar_password` y RPC base |
-| `FUNCION_VALIDAR_PASSWORD_BCRYPT.sql` | Validación con bcrypt (producción) |
-| `CREAR_TABLA_CITAS_PADRES.sql` | Tabla de citas con padres |
-| `ACTUALIZAR_ESTUDIANTES_CONTACTO.sql` | Campos de contacto familiar |
-| `ACTUALIZAR_REGISTROS_LLEGADA_SALIDAS.sql` | Control de salidas |
-| `ACTUALIZAR_CITAS_PADRES_LLEGADA_TARDE.sql` | Llegada tarde a citas |
-| `AGREGAR_ESTADO_JUSTIFICADA*.sql` | Estado Justificada en incidencias |
-| `SOLUCION_REINCIDENCIA.sql` / `SOLUCION_COMPLETA_REINCIDENCIA.sql` | Correcciones algoritmo reincidencia |
-| `CORREGIR_REINCIDENCIA_USANDO_PUNTOS_INDIVIDUALES.sql` | Puntos por falta del catálogo |
-| `CORREGIR_AUDITORIA_LOGS.sql` | Ajustes tabla auditoría |
-| `CREAR_BUCKETS_STORAGE.sql` | Bucket evidencias |
-| `VERIFICAR_ESTADO_JUSTIFICADA.sql` | Verificación migración |
+| `sql/schema/FUNCIONES_SQL_REQUERIDAS.sql` | Función `validar_password` y RPC base |
+| `sql/schema/FUNCION_VALIDAR_PASSWORD_BCRYPT.sql` | Validación con bcrypt (producción) |
+| `sql/migraciones/CREAR_TABLA_CITAS_PADRES.sql` | Tabla de citas con padres |
+| `sql/migraciones/ACTUALIZAR_ESTUDIANTES_CONTACTO.sql` | Campos de contacto familiar |
+| `sql/migraciones/ACTUALIZAR_REGISTROS_LLEGADA_SALIDAS.sql` | Control de salidas |
+| `sql/migraciones/ACTUALIZAR_CITAS_PADRES_LLEGADA_TARDE.sql` | Llegada tarde a citas |
+| `sql/migraciones/AGREGAR_ESTADO_JUSTIFICADA*.sql` | Estado Justificada en incidencias |
+| `sql/migraciones/SOLUCION_REINCIDENCIA.sql` / `SOLUCION_COMPLETA_REINCIDENCIA.sql` | Correcciones algoritmo reincidencia |
+| `sql/migraciones/CORREGIR_REINCIDENCIA_USANDO_PUNTOS_INDIVIDUALES.sql` | Puntos por falta del catálogo |
+| `sql/migraciones/CORREGIR_AUDITORIA_LOGS.sql` | Ajustes tabla auditoría |
+| `sql/schema/CREAR_BUCKETS_STORAGE.sql` | Bucket evidencias |
+| `sql/migraciones/VERIFICAR_ESTADO_JUSTIFICADA.sql` | Verificación migración |
 
-Ejecutar en **Supabase → SQL Editor** en el orden indicado en `CONFIGURACION_COMPLETA.md`.
+Ejecutar en **Supabase → SQL Editor** en el orden indicado en [`CONFIGURACION_COMPLETA.md`](../configuracion/CONFIGURACION_COMPLETA.md).
 
 ---
 
@@ -384,18 +385,18 @@ Ejecutar en **Supabase → SQL Editor** en el orden indicado en `CONFIGURACION_C
 
 | Archivo | Contenido |
 |---------|-----------|
-| `MANUAL_DE_USUARIO.md` | Guía paso a paso para usuarios finales |
-| `CONFIGURACION_COMPLETA.md` | Checklist de puesta en marcha |
-| `CONFIGURACION_BD.md` | Conexión Supabase, Storage, RPC |
-| `CONFIGURACION_RLS_PADRES.md` | Políticas RLS para rol Padre |
-| `RESUMEN_IMPLEMENTACION.md` | Funcionalidades implementadas por fase |
-| `EXPLICACION_SISTEMA_REINCIDENCIA.md` | Algoritmo de reincidencia |
-| `MEJORAS_SEGURIDAD.md` | Sesión, rate limit, sanitización |
-| `MEJORAS_IMPLEMENTADAS.md` | Lazy loading, accesibilidad, build |
-| `LOADING_SCREEN_USAGE.md` | Uso de pantallas de carga |
-| `ERROR_DIALOG_USAGE.md` | Diálogos de error |
-| `INSTRUCCIONES_FUNCION_SQL.md` | Instalación de funciones SQL |
-| `DIAGNOSTICO_REINCIDENCIA.md` | Troubleshooting reincidencia |
+| [`MANUAL_DE_USUARIO.md`](./MANUAL_DE_USUARIO.md) | Guía paso a paso para usuarios finales |
+| [`CONFIGURACION_COMPLETA.md`](../configuracion/CONFIGURACION_COMPLETA.md) | Checklist de puesta en marcha |
+| [`CONFIGURACION_BD.md`](../configuracion/CONFIGURACION_BD.md) | Conexión Supabase, Storage, RPC |
+| [`CONFIGURACION_RLS_PADRES.md`](../configuracion/CONFIGURACION_RLS_PADRES.md) | Políticas RLS para rol Padre |
+| [`RESUMEN_IMPLEMENTACION.md`](../tecnico/RESUMEN_IMPLEMENTACION.md) | Funcionalidades implementadas por fase |
+| [`EXPLICACION_SISTEMA_REINCIDENCIA.md`](../tecnico/EXPLICACION_SISTEMA_REINCIDENCIA.md) | Algoritmo de reincidencia |
+| [`MEJORAS_SEGURIDAD.md`](../tecnico/MEJORAS_SEGURIDAD.md) | Sesión, rate limit, sanitización |
+| [`MEJORAS_IMPLEMENTADAS.md`](../tecnico/MEJORAS_IMPLEMENTADAS.md) | Lazy loading, accesibilidad, build |
+| [`LOADING_SCREEN_USAGE.md`](../componentes/LOADING_SCREEN_USAGE.md) | Uso de pantallas de carga |
+| [`ERROR_DIALOG_USAGE.md`](../componentes/ERROR_DIALOG_USAGE.md) | Diálogos de error |
+| [`INSTRUCCIONES_FUNCION_SQL.md`](../tecnico/INSTRUCCIONES_FUNCION_SQL.md) | Instalación de funciones SQL |
+| [`DIAGNOSTICO_REINCIDENCIA.md`](../tecnico/DIAGNOSTICO_REINCIDENCIA.md) | Troubleshooting reincidencia |
 
 Este archivo (`DOCUMENTACION_SISTEMA.md`) es la **visión técnica consolidada**; el manual de usuario cubre el uso operativo día a día.
 
@@ -430,9 +431,9 @@ npm run preview   # previsualizar build
 ### Checklist mínimo antes de usar
 
 1. Ejecutar script SQL de tablas en Supabase.
-2. Ejecutar `FUNCIONES_SQL_REQUERIDAS.sql`.
+2. Ejecutar `sql/schema/FUNCIONES_SQL_REQUERIDAS.sql`.
 3. Crear bucket `evidencias` y políticas de Storage.
-4. Crear usuarios de prueba (ver `CONFIGURACION_COMPLETA.md`).
+4. Crear usuarios de prueba (ver [`CONFIGURACION_COMPLETA.md`](../configuracion/CONFIGURACION_COMPLETA.md)).
 5. Aplicar migraciones de contacto, salidas y citas si aún no están en el esquema.
 6. Configurar RLS según el entorno (desarrollo vs producción).
 
@@ -450,7 +451,7 @@ npm run preview   # previsualizar build
 
 El sistema es una **SPA React + Supabase** para gestión escolar integral: incidencias con reincidencia automática, asistencia con control de salidas, citas con padres, portal familiar y reportes por bimestre. Cinco roles definen qué puede ver y hacer cada usuario. La lógica crítica (contraseñas, reincidencia, auditoría) vive en PostgreSQL mediante funciones, triggers y vistas; el frontend orquesta la experiencia y consume servicios tipados en TypeScript.
 
-Para uso diario del personal, consultar **`MANUAL_DE_USUARIO.md`**. Para configurar el entorno, **`CONFIGURACION_COMPLETA.md`**.
+Para uso diario del personal, consultar **[`MANUAL_DE_USUARIO.md`](./MANUAL_DE_USUARIO.md)**. Para configurar el entorno, **[`CONFIGURACION_COMPLETA.md`](../configuracion/CONFIGURACION_COMPLETA.md)**.
 
 ---
 

@@ -101,10 +101,10 @@ ADD COLUMN IF NOT EXISTS tipo_salida VARCHAR(20) CHECK (tipo_salida IN ('Normal'
 ```
 
 ### 3. Crear Tabla citas_padres
-Ejecutar el archivo: `CREAR_TABLA_CITAS_PADRES.sql`
+Ejecutar el archivo: `sql/migraciones/CREAR_TABLA_CITAS_PADRES.sql`
 
 ### 4. Configurar RLS para Padres
-Ver archivo: `CONFIGURACION_RLS_PADRES.md`
+Ver archivo: `docs/configuracion/CONFIGURACION_RLS_PADRES.md`
 
 ## 🎯 Funcionalidades Principales Implementadas
 
@@ -131,8 +131,8 @@ Ver archivo: `CONFIGURACION_RLS_PADRES.md`
 5. `src/hooks/useFilters.ts` - Hook para filtros
 6. `src/hooks/useExportPDF.ts` - Hook para exportación PDF
 7. `src/types/pdf-excel.d.ts` - Tipos para jspdf y exceljs
-8. `CREAR_TABLA_CITAS_PADRES.sql` - Script SQL para tabla de citas
-9. `CONFIGURACION_RLS_PADRES.md` - Documentación de RLS
+8. `sql/migraciones/CREAR_TABLA_CITAS_PADRES.sql` - Script SQL para tabla de citas
+9. `docs/configuracion/CONFIGURACION_RLS_PADRES.md` - Documentación de RLS
 
 ## 🔄 Archivos Modificados
 

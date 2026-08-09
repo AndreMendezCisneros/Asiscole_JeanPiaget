@@ -13,7 +13,7 @@
 
 - [x] Script SQL de tablas ejecutado
 - [x] Vistas creadas (`v_dashboard_ejecutivo`, `v_estudiantes_nivel_actual`)
-- [ ] **FALTA**: Ejecutar `FUNCIONES_SQL_REQUERIDAS.sql` (función `validar_password`)
+- [ ] **FALTA**: Ejecutar `sql/schema/FUNCIONES_SQL_REQUERIDAS.sql` (función `validar_password`)
 
 ### 2. Storage de Supabase ⚠️
 
@@ -36,7 +36,7 @@
 ### Paso 1: Ejecutar Función SQL de Validación
 
 1. Ve a Supabase Dashboard → SQL Editor
-2. Abre el archivo `FUNCIONES_SQL_REQUERIDAS.sql`
+2. Abre el archivo `sql/schema/FUNCIONES_SQL_REQUERIDAS.sql`
 3. Copia y pega el contenido
 4. Ejecuta el script
 
@@ -179,7 +179,7 @@ WITH CHECK (true);  -- Ajustar según permisos de rol
 ## ⚠️ Problemas Comunes
 
 ### Error: "Función validar_password no encontrada"
-**Solución**: Ejecuta `FUNCIONES_SQL_REQUERIDAS.sql` en Supabase
+**Solución**: Ejecuta `sql/schema/FUNCIONES_SQL_REQUERIDAS.sql` en Supabase
 
 ### Error: "storage: bucket not found"
 **Solución**: Crea el bucket `evidencias` en Storage

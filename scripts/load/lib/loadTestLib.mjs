@@ -23,14 +23,15 @@ export function loadEnvLocal() {
 }
 
 export function getSupabaseUrl() {
-  return process.env.VITE_SUPABASE_URL || 'https://spdugaykkcgpcfslcpac.supabase.co';
+  const url = (process.env.VITE_SUPABASE_URL || '').trim();
+  if (!url) throw new Error('Falta VITE_SUPABASE_URL');
+  return url;
 }
 
 export function getAnonKey() {
-  return (
-    process.env.VITE_SUPABASE_ANON_KEY ||
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwZHVnYXlra2NncGNmc2xjcGFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE5NDE5MzAsImV4cCI6MjA3NzUxNzkzMH0.zLC3qHpIeVSA0jsLcA_md87_0SV4-stpDjHF7IvBr28'
-  );
+  const key = (process.env.VITE_SUPABASE_ANON_KEY || '').trim();
+  if (!key) throw new Error('Falta VITE_SUPABASE_ANON_KEY');
+  return key;
 }
 
 export function getServiceKey() {

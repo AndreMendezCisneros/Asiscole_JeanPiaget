@@ -50,6 +50,12 @@ npm run dev
 - Click on "New codespace" to launch a new Codespace environment.
 - Edit files directly within the Codespace and commit and push your changes once you're done.
 
+## Documentación y SQL
+
+- Guías y manuales: [`docs/`](docs/README.md)
+- Scripts SQL organizados: [`sql/`](sql/README.md)
+- Parches operativos de BD (`PATCH_*`, `RLS_*`): siguen en [`scripts/`](scripts/)
+
 ## What technologies are used for this project?
 
 This project is built with:

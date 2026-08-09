@@ -1,9 +1,8 @@
 import { SCHOOL_NAME } from '@/config/siteSeo';
-
-const CARNET_SRC = '/Carnet-JeanPiaget.png';
+import { BRAND_LOGIN_CARNET } from '@/config/brandAssets';
 
 /**
- * Carnet real del Colegio Jean Piaget en la escena de login
+ * Carnet Asiscole en la escena de login
  * (marco + animaciones GSAP sobre el wrapper de la imagen).
  */
 export function LoginHeroIllustration() {
@@ -36,7 +35,7 @@ export function LoginHeroIllustration() {
               data-login-visual-carnet-part="photo"
             >
               <img
-                src={CARNET_SRC}
+                src={BRAND_LOGIN_CARNET}
                 alt={`Carnet escolar de ejemplo — ${SCHOOL_NAME}`}
                 className="login-carnet-replica__photo-card-img"
                 width={420}

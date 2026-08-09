@@ -42,6 +42,10 @@ export function cspConnectSrcPlugin(): Plugin {
       }
 
       const connectExtra = origins.size > 0 ? ` ${[...origins].join(' ')}` : '';
+      const connectSrc =
+        origins.size > 0
+          ? `connect-src 'self'${connectExtra}`
+          : "connect-src 'self'";
       const devCsp = [
         "default-src 'self'",
         "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
@@ -49,7 +53,7 @@ export function cspConnectSrcPlugin(): Plugin {
         "font-src 'self' data: https://fonts.gstatic.com",
         "img-src 'self' data: https: blob:",
         "media-src 'self' blob: data:",
-        `connect-src 'self' https://spdugaykkcgpcfslcpac.supabase.co wss://spdugaykkcgpcfslcpac.supabase.co${connectExtra}`,
+        connectSrc,
         "base-uri 'self'",
         "form-action 'self'",
         "frame-ancestors 'none'",

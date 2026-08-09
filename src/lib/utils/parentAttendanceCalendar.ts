@@ -37,7 +37,7 @@ export const DAY_STYLES: Record<
   },
   noclass: {
     bg: '#F1F2F5',
-    text: '#9095A3',
+    text: '#475569',
     border: '#DDE0E8',
     icon: '',
     label: '',

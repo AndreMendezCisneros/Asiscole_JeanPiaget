@@ -1,8 +1,12 @@
 // Script para verificar estudiante por código de barras
-// Ejecutar en la consola del navegador o en Node.js con las credenciales de Supabase
+// Requiere VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en el entorno.
 
-const SUPABASE_URL = 'https://spdugaykkcgpcfslcpac.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwZHVnYXlra2NncGNmc2xjcGFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE5NDE5MzAsImV4cCI6MjA3NzUxNzkzMH0.zLC3qHpIeVSA0jsLcA_md87_0SV4-stpDjHF7IvBr28';
+const SUPABASE_URL = (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_URL) || '';
+const SUPABASE_KEY = (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_ANON_KEY) || '';
+
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  throw new Error('Defina VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY antes de ejecutar.');
+}
 
 async function verificarEstudiante(codigoBarras) {
   try {

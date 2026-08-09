@@ -5,10 +5,14 @@
  */
 import { createClient } from '@supabase/supabase-js';
 
-const url = process.env.VITE_SUPABASE_URL || 'https://spdugaykkcgpcfslcpac.supabase.co';
-const key =
-  process.env.VITE_SUPABASE_ANON_KEY ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwZHVnYXlra2NncGNmc2xjcGFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE5NDE5MzAsImV4cCI6MjA3NzUxNzkzMH0.zLC3qHpIeVSA0jsLcA_md87_0SV4-stpDjHF7IvBr28';
+function requireEnv(name) {
+  const v = (process.env[name] || '').trim();
+  if (!v) throw new Error(`Falta ${name} (defínalo en .env.local o el entorno)`);
+  return v;
+}
+
+const url = requireEnv('VITE_SUPABASE_URL');
+const key = requireEnv('VITE_SUPABASE_ANON_KEY');
 
 /** Catálogo real San Ramón — recomendaciones alineadas al nombre de la falta */
 const BY_ID = {

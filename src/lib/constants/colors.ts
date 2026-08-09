@@ -1,69 +1,69 @@
 /**
  * Colores de marca SIE — reflejan tokens en src/index.css (:root).
  * Fuente canónica: variables CSS (--primary, --success, etc.).
- * Paleta Colegio Jean Piaget: navy + rojo.
+ * Paleta Asiscole: morado (#5B21E6) + celeste (#22C7F2).
  */
 export const COLORS = {
-  primary: 'hsl(221, 56%, 24%)',
-  secondary: 'hsl(221, 42%, 36%)',
-  accent: 'hsl(355, 71%, 41%)',
+  primary: 'hsl(258, 80%, 52%)',
+  secondary: 'hsl(262, 83%, 58%)',
+  accent: 'hsl(280, 91%, 65%)',
 
-  primaryLight: 'hsl(221, 40%, 94%)',
-  primaryDark: 'hsl(221, 60%, 18%)',
-  secondaryLight: 'hsl(221, 38%, 48%)',
-  secondaryDark: 'hsl(221, 50%, 22%)',
+  primaryLight: 'hsl(270, 90%, 96%)',
+  primaryDark: 'hsl(258, 75%, 40%)',
+  secondaryLight: 'hsl(262, 70%, 70%)',
+  secondaryDark: 'hsl(262, 75%, 45%)',
 
-  accentLight: 'hsl(355, 55%, 58%)',
-  accentDark: 'hsl(355, 72%, 32%)',
+  accentLight: 'hsl(280, 85%, 78%)',
+  accentDark: 'hsl(280, 80%, 50%)',
 
   white: 'hsl(0, 0%, 100%)',
-  offWhite: 'hsl(240, 5%, 98%)',
-  lightGray: 'hsl(240, 7%, 91%)',
-  mediumGray: 'hsl(0, 0%, 60%)',
-  darkGray: 'hsl(240, 4%, 25%)',
-  black: 'hsl(0, 0%, 0%)',
+  offWhite: 'hsl(210, 40%, 98%)',
+  lightGray: 'hsl(214, 32%, 91%)',
+  mediumGray: 'hsl(215, 16%, 47%)',
+  darkGray: 'hsl(222, 47%, 20%)',
+  black: 'hsl(222, 47%, 11%)',
 
-  cream: 'hsl(240, 5%, 96%)',
-  beige: 'hsl(220, 14%, 92%)',
-  warmGray: 'hsl(240, 6%, 94%)',
-  sand: 'hsl(240, 5%, 98%)',
+  cream: 'hsl(210, 40%, 98%)',
+  beige: 'hsl(214, 32%, 96%)',
+  warmGray: 'hsl(214, 32%, 94%)',
+  sand: 'hsl(210, 40%, 98%)',
 
   success: 'hsl(152, 48%, 38%)',
   warning: 'hsl(32, 85%, 46%)',
   error: 'hsl(0, 65%, 48%)',
-  info: 'hsl(221, 48%, 42%)',
+  info: 'hsl(191, 89%, 54%)',
 
-  background: 'hsl(240, 5%, 96%)',
-  backgroundAlt: 'hsl(220, 14%, 92%)',
-  backgroundWarm: 'hsl(240, 6%, 94%)',
+  background: 'hsl(210, 40%, 98%)',
+  backgroundAlt: 'hsl(214, 32%, 96%)',
+  backgroundWarm: 'hsl(210, 36%, 97%)',
   paper: 'hsl(0, 0%, 100%)',
-  paperAlt: 'hsl(240, 5%, 98%)',
+  paperAlt: 'hsl(210, 40%, 98%)',
 
-  textPrimary: 'hsl(240, 4%, 12%)',
-  textSecondary: 'hsl(0, 0%, 47%)',
-  textTertiary: 'hsl(0, 0%, 60%)',
+  textPrimary: 'hsl(222, 47%, 11%)',
+  textSecondary: 'hsl(215, 16%, 47%)',
+  textTertiary: 'hsl(215, 14%, 58%)',
   textOnPrimary: 'hsl(0, 0%, 100%)',
   textOnSecondary: 'hsl(0, 0%, 100%)',
   textOnAccent: 'hsl(0, 0%, 100%)',
 
-  borderLight: 'hsl(220, 13%, 91%)',
-  borderMedium: 'hsl(240, 7%, 85%)',
-  borderDark: 'hsl(0, 0%, 60%)',
+  borderLight: 'hsl(214, 32%, 91%)',
+  borderMedium: 'hsl(214, 25%, 85%)',
+  borderDark: 'hsl(215, 16%, 47%)',
 
   shadow: 'none',
   shadowMd: 'none',
   shadowLg: 'none',
 
-  gradientPrimary: 'linear-gradient(135deg, hsl(221, 56%, 24%) 0%, hsl(221, 60%, 18%) 100%)',
-  gradientSecondary: 'linear-gradient(135deg, hsl(221, 42%, 36%) 0%, hsl(221, 38%, 48%) 100%)',
-  gradientAccent: 'linear-gradient(135deg, hsl(355, 71%, 41%) 0%, hsl(355, 55%, 58%) 100%)',
-  gradientWarm: 'linear-gradient(135deg, hsl(240, 5%, 96%) 0%, hsl(220, 14%, 92%) 100%)',
-  gradientHero: 'linear-gradient(135deg, hsl(0, 0%, 0%) 0%, hsl(0, 0%, 18%) 100%)',
+  gradientPrimary: 'linear-gradient(135deg, hsl(258, 80%, 52%) 0%, hsl(262, 83%, 58%) 100%)',
+  gradientSecondary: 'linear-gradient(135deg, hsl(262, 83%, 58%) 0%, hsl(280, 91%, 65%) 100%)',
+  gradientAccent: 'linear-gradient(135deg, hsl(191, 89%, 54%) 0%, hsl(258, 80%, 52%) 100%)',
+  gradientWarm: 'linear-gradient(135deg, hsl(210, 40%, 98%) 0%, hsl(214, 32%, 96%) 100%)',
+  gradientHero: 'linear-gradient(135deg, hsl(258, 45%, 6%) 0%, hsl(258, 35%, 14%) 100%)',
 
-  overlay: 'rgba(0, 0, 0, 0.5)',
-  primary10: 'hsla(221, 56%, 24%, 0.1)',
-  secondary10: 'hsla(221, 42%, 36%, 0.1)',
-  accent10: 'hsla(355, 71%, 41%, 0.08)',
+  overlay: 'rgba(15, 23, 42, 0.5)',
+  primary10: 'hsla(258, 80%, 52%, 0.1)',
+  secondary10: 'hsla(262, 83%, 58%, 0.1)',
+  accent10: 'hsla(280, 91%, 65%, 0.12)',
 } as const;
 
 export const THEME = {

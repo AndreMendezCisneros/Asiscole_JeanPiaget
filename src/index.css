@@ -2,120 +2,121 @@
 @tailwind components;
 @tailwind utilities;
 
-/* SIE Design System — neutros + azul pizarra corporativo */
+/* SIE Design System — paleta Asiscole (morado + celeste) */
 
 @layer base {
   :root {
-    /* Superficies (Apple Fog + Paper) */
-    /* Ajuste ejecutivo: blancos más limpios, menos gris */
+    /* Superficies — Blanco Hielo #F8FAFC */
     --background: 210 40% 98%;
-    --background-alt: 210 24% 96%;
-    --background-warm: 210 30% 97%;
-    --foreground: 222 47% 11%;
+    --background-alt: 214 32% 96%;
+    --background-warm: 210 36% 97%;
+    --foreground: 222 47% 11%; /* Azul Marino Oscuro #0F172A */
 
     --card: 0 0% 100%;
-    --card-alt: 240 5% 98%;
-    --card-foreground: 240 4% 12%;
+    --card-alt: 210 40% 98%;
+    --card-foreground: 222 47% 11%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 240 4% 12%;
+    --popover-foreground: 222 47% 11%;
 
-    /* Acción principal — navy Colegio Jean Piaget (#1A305E) */
-    --primary: 221 56% 24%;
+    /* Morado Principal #5B21E6 */
+    --primary: 258 80% 52%;
     --primary-foreground: 0 0% 100%;
 
-    /* Secundario — navy más claro */
-    --secondary: 221 42% 36%;
+    /* Morado Secundario #7C3AED */
+    --secondary: 262 83% 58%;
     --secondary-foreground: 0 0% 100%;
 
-    --muted: 210 26% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 214 32% 96%;
+    --muted-foreground: 215 16% 47%; /* Gris Azulado #475569 */
 
-    /* Acento — rojo Jean Piaget (#B11E2A) */
-    --accent: 355 71% 41%;
+    /* Morado Claro #A855F7 */
+    --accent: 280 91% 65%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 72% 48%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 214 20% 90%;
+    /* Gris Claro #E2E8F0 */
+    --border: 214 32% 91%;
     --input: 0 0% 100%;
-    --ring: 221 56% 28%;
+    --ring: 258 80% 52%;
 
     /* Semáforo */
     --success: 152 55% 38%;
     --success-foreground: 0 0% 100%;
     --warning: 32 90% 48%;
     --warning-foreground: 0 0% 100%;
-    --info: 221 48% 36%;
-    --info-foreground: 0 0% 100%;
+    /* Celeste Tecnológico #22C7F2 */
+    --info: 191 89% 54%;
+    --info-foreground: 222 47% 11%;
     --danger: 0 72% 48%;
     --danger-foreground: 0 0% 100%;
 
     --radius: 0.75rem;
 
-    /* Sidebar — navy Jean Piaget */
-    --sidebar-background: 221 56% 18%;
+    /* Sidebar — morado oscuro derivado */
+    --sidebar-background: 258 70% 18%;
     --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 221 45% 72%;
-    --sidebar-primary-foreground: 221 56% 16%;
-    --sidebar-accent: 221 40% 26%;
+    --sidebar-primary: 262 83% 72%;
+    --sidebar-primary-foreground: 258 70% 14%;
+    --sidebar-accent: 258 55% 26%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 221 35% 28%;
-    --sidebar-ring: 221 45% 72%;
+    --sidebar-border: 258 40% 28%;
+    --sidebar-ring: 191 89% 54%;
 
     /* Tokens de marca (login) */
-    --brand-accent: 221 56% 24%;
-    --brand-accent-dark: 221 60% 18%;
-    --brand-accent-light: 221 40% 94%;
-    --brand-link: 221 48% 42%;
-    --canvas-ice: 220 14% 92%;
-    --ink: 0 0% 0%;
-    --fog: 240 5% 96%;
-    --silver-mist: 240 7% 91%;
+    --brand-accent: 258 80% 52%;
+    --brand-accent-dark: 258 75% 40%;
+    --brand-accent-light: 270 90% 96%;
+    --brand-link: 262 83% 58%;
+    --canvas-ice: 214 32% 91%;
+    --ink: 222 47% 11%;
+    --fog: 210 40% 98%;
+    --silver-mist: 214 32% 91%;
 
-    /* Login — navy / rojo Jean Piaget */
-    --login-deep: 221 40% 5%;
-    --login-surface: 221 28% 9%;
-    --login-elevated: 221 22% 13%;
-    --login-border: 221 16% 26%;
-    --login-foreground: 210 30% 98%;
-    --login-muted: 216 20% 83%;
-    --login-caption: 216 16% 75%;
-    --login-placeholder: 216 14% 65%;
-    --login-accent: 355 71% 48%;
-    --login-glow: 221 55% 58%;
+    /* Login — morado + celeste Asiscole */
+    --login-deep: 258 45% 6%;
+    --login-surface: 258 35% 10%;
+    --login-elevated: 262 30% 14%;
+    --login-border: 258 20% 28%;
+    --login-foreground: 210 40% 98%;
+    --login-muted: 214 20% 82%;
+    --login-caption: 214 16% 74%;
+    --login-placeholder: 214 14% 64%;
+    --login-accent: 191 89% 54%;
+    --login-glow: 191 89% 54%;
   }
 
   .dark {
-    --background: 0 0% 10%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 14%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 14%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 221 45% 52%;
+    --background: 258 30% 8%;
+    --foreground: 210 40% 98%;
+    --card: 258 25% 12%;
+    --card-foreground: 210 40% 98%;
+    --popover: 258 25% 12%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 262 83% 65%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 221 38% 46%;
+    --secondary: 280 70% 60%;
     --secondary-foreground: 0 0% 100%;
-    --muted: 0 0% 20%;
-    --muted-foreground: 0 0% 65%;
-    --accent: 355 65% 52%;
+    --muted: 258 20% 18%;
+    --muted-foreground: 214 20% 70%;
+    --accent: 280 91% 68%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 70% 52%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 22%;
-    --input: 0 0% 18%;
-    --ring: 221 45% 52%;
+    --border: 258 18% 22%;
+    --input: 258 20% 16%;
+    --ring: 262 83% 65%;
     --success: 152 50% 45%;
     --warning: 32 85% 52%;
-    --info: 217 45% 52%;
+    --info: 191 89% 54%;
     --danger: 0 70% 52%;
-    --sidebar-background: 0 0% 8%;
-    --sidebar-foreground: 0 0% 98%;
-    --sidebar-primary: 217 45% 62%;
-    --sidebar-accent: 0 0% 14%;
-    --sidebar-border: 0 0% 16%;
+    --sidebar-background: 258 35% 7%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 262 83% 70%;
+    --sidebar-accent: 258 25% 14%;
+    --sidebar-border: 258 20% 16%;
   }
 }
 
@@ -996,7 +997,7 @@
     transform-origin: center center;
   }
 
-  /* Carnet real (imagen Jean Piaget) en login */
+  /* Carnet Asiscole (imagen) en login */
   .login-carnet-replica--photo {
     max-width: min(280px, 72vw);
     min-height: 0;

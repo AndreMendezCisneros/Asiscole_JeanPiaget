@@ -18,7 +18,8 @@ asiscole.com, www.asiscole.com {
 	# CSP estricta (SPA + proxy WPPConnect /wpp-api)
 	@sie_app not path /wpp-api* /api/* /wpp-notify*
 	# Sin require-trusted-types-for: tablets con WebView antiguo quedan en blanco si lo exige el CSP
-	header @sie_app Content-Security-Policy "default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: blob:; media-src 'self' blob: data:; connect-src 'self' https://spdugaykkcgpcfslcpac.supabase.co wss://spdugaykkcgpcfslcpac.supabase.co https://www.google-analytics.com https://region1.google-analytics.com; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; upgrade-insecure-requests"
+	# Sustituir *.supabase.co por el host concreto del colegio en producción si el navegador no acepta wildcard.
+	header @sie_app Content-Security-Policy "default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: blob:; media-src 'self' blob: data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://www.google-analytics.com https://region1.google-analytics.com; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; upgrade-insecure-requests"
 
 	# SPA (/incidents, /dashboard, …) y JS de arranque sin hash: revalidar siempre.
 	# Antes solo / e /index.html tenían no-cache; /incidents se cacheaba con etag.
