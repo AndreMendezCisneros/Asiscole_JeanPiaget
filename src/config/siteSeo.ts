@@ -1,5 +1,5 @@
-/** Metadatos SEO centralizados — asisacademy.com / Asis Academy */
-export const SITE_URL = 'https://asisacademy.com';
+/** Metadatos SEO centralizados — demostracion.asisacademy.com / Asis Academy */
+export const SITE_URL = 'https://demostracion.asisacademy.com';
 
 /** Imagen única para vista previa de enlaces en WhatsApp (JPEG ligero, no SVG). */
 export const WHATSAPP_PREVIEW_VERSION = '1';

@@ -5,7 +5,7 @@
       "@type": "WebApplication",
       "name": "SIE Asiscole",
       "alternateName": "Sistema de Incidencias Escolares",
-      "url": "https://asisacademy.com/",
+      "url": "https://demostracion.asisacademy.com/",
       "applicationCategory": "EducationalApplication",
       "operatingSystem": "Web",
       "inLanguage": "es-PE",
@@ -13,23 +13,23 @@
       "provider": {
         "@type": "EducationalOrganization",
         "name": "Asis Academy",
-        "url": "https://asisacademy.com/"
+        "url": "https://demostracion.asisacademy.com/"
       }
     },
     {
       "@type": "EducationalOrganization",
-      "@id": "https://asisacademy.com/#organization",
+      "@id": "https://demostracion.asisacademy.com/#organization",
       "name": "Asis Academy",
-      "url": "https://asisacademy.com/",
-      "sameAs": ["https://asisacademy.com/"]
+      "url": "https://demostracion.asisacademy.com/",
+      "sameAs": ["https://demostracion.asisacademy.com/"]
     },
     {
       "@type": "WebSite",
-      "@id": "https://asisacademy.com/#website",
-      "url": "https://asisacademy.com/",
+      "@id": "https://demostracion.asisacademy.com/#website",
+      "url": "https://demostracion.asisacademy.com/",
       "name": "SIE Asiscole",
       "description": "Sistema de incidencias y asistencia escolar",
-      "publisher": { "@id": "https://asisacademy.com/#organization" },
+      "publisher": { "@id": "https://demostracion.asisacademy.com/#organization" },
       "inLanguage": "es-PE"
     }
   ]
