@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Clock, Search, Users, CheckCircle, AlertCircle, Loader2, LogOut, AlertTriangle } from 'lucide-react';
+import { Clock, Search, Users, CheckCircle, AlertCircle, Loader2, LogOut, LogIn } from 'lucide-react';
 import {
   StaffKpiStat,
   StaffToolbar,
@@ -28,23 +28,61 @@ import {
   StaffEmptyState,
 } from '@/components/staff';
 import { Label } from '@/components/ui/label';
-import { arrivalService, authService, whatsappService } from '@/lib/services';
-import type { ArrivalRecord, EducationalLevel } from '@/types';
+import { arrivalService, authService, studentsService, whatsappService } from '@/lib/services';
+import type { ArrivalRecord, EducationalLevel, EstudianteEstadoPension, Student } from '@/types';
 import { toast } from 'sonner';
 import { staffNotify } from '@/lib/utils/staffNotify';
+import { isPensionesEnabled } from '@/config/features';
+import { playPensionMorosoBeep } from '@/lib/utils/pensionBeep';
 
 const GRADES = ['1ro', '2do', '3ro', '4to', '5to', '6to'];
 const SECTIONS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+const PAGE_SIZE = 15;
+
+type ArrivalStatusFilter = 'all' | 'A tiempo' | 'Tarde' | 'Sin registrar';
+
+type DayRow =
+  | { kind: 'registered'; record: ArrivalRecord }
+  | { kind: 'pending'; student: Student };
+
+/** «sí» = no pagó / moroso; «no» = al día; null = sin dato */
+function deudaLabelFromEstado(
+  estado: EstudianteEstadoPension | undefined | null,
+): 'sí' | 'no' | null {
+  if (!estado || estado === 'sin_dato') return null;
+  if (estado === 'al_dia') return 'no';
+  // pendiente (pagado=0 antes de mora) o moroso
+  return 'sí';
+}
+
+function resolveStudentEstadoPension(
+  student: Student | undefined | null,
+  byId: Map<number, Student>,
+): EstudianteEstadoPension | undefined {
+  if (!student) return undefined;
+  if (student.estadoPension) return student.estadoPension;
+  return byId.get(student.id)?.estadoPension;
+}
 
 export const ArrivalControl = () => {
   const [records, setRecords] = useState<ArrivalRecord[]>([]);
+  const [activeStudents, setActiveStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'A tiempo' | 'Tarde'>('all');
+  const [statusFilter, setStatusFilter] = useState<ArrivalStatusFilter>('all');
   const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('all');
   const [gradeFilter, setGradeFilter] = useState<'all' | string>('all');
   const [sectionFilter, setSectionFilter] = useState<'all' | string>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [registeringStudentId, setRegisteringStudentId] = useState<number | null>(null);
   const isMountedRef = useRef(true);
+  const pensionesEnabled = isPensionesEnabled();
+
+  const studentsById = useMemo(() => {
+    const map = new Map<number, Student>();
+    for (const s of activeStudents) map.set(s.id, s);
+    return map;
+  }, [activeStudents]);
   
   // Obtener fecha actual en formato YYYY-MM-DD
   const getTodayDate = () => {
@@ -70,12 +108,45 @@ export const ArrivalControl = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
 
+  const loadActiveStudents = async (): Promise<{ students: Student[]; error: string | null }> => {
+    const first = await studentsService.getAll({ active: true, fetchAll: true });
+    if (!first.error && first.students.length > 0) {
+      return { students: first.students, error: null };
+    }
+
+    // Fallback: paginar si fetchAll no está soportado o devolvió vacío con error
+    const pageSize = 100;
+    let page = 1;
+    let total = Number.POSITIVE_INFINITY;
+    const all: Student[] = [];
+    let lastError: string | null = first.error;
+
+    while (all.length < total) {
+      const res = await studentsService.getAll({ active: true, page, pageSize });
+      if (res.error) {
+        lastError = res.error;
+        break;
+      }
+      all.push(...res.students);
+      total = res.total || all.length;
+      if (res.students.length === 0) break;
+      page += 1;
+      if (page > 50) break;
+    }
+
+    if (all.length > 0) return { students: all, error: null };
+    return { students: [], error: lastError };
+  };
+
   const loadArrivals = async () => {
     if (!isMountedRef.current) return;
 
     setLoading(true);
     try {
-      const { records: arrivals, error } = await arrivalService.getArrivals({ date: selectedDate });
+      const [{ records: arrivals, error }, studentsResult] = await Promise.all([
+        arrivalService.getArrivals({ date: selectedDate }),
+        loadActiveStudents(),
+      ]);
 
       if (!isMountedRef.current) return;
 
@@ -85,14 +156,79 @@ export const ArrivalControl = () => {
       } else {
         setRecords(arrivals);
       }
+
+      if (studentsResult.error) {
+        toast.error(`Error al cargar estudiantes activos: ${studentsResult.error}`);
+        setActiveStudents([]);
+      } else {
+        setActiveStudents(studentsResult.students);
+      }
     } catch (error) {
       if (!isMountedRef.current) return;
       console.error('Error en loadArrivals:', error);
       toast.error('Error al procesar las llegadas');
       setRecords([]);
+      setActiveStudents([]);
     } finally {
       if (isMountedRef.current) {
         setLoading(false);
+      }
+    }
+  };
+
+  const handleRegisterArrival = async (student: Student) => {
+    if (!isMountedRef.current) return;
+
+    const currentUser = authService.getCurrentUser();
+    if (!currentUser) {
+      toast.error('Debe estar autenticado para registrar entradas');
+      return;
+    }
+
+    const estado =
+      resolveStudentEstadoPension(student, studentsById) ?? student.estadoPension;
+    const deuda = pensionesEnabled ? deudaLabelFromEstado(estado) : null;
+    if (deuda === 'sí') {
+      playPensionMorosoBeep();
+      toast.warning('Pensión: estudiante no pagó', {
+        description: student.fullName,
+        duration: 3200,
+      });
+    }
+
+    setRegisteringStudentId(student.id);
+    try {
+      const { record, error, alreadyRegistered } = await arrivalService.createArrivalRecord(
+        student.id,
+        currentUser.id,
+        { date: selectedDate, studentLevel: student.level },
+      );
+
+      if (!isMountedRef.current) return;
+
+      if (error || !record) {
+        toast.error(error || 'No se pudo registrar la entrada');
+        return;
+      }
+
+      if (alreadyRegistered) {
+        toast.info(`${student.fullName} ya tenía entrada registrada hoy`);
+      } else {
+        if (whatsappService.isEnabled()) {
+          void whatsappService.notifyParentArrival(student, record).then((wa) => {
+            if (!isMountedRef.current) return;
+            if (!wa.ok && wa.error) {
+              toast.warning(`WhatsApp: ${wa.error}`, { duration: 4500 });
+            }
+          });
+        }
+        staffNotify.success('¡Entrada registrada!', `${student.fullName} quedó registrado`);
+      }
+
+      loadArrivals();
+    } finally {
+      if (isMountedRef.current) {
+        setRegisteringStudentId(null);
       }
     }
   };
@@ -135,35 +271,79 @@ export const ArrivalControl = () => {
     }
   };
 
-  const filteredRecords = useMemo(
+  const dayRows = useMemo((): DayRow[] => {
+    const registeredIds = new Set(records.map((r) => r.studentId));
+    const registeredRows: DayRow[] = records.map((record) => ({ kind: 'registered', record }));
+    const pendingRows: DayRow[] = activeStudents
+      .filter((student) => !registeredIds.has(student.id))
+      .map((student) => ({ kind: 'pending', student }));
+
+    return [...registeredRows, ...pendingRows].sort((a, b) => {
+      if (a.kind !== b.kind) {
+        return a.kind === 'pending' ? -1 : 1;
+      }
+      const nameA = (a.kind === 'registered' ? a.record.student?.fullName : a.student.fullName) ?? '';
+      const nameB = (b.kind === 'registered' ? b.record.student?.fullName : b.student.fullName) ?? '';
+      return nameA.localeCompare(nameB, 'es', { sensitivity: 'base' });
+    });
+  }, [records, activeStudents]);
+
+  const filteredRows = useMemo(
     () =>
-      records.filter((record) => {
-        const studentName = record.student?.fullName ?? '';
-        const matchesSearch = studentName
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase());
-        const matchesStatus = statusFilter === 'all' || record.status === statusFilter;
-        const matchesLevel =
-          levelFilter === 'all' || record.student?.level === levelFilter;
-        const matchesGrade =
-          gradeFilter === 'all' || record.student?.grade === gradeFilter;
-        const matchesSection =
-          sectionFilter === 'all' || record.student?.section === sectionFilter;
+      dayRows.filter((row) => {
+        const student = row.kind === 'registered' ? row.record.student : row.student;
+        const studentName = student?.fullName ?? '';
+        const matchesSearch = studentName.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesLevel = levelFilter === 'all' || student?.level === levelFilter;
+        const matchesGrade = gradeFilter === 'all' || student?.grade === gradeFilter;
+        const matchesSection = sectionFilter === 'all' || student?.section === sectionFilter;
+
+        let matchesStatus = true;
+        if (statusFilter === 'Sin registrar') {
+          matchesStatus = row.kind === 'pending';
+        } else if (statusFilter !== 'all') {
+          matchesStatus = row.kind === 'registered' && row.record.status === statusFilter;
+        }
+
         return matchesSearch && matchesStatus && matchesLevel && matchesGrade && matchesSection;
       }),
-    [records, searchTerm, statusFilter, levelFilter, gradeFilter, sectionFilter],
+    [dayRows, searchTerm, statusFilter, levelFilter, gradeFilter, sectionFilter],
   );
 
   const filteredStats = useMemo(() => {
-    const onTime = filteredRecords.filter((r) => r.status === 'A tiempo').length;
-    const late = filteredRecords.filter((r) => r.status === 'Tarde').length;
-    return { total: filteredRecords.length, onTime, late };
-  }, [filteredRecords]);
+    const registered = filteredRows.filter((r): r is Extract<DayRow, { kind: 'registered' }> => r.kind === 'registered');
+    const pending = filteredRows.filter((r) => r.kind === 'pending').length;
+    const onTime = registered.filter((r) => r.record.status === 'A tiempo').length;
+    const late = registered.filter((r) => r.record.status === 'Tarde').length;
+    return { total: registered.length, pending, onTime, late };
+  }, [filteredRows]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, levelFilter, gradeFilter, sectionFilter, selectedDate]);
+
+  const paginatedRows = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredRows.slice(start, start + PAGE_SIZE);
+  }, [filteredRows, currentPage]);
 
   const onTimePct =
     filteredStats.total > 0
       ? Math.round((filteredStats.onTime / filteredStats.total) * 100)
       : 0;
+
+  const visibleSummary =
+    filteredRows.length > PAGE_SIZE
+      ? `${filteredRows.length} visibles · página ${currentPage} de ${totalPages} · ${PAGE_SIZE} por página`
+      : `${filteredRows.length} visibles · ${PAGE_SIZE} por página`;
 
   return (
     <div className="app-page app-page-shell">
@@ -175,17 +355,25 @@ export const ArrivalControl = () => {
         accent="success"
       />
 
-      <div className="app-kpi-grid !grid-cols-1 sm:!grid-cols-3">
+      <div className="app-kpi-grid !grid-cols-2 sm:!grid-cols-4">
         <StaffKpiStat
-          label="Total llegadas"
+          label="Con entrada"
           value={filteredStats.total}
           icon={Users}
           tone="primary"
         />
         <StaffKpiStat
+          label="Sin registrar"
+          value={filteredStats.pending}
+          hint="Aún no registran llegada"
+          hintIcon={AlertCircle}
+          icon={AlertCircle}
+          tone="warning"
+        />
+        <StaffKpiStat
           label="A tiempo"
           value={filteredStats.onTime}
-          hint={`${onTimePct}% del total`}
+          hint={filteredStats.total > 0 ? `${onTimePct}% de quienes llegaron` : undefined}
           hintIcon={CheckCircle}
           icon={CheckCircle}
           tone="success"
@@ -272,12 +460,13 @@ export const ArrivalControl = () => {
           </div>
           <div className="space-y-2">
             <Label>Estado</Label>
-          <Select value={statusFilter} onValueChange={(value: 'all' | 'A tiempo' | 'Tarde') => setStatusFilter(value)}>
+          <Select value={statusFilter} onValueChange={(value: ArrivalStatusFilter) => setStatusFilter(value)}>
             <SelectTrigger>
               <SelectValue placeholder="Estado" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="Sin registrar">Sin registrar</SelectItem>
               <SelectItem value="A tiempo">A tiempo</SelectItem>
               <SelectItem value="Tarde">Tarde</SelectItem>
             </SelectContent>
@@ -289,7 +478,7 @@ export const ArrivalControl = () => {
       <StaffDataPanel>
         <StaffDataPanelHeader
           title="Registros del día"
-          description={`${filteredRecords.length} visibles · actualice para refrescar`}
+          description={`${visibleSummary} · actualice para refrescar`}
           action={
             <Button onClick={loadArrivals} variant="outline" size="sm" disabled={loading}>
               Actualizar
@@ -302,11 +491,11 @@ export const ArrivalControl = () => {
               <Loader2 className="h-6 w-6 animate-spin" />
               <span>Cargando registros...</span>
             </div>
-          ) : filteredRecords.length === 0 ? (
+          ) : filteredRows.length === 0 ? (
             <StaffEmptyState
               icon={Users}
               title="Sin registros"
-              description="No hay llegadas para la fecha o filtros seleccionados"
+              description="No hay estudiantes para la fecha o filtros seleccionados"
             />
           ) : (
             <div className="app-table-wrap">
@@ -318,12 +507,77 @@ export const ArrivalControl = () => {
                   <TableHead>Hora de Llegada</TableHead>
                   <TableHead>Hora de Salida</TableHead>
                   <TableHead>Estado</TableHead>
+                  {pensionesEnabled && <TableHead>¿Tiene deuda?</TableHead>}
                   <TableHead>Registrado por</TableHead>
-                  <TableHead>Acciones</TableHead>
+                  <TableHead className="min-w-[10rem]">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredRecords.map((record) => (
+                {paginatedRows.map((row) => {
+                  if (row.kind === 'pending') {
+                    const student = row.student;
+                    const isRegistering = registeringStudentId === student.id;
+                    const deuda = pensionesEnabled
+                      ? deudaLabelFromEstado(resolveStudentEstadoPension(student, studentsById))
+                      : null;
+                    return (
+                      <TableRow key={`pending-${student.id}`}>
+                        <TableCell className="font-medium">{student.fullName}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col text-sm">
+                            <span className="font-semibold">{student.level}</span>
+                            <span className="text-muted-foreground">
+                              {student.grade} - {student.section}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">—</TableCell>
+                        <TableCell className="text-muted-foreground text-sm">—</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="font-normal">
+                            Sin registrar
+                          </Badge>
+                        </TableCell>
+                        {pensionesEnabled && (
+                          <TableCell>
+                            {deuda === 'sí' ? (
+                              <Badge variant="destructive" className="font-normal">sí</Badge>
+                            ) : deuda === 'no' ? (
+                              <span className="text-sm text-muted-foreground">no</span>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                        )}
+                        <TableCell className="text-muted-foreground text-sm">—</TableCell>
+                        <TableCell>
+                          {/* Sin llegada → Registrar Entrada */}
+                          <Button
+                            size="sm"
+                            onClick={() => void handleRegisterArrival(student)}
+                            disabled={isRegistering}
+                            className="gap-2"
+                          >
+                            {isRegistering ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <LogIn className="h-4 w-4" />
+                            )}
+                            Registrar Entrada
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  }
+
+                  const record = row.record;
+                  const hasDeparture = Boolean(record.departureTime);
+                  const deuda = pensionesEnabled
+                    ? deudaLabelFromEstado(
+                        resolveStudentEstadoPension(record.student, studentsById),
+                      )
+                    : null;
+                  return (
                   <TableRow key={record.id}>
                     <TableCell className="font-medium">
                       {record.student?.fullName}
@@ -343,7 +597,7 @@ export const ArrivalControl = () => {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {record.departureTime ? (
+                      {hasDeparture ? (
                         <div className="flex items-center gap-2">
                           <LogOut className="h-4 w-4 text-green-600" />
                           <span className="font-medium">{record.departureTime}</span>
@@ -352,10 +606,7 @@ export const ArrivalControl = () => {
                           )}
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2 text-amber-600">
-                          <AlertTriangle className="h-4 w-4" />
-                          <span className="text-sm">Sin salida</span>
-                        </div>
+                        <span className="text-muted-foreground text-sm">—</span>
                       )}
                     </TableCell>
                     <TableCell>
@@ -370,26 +621,62 @@ export const ArrivalControl = () => {
                         {record.status}
                       </Badge>
                     </TableCell>
+                    {pensionesEnabled && (
+                      <TableCell>
+                        {deuda === 'sí' ? (
+                          <Badge variant="destructive" className="font-normal">sí</Badge>
+                        ) : deuda === 'no' ? (
+                          <span className="text-sm text-muted-foreground">no</span>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                    )}
                     <TableCell className="text-muted-foreground text-sm">
                       {record.registeredByUser?.fullName || 'Sistema'}
                     </TableCell>
                     <TableCell>
-                      {!record.departureTime && (
+                      {/* Con llegada y sin salida → Registrar Salida; con salida → vacío */}
+                      {!hasDeparture ? (
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => handleRegisterDeparture(record.id)}
+                          onClick={() => void handleRegisterDeparture(record.id)}
                           className="gap-2"
                         >
                           <LogOut className="h-4 w-4" />
                           Registrar Salida
                         </Button>
-                      )}
+                      ) : null}
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
+            {totalPages > 1 && (
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                >
+                  Anterior
+                </Button>
+                <span className="text-sm text-muted-foreground px-2">
+                  Página {currentPage} de {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  Siguiente
+                </Button>
+              </div>
+            )}
             </div>
           )}
         </div>

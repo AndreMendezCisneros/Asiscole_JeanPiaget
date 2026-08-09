@@ -8,8 +8,9 @@ import {
   Settings,
   Clock,
   CalendarDays,
+  Wallet,
 } from 'lucide-react';
-
+import { isPensionesEnabled } from '@/config/features';
 export interface StaffNavSubItem {
   path: string;
   label: string;
@@ -81,12 +82,17 @@ const ALL_STAFF_NAV_ITEMS: StaffNavItem[] = [
     ],
   },
   {
+    path: '/pensiones',
+    label: 'Pensiones',
+    icon: Wallet,
+    roles: ['Director', 'Admin'],
+  },
+  {
     path: '/system-config',
     label: 'Administración',
     icon: Settings,
     roles: ['Admin'],
     subItems: [
-      { path: '/admin/teachers', label: 'Docentes' },
       { path: '/audit', label: 'Auditoría' },
       { path: '/system-config', label: 'Configuración' },
     ],
@@ -94,8 +100,12 @@ const ALL_STAFF_NAV_ITEMS: StaffNavItem[] = [
 ];
 
 export function getStaffNavItems(role?: string | null): StaffNavItem[] {
-  if (!role || role === 'Tutor' || role === 'Docente' || role === 'Padre') return [];
-  return ALL_STAFF_NAV_ITEMS.filter((item) => item.roles.includes(role));
+  if (!role || role === 'Tutor' || role === 'Padre') return [];
+  return ALL_STAFF_NAV_ITEMS.filter((item) => {
+    if (!item.roles.includes(role)) return false;
+    if (item.path === '/pensiones' && !isPensionesEnabled()) return false;
+    return true;
+  });
 }
 
 export function findStaffNavGroup(

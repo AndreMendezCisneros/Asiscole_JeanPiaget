@@ -24,6 +24,10 @@ interface ImportMetaEnv {
   readonly VITE_WHATSAPP_OPERATOR_PHONE?: string;
   readonly VITE_GA_MEASUREMENT_ID?: string;
   readonly VITE_BUILD_ID?: string;
+  readonly VITE_TALLERES_ENABLED?: string;
+  /** Módulo pensiones (JP: true) */
+  readonly VITE_PENSIONES_ENABLED?: string;
+  readonly VITE_LOGIN_CARNET_SRC?: string;
 }
 
 interface ImportMeta {

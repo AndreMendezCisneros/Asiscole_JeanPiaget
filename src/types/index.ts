@@ -128,6 +128,63 @@ export interface User {
   cambioPasswordObligatorio?: boolean;
 }
 
+export type PensionEstado = 'pagado' | 'pendiente' | 'moroso';
+export type EstudianteEstadoPension = 'al_dia' | 'pendiente' | 'moroso' | 'sin_dato';
+export type PensionFuente = 'banco_excel' | 'banco_pdf' | 'manual';
+export type PensionImportModo = 'pagaron' | 'no_pagaron';
+
+export interface PensionRow {
+  id: number;
+  idEstudiante: number;
+  periodo: string;
+  fechaVencimiento: string;
+  /** 1 = pagado, 0 = sin pagar */
+  pagado: 0 | 1;
+  estado: PensionEstado;
+  monto: number | null;
+  fechaPago: string | null;
+  fuente: PensionFuente;
+  notas: string | null;
+  registradoEn: string;
+  nombreEstudiante?: string;
+  grado?: string;
+  seccion?: string;
+  barcode?: string;
+  contactPhone?: string | null;
+  emergencyPhone?: string | null;
+}
+
+export interface PensionConfig {
+  diaVencimiento: number;
+  montoMensual: number | null;
+  moneda: string;
+  avisoSonoroActivo: boolean;
+  activo: boolean;
+}
+
+export interface PensionImportPreviewRow {
+  rowIndex: number;
+  rawDni: string | null;
+  rawNombre: string | null;
+  monto: number | null;
+  fechaPago: string | null;
+  matchStatus: 'ok' | 'sin_match' | 'ambiguo';
+  idEstudiante: number | null;
+  nombreMatched: string | null;
+}
+
+export interface PensionImportLog {
+  id: number;
+  periodo: string;
+  modo: PensionImportModo;
+  nombreArchivo: string | null;
+  filasLeidas: number;
+  filasOk: number;
+  filasSinMatch: number;
+  filasAmbiguas: number;
+  importadoEn: string;
+}
+
 export interface Student {
   id: number;
   fullName: string;
@@ -145,6 +202,8 @@ export interface Student {
   responsibleName?: string | null;
   responsibleRelationship?: string | null;
   emergencyPhone?: string | null;
+  /** Cache periodo actual: al_dia | pendiente | moroso | sin_dato */
+  estadoPension?: EstudianteEstadoPension;
 }
 
 export interface FaultType {

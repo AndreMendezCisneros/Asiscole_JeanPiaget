@@ -1,7 +1,8 @@
 # Sitio Jean Piaget — Caddy (mismo VPS que asiscole.com)
 # Se instala en: /etc/caddy/sites.d/10-jeanpiaget.caddy
 # Placeholder __SUPABASE_HOST__ lo reemplaza deploy/bootstrap (ej. xxxxx.supabase.co)
-# WhatsApp: chips WPPConnect (/wpp-api + /wpp-notify → cola JP :3102). Meta opcional :3101.
+# Canal móvil: /canal-api → Django asiscole-canal :8000
+# WPP legado (opcional / apagado): /wpp-api + /wpp-notify
 
 jeanpiaget.asiscole.com {
 	encode gzip zstd
@@ -16,7 +17,7 @@ jeanpiaget.asiscole.com {
 		-Server
 	}
 
-	@sie_app not path /wpp-api* /api/* /wpp-notify* /meta-wa*
+	@sie_app not path /wpp-api* /api/* /wpp-notify* /meta-wa* /canal-api*
 	header @sie_app Content-Security-Policy "default-src 'self'; script-src 'self' https://www.googletagmanager.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: blob:; media-src 'self' blob: data:; connect-src 'self' https://__SUPABASE_HOST__ wss://__SUPABASE_HOST__ https://www.google-analytics.com https://region1.google-analytics.com https://cloudflareinsights.com; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; upgrade-insecure-requests"
 
 	@app_shell {
@@ -24,6 +25,7 @@ jeanpiaget.asiscole.com {
 		not path /wpp-api*
 		not path /wpp-notify*
 		not path /meta-wa*
+		not path /canal-api*
 		not path /api/*
 		not path *.ico *.svg *.png *.jpg *.jpeg *.webp
 	}
@@ -35,7 +37,18 @@ jeanpiaget.asiscole.com {
 	@static path *.ico *.svg *.png *.jpg *.webp
 	header @static Cache-Control "public, max-age=86400"
 
-	# Cola chips JP (anti-baneo) — puerto distinto a San Ramón (3100)
+	@canal_root path /canal-api /canal-api/
+	handle @canal_root {
+		redir /canal-api/v0.1/docs/ permanent
+	}
+
+	# Backend canal móvil (Django / APK + ingesta SIE)
+	handle /canal-api* {
+		uri strip_prefix /canal-api
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	# Cola chips JP (legado; servicio puede estar apagado)
 	handle /wpp-notify* {
 		uri strip_prefix /wpp-notify
 		reverse_proxy 127.0.0.1:3102

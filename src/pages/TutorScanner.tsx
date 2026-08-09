@@ -52,9 +52,8 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { getLimaNow } from '@/lib/utils/limaDateTime';
+import { getLimaNow, getLimaTodayDate } from '@/lib/utils/limaDateTime';
 import {
-  compareArrivalStatus,
   resolveArrivalLimitForLevel,
   resolveArrivalStatusForStudent,
   type ArrivalLimitsByLevel,
@@ -62,15 +61,22 @@ import {
 import { configService } from '@/lib/services';
 import { SYSTEM_SETTING_KEYS, normalizeTimeValue } from '@/config/systemSettings';
 import type { CreateArrivalOptions } from '@/lib/services/arrivalService';
-import { invalidateArrivalLimitCache } from '@/lib/services/arrivalService';
 import { useTutorProfileIdle } from '@/hooks/useTutorProfileIdle';
 import { useTutorViewport } from '@/hooks/useTutorViewport';
 import { isDniLikeQuery, TUTOR_NAME_SEARCH_LIMIT } from '@/lib/utils/studentSearch';
 import { prefersTouchBarcodeInput } from '@/lib/utils/deviceCompat';
 import { useTutorTouchLayout } from '@/hooks/useTutorTouchLayout';
 import { useHardwareBarcodeCapture } from '@/hooks/useHardwareBarcodeCapture';
+import { useTallerScan } from '@/hooks/useTallerScan';
 import { buildStudentLookupVariants } from '@/lib/services/studentsService';
 import { cn } from '@/lib/utils';
+import { isPensionesEnabled } from '@/config/features';
+import {
+  playPensionMorosoBeep,
+  shouldAlertPensionMorosa,
+  unlockPensionAudio,
+} from '@/lib/utils/pensionBeep';
+import { pensionesService } from '@/lib/services/pensionesService';
 
 const NAME_SEARCH_SCROLL_AFTER = 8;
 
@@ -79,6 +85,8 @@ export const TutorScanner = () => {
   const invalidateIncidents = useInvalidateIncidents();
   const invalidateStudents = useInvalidateStudents();
   const queryClient = useQueryClient();
+  const pensionesEnabled = isPensionesEnabled();
+  const avisoPensionRef = useRef(true);
   const [barcode, setBarcode] = useState('');
   const [nameSearch, setNameSearch] = useState('');
   const [nameSearchResults, setNameSearchResults] = useState<Student[]>([]);
@@ -114,6 +122,7 @@ export const TutorScanner = () => {
   const [quickFaultId, setQuickFaultId] = useState<number | null>(null);
   const [barcodeKeyboard, setBarcodeKeyboard] = useState(false);
   const isMountedRef = useRef(true);
+  const arrivalLimitsRef = useRef<ArrivalLimitsByLevel>(arrivalLimits);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const hardwareScanInputRef = useRef<HTMLInputElement>(null);
   const studentCardRef = useRef<HTMLDivElement>(null);
@@ -134,6 +143,18 @@ export const TutorScanner = () => {
   const user = authService.getCurrentUser();
   const touchBarcode = useMemo(() => prefersTouchBarcodeInput(), []);
   const touchTablet = useTutorTouchLayout();
+  const {
+    handleTallerScan,
+    isTallerMode,
+    scanMode,
+    setScanMode,
+    tallerPhase,
+    setTallerPhase,
+    clasePhase,
+    setClasePhase,
+    talleresEnabled,
+  } = useTallerScan();
+  const isClaseSalida = !isTallerMode && clasePhase === 'salida';
   const nameSearchScrollable = touchTablet
     ? nameSearchResults.length > NAME_SEARCH_SCROLL_AFTER
     : nameSearchResults.length > 0;
@@ -218,6 +239,16 @@ export const TutorScanner = () => {
     arrivalService.prefetchArrivalConfig();
     void scheduleService.getConfig();
     loadArrivalLimit();
+    if (pensionesEnabled) {
+      void pensionesService.getConfig().then(({ config }) => {
+        if (config) avisoPensionRef.current = config.avisoSonoroActivo && config.activo;
+      });
+      const unlock = () => {
+        void unlockPensionAudio();
+      };
+      window.addEventListener('pointerdown', unlock, { once: true });
+      window.addEventListener('keydown', unlock, { once: true });
+    }
     const stopClock = startClock();
     if (!touchBarcode) {
       focusBarcodeInput();
@@ -342,11 +373,15 @@ export const TutorScanner = () => {
     }
   };
 
+  const applyArrivalLimits = useCallback((limits: ArrivalLimitsByLevel) => {
+    arrivalLimitsRef.current = limits;
+    setArrivalLimits(limits);
+  }, []);
+
   const loadArrivalLimit = async () => {
     try {
-      invalidateArrivalLimitCache();
-      const limits = await arrivalService.fetchArrivalLimits();
-      setArrivalLimits(limits);
+      const limits = await arrivalService.fetchArrivalLimits({ force: true });
+      applyArrivalLimits(limits);
 
       // Hora de cierre: desde cuándo mostrar "Fuera de jornada"
       const { config: closeCfg } = await configService.getByKey(SYSTEM_SETTING_KEYS.schoolClose);
@@ -386,36 +421,44 @@ export const TutorScanner = () => {
     }
   };
 
-  const computeArrivalSnapshot = useCallback(
-    (studentLevel?: string) => {
-      const { date, time } = getLimaNow();
-      const limit = resolveArrivalLimitForLevel(arrivalLimits, studentLevel);
-      const status = compareArrivalStatus(time, limit);
-      return { date, time, status, limit };
-    },
-    [arrivalLimits]
-  );
+  const resolveArrivalSnapshot = useCallback(async (studentLevel?: string | null) => {
+    const limits = await arrivalService.fetchArrivalLimits({ force: true });
+    arrivalLimitsRef.current = limits;
+    setArrivalLimits(limits);
+    const { date, time } = getLimaNow();
+    const limit = resolveArrivalLimitForLevel(limits, studentLevel);
+    const status = resolveArrivalStatusForStudent(time, limits, studentLevel);
+    return { date, time, status, limit };
+  }, []);
 
   const applyScanSuccess = useCallback(
     (
       studentToShow: Student,
       record: ArrivalRecord,
-      options?: { countInSession?: boolean; duplicate?: boolean }
+      options?: {
+        countInSession?: boolean;
+        duplicate?: boolean;
+        displayStatus?: string;
+        displayTime?: string;
+        statusForTotals?: ArrivalRecord['status'] | null;
+      }
     ) => {
+      // Mostrar siempre el estado de la BD (no recalcular en el cliente).
       showStudentProfileRef.current = true;
       displayedStudentIdRef.current = studentToShow.id;
       setStudent(studentToShow);
       setArrivalRecord(record);
       setShowStudentProfile(true);
 
-      const status = record.status || 'Registrado';
-      const displayTime = record.arrivalTime ?? nowHHMM;
+      const status = options?.displayStatus ?? (record.status || 'Registrado');
+      const countableStatus = options?.statusForTotals ?? record.status;
+      const displayTime = options?.displayTime ?? record.arrivalTime ?? nowHHMM;
 
       if (options?.countInSession !== false) {
         setSessionCount((prev) => ({
           total: prev.total + 1,
-          onTime: prev.onTime + (status === 'A tiempo' ? 1 : 0),
-          late: prev.late + (status === 'Tarde' ? 1 : 0),
+          onTime: prev.onTime + (countableStatus === 'A tiempo' ? 1 : 0),
+          late: prev.late + (countableStatus === 'Tarde' ? 1 : 0),
         }));
         setRecentScans((prev) => {
           const next = [
@@ -522,6 +565,7 @@ export const TutorScanner = () => {
             return;
           }
 
+          // El estado viene de la BD (trigger por nivel); no recalcular en el cliente.
           todayArrivalsRef.current.set(studentToShow.id, record);
 
           if (alreadyRegistered) {
@@ -622,84 +666,225 @@ export const TutorScanner = () => {
   );
 
   const processStudent = useCallback(
-    (foundStudent: Student, scanSeq: number) => {
-      void (async () => {
+    async (foundStudent: Student, scanSeq: number) => {
+      if (!isMountedRef.current) return;
+
+      // Aviso pensión: pitido + toast; NUNCA bloquea asistencia/taller
+      if (
+        pensionesEnabled &&
+        shouldAlertPensionMorosa(foundStudent.estadoPension, avisoPensionRef.current)
+      ) {
+        playPensionMorosoBeep();
+        toast.warning('Pensión: estudiante no pagó', {
+          description: foundStudent.fullName,
+          duration: 3500,
+        });
+      }
+
+      const isLatestProfile = scanSeq === latestProfileScanRef.current;
+      const shouldUpdateProfile =
+        isLatestProfile || foundStudent.id !== displayedStudentIdRef.current;
+
+      if (isTallerMode) {
+        const result = await handleTallerScan(foundStudent, user?.id);
         if (!isMountedRef.current) return;
 
-        const isLatestProfile = scanSeq === latestProfileScanRef.current;
-        const shouldUpdateProfile =
-          isLatestProfile || foundStudent.id !== displayedStudentIdRef.current;
+        if (!result.ok) {
+          toast.error(result.error, { duration: 3200 });
+          releaseScanFocus();
+          return;
+        }
 
-        const cachedToday = todayArrivalsRef.current.get(foundStudent.id);
-        if (cachedToday) {
-          if (shouldUpdateProfile) {
-            applyScanSuccess(foundStudent, cachedToday, { countInSession: false, duplicate: true });
+        if (shouldUpdateProfile) {
+          applyScanSuccess(foundStudent, result.record, {
+            displayStatus: result.displayStatus,
+            displayTime: result.displayTime,
+            // En talleres reutilizamos los contadores: onTime=llegadas, late=salidas
+            statusForTotals: result.action === 'arrival' ? 'A tiempo' : 'Tarde',
+          });
+        }
+
+        releaseScanFocus();
+        return;
+      }
+
+      // Modo clase — salida (misma regla que talleres: requiere llegada previa)
+      if (clasePhase === 'salida') {
+        let todayRecord = todayArrivalsRef.current.get(foundStudent.id) ?? null;
+        if (!todayRecord) {
+          const today = getLimaTodayDate();
+          const { record, error } = await arrivalService.getTodayArrivalForStudent(
+            foundStudent.id,
+            today,
+          );
+          if (!isMountedRef.current) return;
+          if (error) {
+            toast.error(error, { duration: 3200 });
+            releaseScanFocus();
+            return;
           }
-          toast.info(
-            `${foundStudent.fullName} ya fue registrado hoy a las ${cachedToday.arrivalTime ?? '—'}`,
-            { duration: 2800 }
+          todayRecord = record;
+          if (record) todayArrivalsRef.current.set(foundStudent.id, record);
+        }
+
+        if (!todayRecord) {
+          toast.error(
+            `${foundStudent.fullName} aún no tiene llegada. Cambie a Llegada y escanee primero.`,
+            { duration: 3200 },
           );
           releaseScanFocus();
           return;
         }
 
-        if (inFlightStudentIdsRef.current.has(foundStudent.id)) {
-          if (isLatestProfile) {
-            toast.info(`Registrando a ${foundStudent.fullName}…`, { duration: 1800 });
+        if (todayRecord.departureTime) {
+          if (shouldUpdateProfile) {
+            applyScanSuccess(foundStudent, todayRecord, {
+              countInSession: false,
+              duplicate: true,
+              displayStatus: 'Salida',
+              displayTime: todayRecord.departureTime.slice(0, 5),
+              statusForTotals: null,
+            });
           }
+          toast.info(
+            `${foundStudent.fullName} ya tiene salida registrada hoy (${todayRecord.departureTime.slice(0, 5)}).`,
+            { duration: 2800 },
+          );
           releaseScanFocus();
           return;
         }
-        inFlightStudentIdsRef.current.add(foundStudent.id);
 
-        invalidateArrivalLimitCache();
-        const limits = await arrivalService.fetchArrivalLimits();
-        if (!isMountedRef.current) return;
-        setArrivalLimits(limits);
-
-        const { date, time } = getLimaNow();
-        const status = resolveArrivalStatusForStudent(time, limits, foundStudent.level);
-
-        const arrivalOpts: CreateArrivalOptions = {
-          date,
-          arrivalTime: time,
-          studentLevel: foundStudent.level,
-        };
-
-        if (foundStudent.barcode?.trim()) {
-          barcodeIndexRef.current.set(foundStudent.barcode.trim(), foundStudent);
+        if (!todayRecord.id || todayRecord.id <= 0) {
+          toast.error('No se pudo registrar la salida. Vuelva a escanear la llegada.', {
+            duration: 3200,
+          });
+          releaseScanFocus();
+          return;
         }
 
-        const optimisticRecord: ArrivalRecord = {
-          id: 0,
-          studentId: foundStudent.id,
-          date,
-          arrivalTime: time,
-          status,
-          createdAt: new Date().toISOString(),
-          registeredBy: 0,
-        };
-
-        const showedOptimisticUi = shouldUpdateProfile;
-        if (showedOptimisticUi) {
-          applyScanSuccess(foundStudent, optimisticRecord);
-        }
-
-        persistArrivalInBackground(
-          foundStudent,
-          arrivalOpts,
-          scanSeq,
-          status,
-          showedOptimisticUi
+        const {
+          successCount,
+          error: depError,
+          departureTime,
+        } = await arrivalService.createBulkDepartureRecords(
+          [todayRecord.id],
+          user?.id,
+          'Normal',
         );
+        if (!isMountedRef.current) return;
+
+        if (successCount <= 0 || !departureTime || depError) {
+          toast.error(depError || 'No se pudo registrar la salida.', { duration: 3200 });
+          releaseScanFocus();
+          return;
+        }
+
+        const updated: ArrivalRecord = {
+          ...todayRecord,
+          departureTime,
+          departureType: 'Normal',
+          departureRegisteredBy: user?.id ?? null,
+        };
+        todayArrivalsRef.current.set(foundStudent.id, updated);
+
+        if (shouldUpdateProfile) {
+          applyScanSuccess(foundStudent, updated, {
+            displayStatus: 'Salida',
+            displayTime: departureTime,
+            statusForTotals: null,
+          });
+        }
+
+        if (whatsappService.isEnabled()) {
+          void whatsappService.notifyParentDeparture(foundStudent, updated).then((wa) => {
+            if (!isMountedRef.current) return;
+            if (!wa.ok && wa.error) {
+              toast.warning(`WhatsApp: ${wa.error}`, { duration: 4500 });
+            } else if (wa.skipped) {
+              toast.info('WhatsApp: aviso ya enviado hace poco (sin reenvío)', {
+                duration: 2200,
+              });
+            }
+          });
+        }
 
         releaseScanFocus();
-      })();
+        return;
+      }
+
+      const cachedToday = todayArrivalsRef.current.get(foundStudent.id);
+      if (cachedToday) {
+        if (shouldUpdateProfile) {
+          applyScanSuccess(foundStudent, cachedToday, { countInSession: false, duplicate: true });
+        }
+        toast.info(
+          cachedToday.departureTime
+            ? `${foundStudent.fullName} ya tiene llegada y salida hoy.`
+            : `${foundStudent.fullName} ya fue registrado hoy a las ${cachedToday.arrivalTime ?? '—'}. Para salida, elija Salida.`,
+          { duration: 2800 }
+        );
+        releaseScanFocus();
+        return;
+      }
+
+      if (inFlightStudentIdsRef.current.has(foundStudent.id)) {
+        if (isLatestProfile) {
+          toast.info(`Registrando a ${foundStudent.fullName}…`, { duration: 1800 });
+        }
+        releaseScanFocus();
+        return;
+      }
+
+      const { date, time, status } = await resolveArrivalSnapshot(foundStudent.level);
+      if (!isMountedRef.current) return;
+
+      const arrivalOpts: CreateArrivalOptions = {
+        date,
+        arrivalTime: time,
+        studentLevel: foundStudent.level,
+      };
+
+      if (foundStudent.barcode?.trim()) {
+        barcodeIndexRef.current.set(foundStudent.barcode.trim(), foundStudent);
+      }
+
+      const optimisticRecord: ArrivalRecord = {
+        id: 0,
+        studentId: foundStudent.id,
+        date,
+        arrivalTime: time,
+        status,
+        createdAt: new Date().toISOString(),
+        registeredBy: 0,
+      };
+
+      inFlightStudentIdsRef.current.add(foundStudent.id);
+
+      const showedOptimisticUi = shouldUpdateProfile;
+      if (showedOptimisticUi) {
+        applyScanSuccess(foundStudent, optimisticRecord);
+      }
+
+      persistArrivalInBackground(
+        foundStudent,
+        arrivalOpts,
+        scanSeq,
+        status,
+        showedOptimisticUi
+      );
+
+      releaseScanFocus();
     },
     [
       applyScanSuccess,
+      clasePhase,
+      handleTallerScan,
+      isTallerMode,
+      resolveArrivalSnapshot,
       persistArrivalInBackground,
       releaseScanFocus,
+      user?.id,
+      pensionesEnabled,
     ]
   );
 
@@ -711,7 +896,10 @@ export const TutorScanner = () => {
         return;
       }
 
-      let foundStudent = studentsService.lookupBarcodeInIndex(barcodeIndexRef.current, raw);
+      // Con pensiones: siempre RPC fresco (el índice puede quedar con estado_pension viejo tras un import).
+      let foundStudent = pensionesEnabled
+        ? null
+        : studentsService.lookupBarcodeInIndex(barcodeIndexRef.current, raw);
 
       if (!foundStudent) {
         setLookupBusy(true);
@@ -729,9 +917,9 @@ export const TutorScanner = () => {
         return;
       }
 
-      processStudent(foundStudent, scanSeq);
+      void processStudent(foundStudent, scanSeq);
     },
-    [focusBarcodeInput, processStudent, resolveStudentByBarcode, setLookupBusy]
+    [focusBarcodeInput, pensionesEnabled, processStudent, resolveStudentByBarcode, setLookupBusy]
   );
 
   const startScan = useCallback(
@@ -801,7 +989,7 @@ export const TutorScanner = () => {
       setLookupBusy(false);
     }
 
-    processStudent(studentToRegister, scanSeq);
+    void processStudent(studentToRegister, scanSeq);
   };
 
   const handleNameSearchKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -863,7 +1051,7 @@ export const TutorScanner = () => {
           setNameSearch('');
           setNameSearchResults([]);
           setNameSearchEmpty(false);
-          processStudent(student, ++latestProfileScanRef.current);
+          void processStudent(student, ++latestProfileScanRef.current);
         } else if (dniError) {
           toast.error(dniError);
         } else {
@@ -933,18 +1121,51 @@ export const TutorScanner = () => {
       return false;
     }
 
-    const { error } = await incidentsService.create({
-      studentId: student.id,
-      faultTypeId,
-      registeredBy: currentUser.id,
-      observations: obs?.trim() || undefined,
-    });
+    if (scanMode === 'taller') {
+      toast.error('En talleres no se registran faltas. Use el escáner para llegada y salida.');
+      return false;
+    }
+
+    const faultForWa = faults.find((fault) => fault.id === faultTypeId);
+    const studentForWa = student;
+    const { incident, error } = await incidentsService.create(
+      {
+        studentId: student.id,
+        faultTypeId,
+        registeredBy: currentUser.id,
+        observations: obs?.trim() || undefined,
+      },
+      { minimal: true },
+    );
 
     if (!isMountedRef.current) return false;
 
-    if (error) {
-      toast.error(error, { duration: 3200 });
+    if (error || !incident) {
+      toast.error(error || 'No se pudo registrar la incidencia', { duration: 3200 });
       return false;
+    }
+
+    if (whatsappService.isEnabled() && faultForWa) {
+      void whatsappService
+        .notifyParentIncident(
+          studentForWa,
+          {
+            ...incident,
+            student: studentForWa,
+            faultType: faultForWa,
+          },
+          faultForWa,
+        )
+        .then((wa) => {
+          if (!isMountedRef.current) return;
+          if (!wa.ok && wa.error) {
+            toast.warning(`WhatsApp: ${wa.error}`, { duration: 4500 });
+          } else if (wa.skipped) {
+            toast.info('WhatsApp: aviso de incidencia ya enviado hace poco', {
+              duration: 2200,
+            });
+          }
+        });
     }
 
     toast.success('Incidencia registrada');
@@ -1031,20 +1252,31 @@ export const TutorScanner = () => {
     releaseScanFocus();
   };
 
-  const arrivalOnTime = arrivalRecord?.status === 'A tiempo';
   const displayArrivalTime =
-    arrivalRecord?.arrivalTime?.length && arrivalRecord.arrivalTime.length >= 5
-      ? arrivalRecord.arrivalTime.slice(0, 5)
-      : arrivalRecord?.arrivalTime ?? '—:—';
+    (isTallerMode || isClaseSalida || Boolean(arrivalRecord?.departureTime)) &&
+    arrivalRecord?.departureTime?.length &&
+    arrivalRecord.departureTime.length >= 5
+      ? arrivalRecord.departureTime.slice(0, 5)
+      : arrivalRecord?.arrivalTime?.length && arrivalRecord.arrivalTime.length >= 5
+        ? arrivalRecord.arrivalTime.slice(0, 5)
+        : arrivalRecord?.arrivalTime ?? '—:—';
+  const displayArrivalStatus = isTallerMode
+    ? arrivalRecord?.departureTime
+      ? 'Salió del taller'
+      : arrivalRecord
+        ? 'Llegó a taller'
+        : undefined
+    : arrivalRecord?.departureTime
+      ? 'Salida'
+      : arrivalRecord?.status;
+  const arrivalOnTime = displayArrivalStatus !== 'Tarde';
   const limitsLabel = `Prim ${arrivalLimits.primaria} · Sec ${arrivalLimits.secundaria}`;
   const activeArrivalLimit = student
     ? resolveArrivalLimitForLevel(arrivalLimits, student.level)
-    : arrivalLimits.general;
+    : arrivalLimits.secundaria;
   const limitTone = useMemo(() => {
     if (!nowHHMM) return 'secondary' as const;
-    return compareArrivalStatus(nowHHMM, activeArrivalLimit) === 'A tiempo'
-      ? ('success' as const)
-      : ('warning' as const);
+    return nowHHMM <= activeArrivalLimit ? ('success' as const) : ('warning' as const);
   }, [nowHHMM, activeArrivalLimit]);
 
   return (
@@ -1169,20 +1401,42 @@ export const TutorScanner = () => {
                   <div className="min-w-0 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-primary">
-                        Registro de llegada
+                        {isTallerMode
+                          ? 'Registro de talleres'
+                          : isClaseSalida
+                            ? 'Registro de salida'
+                            : 'Registro de llegada'}
                       </p>
                       <Badge variant={limitTone} className="text-[10px]">
                         Límite {limitsLabel}
                       </Badge>
                     </div>
                     <h2 className="text-lg font-semibold tracking-[-0.02em] text-foreground sm:text-2xl">
-                      Escanear o buscar estudiante
+                      {isTallerMode
+                        ? tallerPhase === 'salida'
+                          ? 'Escanear salida de taller'
+                          : 'Escanear llegada a taller'
+                        : isClaseSalida
+                          ? 'Escanear salida de clase'
+                          : 'Escanear o buscar estudiante'}
                     </h2>
                     <p className="text-sm text-muted-foreground leading-relaxed hidden sm:block">
-                      Carnet con lector de barras o búsqueda manual por nombre del estudiante.
+                      {isTallerMode
+                        ? tallerPhase === 'salida'
+                          ? 'Elija Salida y escanee el carnet. Se avisa a los padres con la hora de salida.'
+                          : 'Elija Llegada y escanee el carnet. Se avisa a los padres con la hora de llegada.'
+                        : isClaseSalida
+                          ? 'Elija Salida y escanee el carnet. Debe existir llegada del día.'
+                          : 'Elija Llegada o Salida, luego carnet con lector o búsqueda por nombre.'}
                     </p>
                     <p className="text-sm text-muted-foreground leading-relaxed sm:hidden">
-                      Conecte el lector por Bluetooth o adaptador: escanee carnets seguidos sin tocar la pantalla.
+                      {isTallerMode
+                        ? tallerPhase === 'salida'
+                          ? 'Modo Salida: escanee para registrar la hora de salida.'
+                          : 'Modo Llegada: escanee para registrar la hora de llegada.'
+                        : isClaseSalida
+                          ? 'Modo Salida: escanee para registrar la hora de salida.'
+                          : 'Modo Llegada: escanee el carnet o busque por nombre.'}
                     </p>
                   </div>
                 </div>
@@ -1193,8 +1447,96 @@ export const TutorScanner = () => {
                   onSubmit={handleScan}
                   className="space-y-5"
                   aria-busy={lookupPending}
-                  aria-label="Registro de llegada por código de barras o nombre"
+                  aria-label={
+                    isTallerMode
+                      ? 'Registro de talleres por código de barras o nombre'
+                      : isClaseSalida
+                        ? 'Registro de salida por código de barras o nombre'
+                        : 'Registro de llegada por código de barras o nombre'
+                  }
                 >
+                  {talleresEnabled && (
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium text-foreground">Modo</Label>
+                      <div className="grid max-w-sm grid-cols-2 gap-2 rounded-xl border border-border bg-muted/20 p-1">
+                        <Button
+                          type="button"
+                          variant={scanMode === 'clase' ? 'default' : 'ghost'}
+                          onClick={() => setScanMode('clase')}
+                          className="w-full"
+                        >
+                          Clase
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={scanMode === 'taller' ? 'default' : 'ghost'}
+                          onClick={() => setScanMode('taller')}
+                          className="w-full"
+                        >
+                          Talleres
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  {scanMode === 'taller' && talleresEnabled ? (
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium text-foreground">
+                        Registro de taller
+                      </Label>
+                      <div className="grid max-w-sm grid-cols-2 gap-2 rounded-xl border border-border bg-muted/20 p-1">
+                        <Button
+                          type="button"
+                          variant={tallerPhase === 'llegada' ? 'default' : 'ghost'}
+                          onClick={() => setTallerPhase('llegada')}
+                          className="w-full"
+                        >
+                          Llegada
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={tallerPhase === 'salida' ? 'default' : 'ghost'}
+                          onClick={() => setTallerPhase('salida')}
+                          className="w-full"
+                        >
+                          Salida
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {tallerPhase === 'llegada'
+                          ? 'Escanee para registrar la hora de llegada al taller.'
+                          : 'Escanee para registrar la hora de salida del taller (debe haber llegada primero).'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium text-foreground">
+                        Registro de clase
+                      </Label>
+                      <div className="grid max-w-sm grid-cols-2 gap-2 rounded-xl border border-border bg-muted/20 p-1">
+                        <Button
+                          type="button"
+                          variant={clasePhase === 'llegada' ? 'default' : 'ghost'}
+                          onClick={() => setClasePhase('llegada')}
+                          className="w-full"
+                        >
+                          Llegada
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={clasePhase === 'salida' ? 'default' : 'ghost'}
+                          onClick={() => setClasePhase('salida')}
+                          className="w-full"
+                        >
+                          Salida
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {clasePhase === 'llegada'
+                          ? 'Escanee para registrar la hora de llegada a clase.'
+                          : 'Escanee para registrar la hora de salida (debe haber llegada primero).'}
+                      </p>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label htmlFor="barcode-input" className="text-sm font-medium text-foreground">
                       Código de barras
@@ -1385,7 +1727,13 @@ export const TutorScanner = () => {
                       ) : (
                         <>
                           <Barcode className="h-4 w-4" />
-                          Registrar llegada
+                          {isTallerMode
+                            ? tallerPhase === 'salida'
+                              ? 'Registrar salida'
+                              : 'Registrar llegada'
+                            : isClaseSalida
+                              ? 'Registrar salida'
+                              : 'Registrar llegada'}
                         </>
                       )}
                     </Button>
@@ -1440,13 +1788,18 @@ export const TutorScanner = () => {
                         variant={arrivalOnTime ? 'success' : 'warning'}
                         className="tutor-student-card__status"
                       >
-                        {arrivalRecord?.status ?? 'Registrado'} · {displayArrivalTime}
+                        {displayArrivalStatus ?? 'Registrado'} · {displayArrivalTime}
                       </Badge>
                       <h3 className="tutor-identity__name">{student.fullName}</h3>
                       <p className="tutor-identity__grade">
                         {student.level} · {student.grade} &apos;{student.section}&apos;
                       </p>
                       <p className="tutor-identity__dni font-mono">{student.barcode || '—'}</p>
+                      {pensionesEnabled && student.estadoPension === 'moroso' && (
+                        <Badge variant="destructive" className="mt-1">
+                          Pensión: no pagó
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1473,8 +1826,8 @@ export const TutorScanner = () => {
                     </div>
                   )}
 
-                  {/* Reporte rápido */}
-                  {quickFaults.length > 0 && (
+                  {/* Reporte rápido — solo en modo clase (en talleres no hay faltas) */}
+                  {!isTallerMode && quickFaults.length > 0 && (
                     <div className="tutor-quick-report">
                       <p className="tutor-quick-report__title">
                         <Zap className="h-4 w-4" aria-hidden />
@@ -1511,16 +1864,18 @@ export const TutorScanner = () => {
                     >
                       Siguiente estudiante
                     </Button>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="lg"
-                      onClick={handleRegisterFault}
-                      className="tutor-student-card__btn-incident gap-2"
-                    >
-                      <AlertCircle className="h-5 w-5" />
-                      Otra incidencia…
-                    </Button>
+                    {!isTallerMode && (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="lg"
+                        onClick={handleRegisterFault}
+                        className="tutor-student-card__btn-incident gap-2"
+                      >
+                        <AlertCircle className="h-5 w-5" />
+                        Otra incidencia…
+                      </Button>
+                    )}
                   </div>
                 </div>
                 </div>
@@ -1553,14 +1908,29 @@ export const TutorScanner = () => {
                   <p className="tutor-kpi__value">{sessionCount.total}</p>
                   <p className="tutor-kpi__label">Total</p>
                 </div>
-                <div className="tutor-kpi">
-                  <p className="tutor-kpi__value">{sessionCount.onTime}</p>
-                  <p className="tutor-kpi__label">A tiempo</p>
-                </div>
-                <div className="tutor-kpi">
-                  <p className="tutor-kpi__value">{sessionCount.late}</p>
-                  <p className="tutor-kpi__label">Tarde</p>
-                </div>
+                {isTallerMode ? (
+                  <>
+                    <div className="tutor-kpi">
+                      <p className="tutor-kpi__value">{sessionCount.onTime}</p>
+                      <p className="tutor-kpi__label">Llegadas</p>
+                    </div>
+                    <div className="tutor-kpi">
+                      <p className="tutor-kpi__value">{sessionCount.late}</p>
+                      <p className="tutor-kpi__label">Salidas</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="tutor-kpi">
+                      <p className="tutor-kpi__value">{sessionCount.onTime}</p>
+                      <p className="tutor-kpi__label">A tiempo</p>
+                    </div>
+                    <div className="tutor-kpi">
+                      <p className="tutor-kpi__value">{sessionCount.late}</p>
+                      <p className="tutor-kpi__label">Tarde</p>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -1596,27 +1966,58 @@ export const TutorScanner = () => {
               </CardHeader>
               <CardContent className="pt-0 pb-5">
                 <ol>
-                  <li>
-                    <span className="tutor-instructions__step">1</span>
-                    <span>
-                      Escanee el código de barras del carnet o busque al estudiante por nombre.
-                    </span>
-                  </li>
-                  <li>
-                    <span className="tutor-instructions__step">2</span>
-                    <span>El sistema registrará automáticamente la hora de llegada.</span>
-                  </li>
-                  <li>
-                    <span className="tutor-instructions__step">3</span>
-                    <span>
-                      Si detecta una falta (uniforme, conducta, etc.), use{' '}
-                      <strong className="text-foreground font-medium">Registrar incidencia</strong>.
-                    </span>
-                  </li>
-                  <li>
-                    <span className="tutor-instructions__step">4</span>
-                    <span>Complete el tipo de falta y guarde el registro.</span>
-                  </li>
+                  {isTallerMode ? (
+                    <>
+                      <li>
+                        <span className="tutor-instructions__step">1</span>
+                        <span>
+                          Elija <strong className="text-foreground font-medium">Llegada</strong> o{' '}
+                          <strong className="text-foreground font-medium">Salida</strong> del taller.
+                        </span>
+                      </li>
+                      <li>
+                        <span className="tutor-instructions__step">2</span>
+                        <span>Escanee el carnet: se guarda la hora y se avisa a los padres.</span>
+                      </li>
+                      <li>
+                        <span className="tutor-instructions__step">3</span>
+                        <span>
+                          Para la salida, cambie a <strong className="text-foreground font-medium">Salida</strong> y
+                          vuelva a escanear (debe existir llegada del día).
+                        </span>
+                      </li>
+                    </>
+                  ) : (
+                    <>
+                      <li>
+                        <span className="tutor-instructions__step">1</span>
+                        <span>
+                          Elija <strong className="text-foreground font-medium">Llegada</strong> o{' '}
+                          <strong className="text-foreground font-medium">Salida</strong> de clase.
+                        </span>
+                      </li>
+                      <li>
+                        <span className="tutor-instructions__step">2</span>
+                        <span>
+                          Escanee el carnet o busque por nombre: se guarda la hora y se avisa a los padres.
+                        </span>
+                      </li>
+                      <li>
+                        <span className="tutor-instructions__step">3</span>
+                        <span>
+                          Para la salida, cambie a <strong className="text-foreground font-medium">Salida</strong> y
+                          vuelva a escanear (debe existir llegada del día).
+                        </span>
+                      </li>
+                      <li>
+                        <span className="tutor-instructions__step">4</span>
+                        <span>
+                          Si detecta una falta, use{' '}
+                          <strong className="text-foreground font-medium">Registrar incidencia</strong>.
+                        </span>
+                      </li>
+                    </>
+                  )}
                 </ol>
               </CardContent>
             </Card>

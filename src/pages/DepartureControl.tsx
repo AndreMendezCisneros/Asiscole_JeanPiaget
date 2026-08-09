@@ -142,10 +142,11 @@ function buildDepartureGroups(records: ArrivalRecord[]): DepartureGroup[] {
   const map = new Map<string, DepartureGroup>();
 
   for (const record of records) {
-    const level = record.student?.level;
-    const grade = record.student?.grade;
-    const section = record.student?.section;
-    if (!level || !grade || !section) continue;
+    // Fallbacks: no descartar registros sin nivel/grado/sección (si no, desaparecen
+    // las tarjetas y el botón «Registrar salida del aula»).
+    const level = (record.student?.level || 'Secundaria') as EducationalLevel;
+    const grade = record.student?.grade?.trim() || '—';
+    const section = record.student?.section?.trim() || '—';
 
     const key = `${level}|${grade}|${section}`;
     const existing = map.get(key) ?? {

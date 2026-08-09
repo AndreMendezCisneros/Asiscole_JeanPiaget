@@ -2,70 +2,13 @@ import { supabase } from '../supabaseClient';
 import { Incident, EducationalLevel, EstadoIncidencia } from '@/types';
 import { fetchAllPages } from '@/lib/utils/supabasePagination';
 import { ensureSupabaseReady } from '@/lib/supabaseWarmup';
-
-const INCIDENT_LIST_SELECT = `
-  id_incidencia,
-  id_estudiante,
-  id_falta,
-  id_usuario_registro,
-  fecha_hora_registro,
-  observaciones,
-  nivel_reincidencia,
-  estado_evidencia,
-  cantidad_fotos,
-  estado,
-  estudiantes:id_estudiante (
-    id_estudiante,
-    codigo_barras,
-    nombre_completo,
-    grado,
-    seccion,
-    nivel_educativo,
-    activo
-  ),
-  catalogos_faltas:id_falta (
-    id_falta,
-    nombre_falta,
-    categoria,
-    es_grave,
-    puntos_reincidencia,
-    descripcion,
-    recomendacion,
-    activo
-  ),
-  usuarios_registro:id_usuario_registro (
-    id_usuario,
-    nombre_completo
-  )
-`;
-
-const INCIDENT_FULL_SELECT = `
-  *,
-  estudiantes:id_estudiante (
-    id_estudiante,
-    codigo_barras,
-    nombre_completo,
-    grado,
-    seccion,
-    nivel_educativo,
-    foto_perfil,
-    activo
-  ),
-  catalogos_faltas:id_falta (
-    id_falta,
-    nombre_falta,
-    categoria,
-    es_grave,
-    puntos_reincidencia,
-    descripcion,
-    recomendacion,
-    activo
-  ),
-  usuarios_registro:id_usuario_registro (
-    id_usuario,
-    nombre_completo
-  )
-`;
+import { isTalleresEnabled } from '@/config/features';
+import {
+  buildIncidentSelect,
+  isMissingTallerSchemaError,
+  setTallerSchemaAvailable,
+  shouldIncludeTallerEmbed,
+} from './incidentSelect';
 
 export interface IncidentsListFilters {
   estudianteId?: number;
@@ -268,21 +211,36 @@ export const incidentsService = {
       faultTypeId: number;
       registeredBy: number;
       observations?: string;
+      tallerId?: string;
     },
     options?: { minimal?: boolean },
   ): Promise<{ incident: Incident | null; error: string | null }> {
     try {
+      const includeTallerCol = shouldIncludeTallerEmbed(isTalleresEnabled());
       const insertQuery = supabase.from('incidencias').insert({
         id_estudiante: incident.studentId,
         id_falta: incident.faultTypeId,
         id_usuario_registro: incident.registeredBy,
         observaciones: incident.observations || null,
+        ...(includeTallerCol && incident.tallerId
+          ? { taller_id: incident.tallerId }
+          : {}),
       });
 
       if (options?.minimal) {
-        const { data, error } = await insertQuery
-          .select('id_incidencia, fecha_hora_registro, nivel_reincidencia, observaciones, estado')
-          .single();
+        const includeTaller = shouldIncludeTallerEmbed(isTalleresEnabled());
+        const minimalSelect = includeTaller
+          ? 'id_incidencia, fecha_hora_registro, nivel_reincidencia, observaciones, estado, taller_id'
+          : 'id_incidencia, fecha_hora_registro, nivel_reincidencia, observaciones, estado';
+        let { data, error } = await insertQuery.select(minimalSelect).single();
+        if (error && includeTaller && isMissingTallerSchemaError(error)) {
+          setTallerSchemaAvailable(false);
+          ({ data, error } = await insertQuery
+            .select(
+              'id_incidencia, fecha_hora_registro, nivel_reincidencia, observaciones, estado',
+            )
+            .single());
+        }
         if (error) {
           console.error('Error al crear incidencia:', error);
           return { incident: null, error: error.message };
@@ -299,40 +257,23 @@ export const incidentsService = {
             hasEvidence: false,
             evidenceCount: 0,
             status: (data.estado || 'Activa') as Incident['status'],
+            tallerId:
+              (data as { taller_id?: string | null }).taller_id ??
+              incident.tallerId ??
+              null,
           },
           error: null,
         };
       }
 
-      const { data, error } = await insertQuery
-        .select(`
-          *,
-          estudiantes:id_estudiante (
-            id_estudiante,
-            codigo_barras,
-            nombre_completo,
-            grado,
-            seccion,
-            nivel_educativo,
-            foto_perfil,
-            activo
-          ),
-          catalogos_faltas:id_falta (
-            id_falta,
-            nombre_falta,
-            categoria,
-            es_grave,
-            puntos_reincidencia,
-            descripcion,
-            recomendacion,
-            activo
-          ),
-          usuarios_registro:id_usuario_registro (
-            id_usuario,
-            nombre_completo
-          )
-        `)
-        .single();
+      const includeTaller = shouldIncludeTallerEmbed(isTalleresEnabled());
+      let selectClause = buildIncidentSelect({ full: true, includeTaller });
+      let { data, error } = await insertQuery.select(selectClause).single();
+      if (error && includeTaller && isMissingTallerSchemaError(error)) {
+        setTallerSchemaAvailable(false);
+        selectClause = buildIncidentSelect({ full: true, includeTaller: false });
+        ({ data, error } = await insertQuery.select(selectClause).single());
+      }
 
       if (error) {
         console.error('Error al crear incidencia:', error);
@@ -417,22 +358,29 @@ export const incidentsService = {
     limit: number | undefined,
     fullSelect = false,
   ): Promise<{ incidents: Incident[]; total: number; error: string | null }> {
-    const selectClause = fullSelect ? INCIDENT_FULL_SELECT : INCIDENT_LIST_SELECT;
+    const includeTaller = shouldIncludeTallerEmbed(isTalleresEnabled());
+    const run = async (withTaller: boolean) => {
+      const selectClause = buildIncidentSelect({
+        full: fullSelect,
+        includeTaller: withTaller,
+      });
+      let query = supabase.from('incidencias').select(selectClause, { count: 'exact' });
+      query = applyIncidentFilters(query, filters, dateRange, scope);
+      query = query.order('fecha_hora_registro', { ascending: false });
+      if (offset != null && limit != null) {
+        query = query.range(offset, offset + limit - 1);
+      } else if (limit != null) {
+        query = query.limit(limit);
+      }
+      return query;
+    };
 
-    let query = supabase
-      .from('incidencias')
-      .select(selectClause, { count: 'exact' });
+    let { data, error, count } = await run(includeTaller);
 
-    query = applyIncidentFilters(query, filters, dateRange, scope);
-    query = query.order('fecha_hora_registro', { ascending: false });
-
-    if (offset != null && limit != null) {
-      query = query.range(offset, offset + limit - 1);
-    } else if (limit != null) {
-      query = query.limit(limit);
+    if (error && includeTaller && isMissingTallerSchemaError(error)) {
+      setTallerSchemaAvailable(false);
+      ({ data, error, count } = await run(false));
     }
-
-    const { data, error, count } = await query;
 
     if (error) {
       console.error('Error al obtener incidencias:', error);
@@ -607,6 +555,7 @@ export const incidentsService = {
     const estudiante = data.estudiantes || data.id_estudiante;
     const falta = data.catalogos_faltas || data.id_falta;
     const usuario = data.usuarios_registro || data.id_usuario_registro;
+    const taller = data.talleres || data.taller_id;
 
     return {
       id: data.id_incidencia,
@@ -650,6 +599,8 @@ export const incidentsService = {
       annulledBy: data.id_usuario_anulacion,
       annulledAt: data.fecha_anulacion,
       annulmentReason: data.motivo_anulacion,
+      tallerId: data.taller_id ?? null,
+      tallerNombre: taller && typeof taller === 'object' ? taller.nombre ?? null : null,
     };
   },
 };

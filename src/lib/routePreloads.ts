@@ -16,11 +16,11 @@ const STAFF_ROUTE_IMPORTS: Record<string, PreloadFn> = {
   '/departure-control': () => import('@/pages/DepartureControl'),
   '/parent-meetings': () => import('@/pages/ParentMeetings'),
   '/justify-faults': () => import('@/pages/JustifyFaults'),
-  '/admin/teachers': () => import('@/pages/TeachersAdmin'),
   '/faults': () => import('@/pages/FaultsCatalog'),
   '/reports': () => import('@/pages/Reports'),
   '/audit': () => import('@/pages/AuditLogs'),
   '/system-config': () => import('@/pages/SystemConfig'),
+  '/pensiones': () => import('@/pages/PensionesAdmin'),
 };
 
 const STAFF_PRELOAD_PRIORITY = [

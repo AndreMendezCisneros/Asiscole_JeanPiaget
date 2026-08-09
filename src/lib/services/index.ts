@@ -18,3 +18,5 @@ export { whatsappService } from './whatsappService';
 export { parentPortalService } from './parentPortalService';
 export { scheduleService } from './scheduleService';
 export { teachersService } from './teachersService';
+export { tallerAttendanceService, mapTallerAsistenciaRow } from './tallerAttendanceService';
+export { pensionesService } from './pensionesService';

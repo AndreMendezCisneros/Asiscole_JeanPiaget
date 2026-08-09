@@ -39,6 +39,7 @@ function mapRpcStudent(raw: Record<string, unknown>): Student {
     responsibleName: (raw.responsibleName as string | null) ?? null,
     responsibleRelationship: (raw.responsibleRelationship as string | null) ?? null,
     emergencyPhone: (raw.emergencyPhone as string | null) ?? null,
+    estadoPension: (raw.estadoPension as Student['estadoPension']) ?? 'sin_dato',
   };
 }
 
@@ -360,6 +361,7 @@ export const studentsService = {
     const offset = (page - 1) * pageSize;
 
     try {
+      const fetchAll = filters?.fetchAll ?? false;
       const { data, error } = await supabase.rpc('sie_lista_estudiantes', {
         p_token: token,
         p_filtros: {
@@ -368,9 +370,8 @@ export const studentsService = {
           level: filters?.level ?? null,
           active: filters?.active ?? null,
           search: filters?.search ?? null,
-          fetchAll: filters?.fetchAll ?? false,
-          limit: filters?.fetchAll ? null : pageSize,
-          offset: filters?.fetchAll ? 0 : offset,
+          fetchAll,
+          ...(fetchAll ? {} : { limit: pageSize, offset }),
         },
       });
 
