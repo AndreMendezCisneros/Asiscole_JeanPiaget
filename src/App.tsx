@@ -29,7 +29,8 @@ import { Reports } from "./pages/Reports";
 import { AuditLogs } from "./pages/AuditLogs";
 import { SystemConfig } from "./pages/SystemConfig";
 import { PensionesAdmin } from "./pages/PensionesAdmin";
-import { isPensionesEnabled } from "./config/features";
+import { NotasAdmin } from "./pages/NotasAdmin";
+import { isNotasEnabled, isPensionesEnabled } from "./config/features";
 
 const Login = lazyPage(() => import("./pages/Login").then(m => ({ default: m.Login })));
 const TutorScanner = lazyPage(() => import("./pages/TutorScanner").then(m => ({ default: m.TutorScanner })));
@@ -156,6 +157,16 @@ const AppContent = () => {
             element={
               <ProtectedRoute requiredRole={['Director', 'Admin']}>
                 <PensionesAdmin />
+              </ProtectedRoute>
+            }
+          />
+        )}
+        {isNotasEnabled() && (
+          <Route
+            path="/notas"
+            element={
+              <ProtectedRoute requiredRole={['Director', 'Admin']}>
+                <NotasAdmin />
               </ProtectedRoute>
             }
           />

@@ -4,6 +4,7 @@ import {
   buildArrivalIngestBody,
   buildDepartureIngestBody,
   buildIncidentIngestBody,
+  buildNotaIngestBody,
   buildPensionIngestBody,
   type MobileIngestEventBody,
 } from '@/lib/services/mobileIngest';
@@ -20,7 +21,7 @@ const MOBILE_INGEST_URL = (
 ).replace(/\/$/, '');
 const MOBILE_INGEST_KEY = import.meta.env.VITE_MOBILE_INGEST_KEY || '';
 const MOBILE_INGEST_TENANT =
-  (import.meta.env.VITE_MOBILE_INGEST_TENANT as string | undefined)?.trim() || 'asis_academy';
+  (import.meta.env.VITE_MOBILE_INGEST_TENANT as string | undefined)?.trim() || 'jean_piaget';
 
 /**
  * URL final del POST. Acepta:
@@ -52,9 +53,9 @@ const WPPCONNECT_NOTIFY_URL = (
 ).replace(/\/$/, '');
 const WPPCONNECT_NOTIFY_KEY = import.meta.env.VITE_WPPCONNECT_NOTIFY_KEY || '';
 
-/** Nombre del colegio en textos WhatsApp (fallback: Asis Academy). */
+/** Nombre del colegio en textos WhatsApp (JP: Colegio Jean Piaget). */
 const SCHOOL_NAME =
-  (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() || 'Asis Academy';
+  (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() || 'I.E. San Ramón';
 
 const GREETING_VARIANTS = [
   'Hola,',
@@ -117,7 +118,7 @@ function randomBetween(min: number, max: number): number {
 }
 
 export function buildNotifyDedupKey(
-  kind: 'arrival' | 'departure' | 'incident' | 'pension',
+  kind: 'arrival' | 'departure' | 'incident' | 'pension' | 'nota',
   studentId: number,
   date: string,
   opts?: { tallerId?: string; incidentId?: number },
@@ -127,6 +128,9 @@ export function buildNotifyDedupKey(
   }
   if (kind === 'pension') {
     return `pension:${studentId}:${date.slice(0, 7)}`;
+  }
+  if (kind === 'nota') {
+    return `nota:${studentId}:${date}`;
   }
   if (opts?.tallerId) {
     return `taller:${opts.tallerId}:${kind}:${studentId}:${date.slice(0, 10)}`;
@@ -936,6 +940,45 @@ export async function notifyParentPensionPending(
   return { ...result, chatId: toWhatsAppChatId(apoderadoPhone) || undefined };
 }
 
+/**
+ * Aviso de nota semanal vía app móvil (canal / mobile ingest). No usa WhatsApp.
+ */
+export async function notifyParentNota(
+  student: Student,
+  input: {
+    semanaCodigo: string;
+    semanaEtiqueta: string;
+    nota: number;
+    carreraNombre?: string | null;
+    areaNombre?: string | null;
+  },
+): Promise<{ ok: boolean; error: string | null; chatId?: string; skipped?: boolean }> {
+  if (!MOBILE_INGEST_ENABLED) {
+    return { ok: false, error: 'Notificaciones por aplicación no habilitadas' };
+  }
+
+  const apoderadoPhone = student.contactPhone?.trim() || student.emergencyPhone?.trim() || '';
+  const dedupKey = buildNotifyDedupKey(
+    'nota',
+    student.id,
+    `${input.semanaCodigo}:${input.nota}`,
+  );
+
+  if (shouldSkipDuplicateNotify(dedupKey)) {
+    return {
+      ok: true,
+      error: null,
+      skipped: true,
+      chatId: toWhatsAppChatId(apoderadoPhone) || undefined,
+    };
+  }
+
+  const result = await sendViaMobileIngest(
+    buildNotaIngestBody(MOBILE_INGEST_TENANT, student, input),
+  );
+  return { ...result, chatId: toWhatsAppChatId(apoderadoPhone) || undefined };
+}
+
 async function notifyParentEvent(
   student: Student,
   record: ArrivalRecord,
@@ -1018,5 +1061,6 @@ export const whatsappService = {
   notifyParentDeparture,
   notifyParentIncident,
   notifyParentPensionPending,
+  notifyParentNota,
   buildPensionPendingMessage,
 };

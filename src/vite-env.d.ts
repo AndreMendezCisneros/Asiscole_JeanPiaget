@@ -18,8 +18,15 @@ interface ImportMetaEnv {
   readonly VITE_META_WA_ENABLED?: string;
   readonly VITE_META_WA_API_URL?: string;
   readonly VITE_META_WA_NOTIFY_KEY?: string;
-  /** Nombre del colegio en mensajes WhatsApp (ej. Asis Academy) */
+  /** App móvil Asiscole — POST /v0.1/ingesta/eventos (prueba JP) */
+  readonly VITE_MOBILE_INGEST_ENABLED?: string;
+  readonly VITE_MOBILE_INGEST_URL?: string;
+  readonly VITE_MOBILE_INGEST_KEY?: string;
+  readonly VITE_MOBILE_INGEST_TENANT?: string;
+  /** Nombre del colegio en mensajes WhatsApp (ej. Colegio Jean Piaget) */
   readonly VITE_SCHOOL_NAME?: string;
+  /** Carnet foto en login (JP: /Carnet-JeanPiaget.png) */
+  readonly VITE_LOGIN_CARNET_SRC?: string;
   /** Tu WhatsApp: recibe el número del apoderado + el mensaje de llegada */
   readonly VITE_WHATSAPP_OPERATOR_PHONE?: string;
   readonly VITE_GA_MEASUREMENT_ID?: string;
@@ -27,7 +34,6 @@ interface ImportMetaEnv {
   readonly VITE_TALLERES_ENABLED?: string;
   /** Módulo pensiones (JP: true) */
   readonly VITE_PENSIONES_ENABLED?: string;
-  readonly VITE_LOGIN_CARNET_SRC?: string;
 }
 
 interface ImportMeta {

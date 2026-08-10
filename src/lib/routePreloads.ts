@@ -21,6 +21,7 @@ const STAFF_ROUTE_IMPORTS: Record<string, PreloadFn> = {
   '/audit': () => import('@/pages/AuditLogs'),
   '/system-config': () => import('@/pages/SystemConfig'),
   '/pensiones': () => import('@/pages/PensionesAdmin'),
+  '/notas': () => import('@/pages/NotasAdmin'),
 };
 
 const STAFF_PRELOAD_PRIORITY = [

@@ -151,3 +151,43 @@ export function buildPensionIngestBody(
     },
   });
 }
+
+export function buildNotaIngestBody(
+  tenantId: string,
+  student: Student,
+  input: {
+    semanaCodigo: string;
+    semanaEtiqueta: string;
+    nota: number;
+    carreraNombre?: string | null;
+    areaNombre?: string | null;
+    idRegistro?: number;
+  },
+): MobileIngestEventBody {
+  const notaTxt = Number(input.nota).toFixed(Number.isInteger(input.nota) ? 0 : 1);
+  const carreraTxt = input.carreraNombre?.trim()
+    ? ` Carrera: ${input.carreraNombre.trim()}.`
+    : '';
+  const areaTxt = input.areaNombre?.trim() ? ` Área: ${input.areaNombre.trim()}.` : '';
+  const textoLibre =
+    `Se registró la nota semanal de ${student.fullName}: ${notaTxt}/20 ` +
+    `(${input.semanaEtiqueta}).${carreraTxt}${areaTxt} ` +
+    `Revise el detalle en la aplicación Asiscole.`;
+  const idSeed = Number(
+    `${String(input.semanaCodigo).replace(/\D/g, '').slice(0, 6) || '0'}${student.id}`,
+  );
+  return buildMobileIngestBody({
+    tenantId,
+    tipo: 'aviso',
+    student,
+    idRegistro: input.idRegistro ?? (idSeed || student.id),
+    payloadExtra: {
+      semana: input.semanaCodigo,
+      nota: String(input.nota),
+      contexto: 'nota',
+      texto_libre: textoLibre,
+      carrera: input.carreraNombre || undefined,
+      area: input.areaNombre || undefined,
+    },
+  });
+}

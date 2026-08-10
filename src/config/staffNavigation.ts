@@ -10,7 +10,8 @@ import {
   CalendarDays,
   Wallet,
 } from 'lucide-react';
-import { isPensionesEnabled } from '@/config/features';
+import { isNotasEnabled, isPensionesEnabled } from '@/config/features';
+
 export interface StaffNavSubItem {
   path: string;
   label: string;
@@ -105,6 +106,17 @@ export function getStaffNavItems(role?: string | null): StaffNavItem[] {
     if (!item.roles.includes(role)) return false;
     if (item.path === '/pensiones' && !isPensionesEnabled()) return false;
     return true;
+  }).map((item) => {
+    if (item.path !== '/students') return item;
+    if (!isNotasEnabled()) return item;
+    if (role !== 'Admin' && role !== 'Director') return item;
+    return {
+      ...item,
+      subItems: [
+        { path: '/students', label: 'Lista de Estudiantes' },
+        { path: '/notas', label: 'Notas' },
+      ],
+    };
   });
 }
 
