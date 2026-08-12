@@ -239,6 +239,9 @@ export interface Incident {
   /** El apoderado abrió el aviso en la app (check azul / mensaje leído). */
   revisadoApp?: boolean;
   revisadoAppAt?: string | null;
+  /** El apoderado confirmó la incidencia en la página Incidencias de la app. */
+  confirmadaApp?: boolean;
+  confirmadaAppAt?: string | null;
 }
 
 export interface IncidentEvidence {

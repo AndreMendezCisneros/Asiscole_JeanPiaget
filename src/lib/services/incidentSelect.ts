@@ -13,6 +13,8 @@ const INCIDENT_LIST_BASE = `
   estado,
   revisado_app,
   revisado_app_en,
+  confirmada_app,
+  confirmada_app_en,
   estudiantes:id_estudiante (
     id_estudiante,
     codigo_barras,

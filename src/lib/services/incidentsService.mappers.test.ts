@@ -16,10 +16,14 @@ describe('incidentsService.mapDBToIncident', () => {
       estado: 'Activa',
       revisado_app: true,
       revisado_app_en: '2026-08-11T21:20:00-05:00',
+      confirmada_app: true,
+      confirmada_app_en: '2026-08-11T21:22:00-05:00',
     });
 
     expect(incident.revisadoApp).toBe(true);
     expect(incident.revisadoAppAt).toBe('2026-08-11T21:20:00-05:00');
+    expect(incident.confirmadaApp).toBe(true);
+    expect(incident.confirmadaAppAt).toBe('2026-08-11T21:22:00-05:00');
   });
 
   it('sin columnas de revisado queda como no visto', () => {
@@ -38,5 +42,7 @@ describe('incidentsService.mapDBToIncident', () => {
 
     expect(incident.revisadoApp).toBe(false);
     expect(incident.revisadoAppAt).toBeNull();
+    expect(incident.confirmadaApp).toBe(false);
+    expect(incident.confirmadaAppAt).toBeNull();
   });
 });

@@ -45,6 +45,7 @@ import {
 } from '@/hooks/queries/useIncidentsQuery';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { incidentsService, evidenceService, authService } from '@/lib/services';
+import { revisadoAppEstado } from '@/lib/utils/revisadoAppEstado';
 import {
   Pagination,
   PaginationContent,
@@ -456,18 +457,31 @@ export const IncidentsList = () => {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {incident.revisadoApp ? (
+                        {revisadoAppEstado(incident) === 'confirmado' ? (
+                          <Badge
+                            variant="secondary"
+                            className="gap-1 bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
+                            title={
+                              incident.confirmadaAppAt
+                                ? `Confirmada en la app el ${format(new Date(incident.confirmadaAppAt), 'dd/MM/yyyy HH:mm', { locale: es })}`
+                                : 'Confirmada en la página Incidencias'
+                            }
+                          >
+                            <Check className="h-3 w-3" aria-hidden />
+                            Confirmada
+                          </Badge>
+                        ) : revisadoAppEstado(incident) === 'visto' ? (
                           <Badge
                             variant="secondary"
                             className="gap-1 bg-sky-100 text-sky-800 hover:bg-sky-100"
                             title={
                               incident.revisadoAppAt
-                                ? `Visto en la app el ${format(new Date(incident.revisadoAppAt), "dd/MM/yyyy HH:mm", { locale: es })}`
-                                : 'Visto en la app'
+                                ? `Visto en mensajes el ${format(new Date(incident.revisadoAppAt), 'dd/MM/yyyy HH:mm', { locale: es })}`
+                                : 'Visto en la bandeja de mensajes'
                             }
                           >
                             <Check className="h-3 w-3" aria-hidden />
-                            Sí
+                            Visto
                           </Badge>
                         ) : (
                           <span className="text-sm text-muted-foreground">No</span>
@@ -610,19 +624,30 @@ export const IncidentsList = () => {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground mb-2">Revisado en la app</p>
-                {detailIncident.revisadoApp ? (
+                {revisadoAppEstado(detailIncident) === 'confirmado' ? (
+                  <Badge
+                    variant="secondary"
+                    className="gap-1 bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
+                  >
+                    <Check className="h-3 w-3" aria-hidden />
+                    Confirmada
+                    {detailIncident.confirmadaAppAt
+                      ? ` · ${format(new Date(detailIncident.confirmadaAppAt), 'dd/MM/yyyy HH:mm', { locale: es })}`
+                      : ''}
+                  </Badge>
+                ) : revisadoAppEstado(detailIncident) === 'visto' ? (
                   <Badge
                     variant="secondary"
                     className="gap-1 bg-sky-100 text-sky-800 hover:bg-sky-100"
                   >
                     <Check className="h-3 w-3" aria-hidden />
-                    Sí
+                    Visto en mensajes
                     {detailIncident.revisadoAppAt
                       ? ` · ${format(new Date(detailIncident.revisadoAppAt), 'dd/MM/yyyy HH:mm', { locale: es })}`
                       : ''}
                   </Badge>
                 ) : (
-                  <p className="text-sm text-muted-foreground">Aún no lo abrió el apoderado</p>
+                  <p className="text-sm text-muted-foreground">Aún no la confirmó el apoderado</p>
                 )}
               </div>
 

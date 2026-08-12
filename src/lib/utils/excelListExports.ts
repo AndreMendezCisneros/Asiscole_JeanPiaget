@@ -88,7 +88,7 @@ export async function exportIncidentsListExcel(
           dt.date,
           dt.time,
           inc.status,
-          inc.revisadoApp ? 'Sí' : 'No',
+          inc.confirmadaApp ? 'Confirmada' : inc.revisadoApp ? 'Visto' : 'No',
           inc.hasEvidence ? inc.evidenceCount : 0,
           inc.observations ?? '',
         ];
