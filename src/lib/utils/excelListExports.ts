@@ -69,6 +69,7 @@ export async function exportIncidentsListExcel(
         'Fecha',
         'Hora',
         'Estado',
+        'Revisado',
         'Evidencias',
         'Observaciones',
       ],
@@ -87,11 +88,12 @@ export async function exportIncidentsListExcel(
           dt.date,
           dt.time,
           inc.status,
+          inc.revisadoApp ? 'Sí' : 'No',
           inc.hasEvidence ? inc.evidenceCount : 0,
           inc.observations ?? '',
         ];
       }),
-      [8, 28, 12, 10, 8, 24, 14, 10, 10, 12, 8, 12, 10, 36]
+      [8, 28, 12, 10, 8, 24, 14, 10, 10, 12, 8, 12, 10, 10, 36]
     );
 
     await saveWorkbook(workbook, defaultExportFilename('Incidencias'));
