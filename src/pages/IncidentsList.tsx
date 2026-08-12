@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Eye, Edit, Printer, Camera, FileSpreadsheet, FileText, AlertCircle, CheckCircle2, Sparkles, Loader2 } from 'lucide-react';
+import { Search, Eye, Edit, Printer, Camera, FileSpreadsheet, FileText, AlertCircle, CheckCircle2, Sparkles, Loader2, Check } from 'lucide-react';
 import {
   StaffKpiStat,
   StaffToolbar,
@@ -399,6 +399,7 @@ export const IncidentsList = () => {
                       <TableHead scope="col">Nivel</TableHead>
                       <TableHead scope="col">Evidencia</TableHead>
                       <TableHead scope="col">Estado</TableHead>
+                      <TableHead scope="col">Revisado</TableHead>
                       <TableHead scope="col">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -453,6 +454,24 @@ export const IncidentsList = () => {
                         <Badge variant={incident.status === 'Activa' ? 'default' : 'secondary'}>
                           {incident.status}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {incident.revisadoApp ? (
+                          <Badge
+                            variant="secondary"
+                            className="gap-1 bg-sky-100 text-sky-800 hover:bg-sky-100"
+                            title={
+                              incident.revisadoAppAt
+                                ? `Visto en la app el ${format(new Date(incident.revisadoAppAt), "dd/MM/yyyy HH:mm", { locale: es })}`
+                                : 'Visto en la app'
+                            }
+                          >
+                            <Check className="h-3 w-3" aria-hidden />
+                            Sí
+                          </Badge>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">No</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1">
@@ -588,6 +607,23 @@ export const IncidentsList = () => {
                     {detailIncident.status}
                   </Badge>
                 </div>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">Revisado en la app</p>
+                {detailIncident.revisadoApp ? (
+                  <Badge
+                    variant="secondary"
+                    className="gap-1 bg-sky-100 text-sky-800 hover:bg-sky-100"
+                  >
+                    <Check className="h-3 w-3" aria-hidden />
+                    Sí
+                    {detailIncident.revisadoAppAt
+                      ? ` · ${format(new Date(detailIncident.revisadoAppAt), 'dd/MM/yyyy HH:mm', { locale: es })}`
+                      : ''}
+                  </Badge>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Aún no lo abrió el apoderado</p>
+                )}
               </div>
 
               <div>

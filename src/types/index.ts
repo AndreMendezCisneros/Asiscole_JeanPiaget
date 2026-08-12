@@ -236,6 +236,9 @@ export interface Incident {
   annulledBy?: number | null;
   annulledAt?: string | null;
   annulmentReason?: string | null;
+  /** El apoderado abrió el aviso en la app (check azul / mensaje leído). */
+  revisadoApp?: boolean;
+  revisadoAppAt?: string | null;
 }
 
 export interface IncidentEvidence {
