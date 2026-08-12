@@ -603,6 +603,8 @@ export const incidentsService = {
       tallerNombre: taller && typeof taller === 'object' ? taller.nombre ?? null : null,
       revisadoApp: Boolean(data.revisado_app),
       revisadoAppAt: data.revisado_app_en ?? null,
+      confirmadaApp: Boolean(data.confirmada_app),
+      confirmadaAppAt: data.confirmada_app_en ?? null,
     };
   },
 };
