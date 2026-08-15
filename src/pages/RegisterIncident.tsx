@@ -521,11 +521,11 @@ export const RegisterIncident = () => {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label className="text-muted-foreground">Grado</Label>
+                      <Label className="text-muted-foreground">Piso</Label>
                       <p className="text-lg font-semibold">{selectedStudent.grade}</p>
                     </div>
                     <div>
-                      <Label className="text-muted-foreground">Sección</Label>
+                      <Label className="text-muted-foreground">Salón</Label>
                       <p className="text-lg font-semibold">{selectedStudent.section}</p>
                     </div>
                   </div>

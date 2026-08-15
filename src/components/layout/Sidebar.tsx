@@ -147,7 +147,7 @@ export const Sidebar = () => {
           </Link>
         </div>
 
-        <nav className="staff-sidebar-nav flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
+        <nav className="staff-sidebar-nav min-h-0 flex-1 space-y-0.5 overflow-y-auto overflow-x-hidden px-3 py-4">
           {user?.role === 'Padre' ? (
             <ParentSidebarNav onNavigate={() => setMobileMenuOpen(false)} />
           ) : null}

@@ -59,8 +59,8 @@ import {
   PhoneCall,
 } from 'lucide-react';
 import { ModernCalendar } from '@/components/calendar/ModernCalendar';
-import { parentMeetingsService, studentsService } from '@/lib/services';
-import { ParentMeeting, Student, EducationalLevel } from '@/types';
+import { parentMeetingsService } from '@/lib/services';
+import { ParentMeeting } from '@/types';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
@@ -75,13 +75,19 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { authService } from '@/lib/services';
 import { format, addMonths, subMonths } from 'date-fns';
-import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { es } from 'date-fns/locale';
 import {
   formatDateKeyLima,
   getLimaTodayDate,
   parseMeetingDateTime,
 } from '@/lib/utils/limaDateTime';
+import { StudentSearchCombobox } from '@/components/students/StudentSearchCombobox';
+import {
+  CLASSROOM_FIELD_LABELS,
+  CLASSROOM_GRADES,
+  CLASSROOM_LEVELS,
+  CLASSROOM_SECTIONS,
+} from '@/lib/constants/classrooms';
 
 const meetingFormSchema = z
   .object({
@@ -107,7 +113,7 @@ const meetingFormSchema = z
     if (data.tipo === 'grade' && !data.grade) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Debe seleccionar un grado',
+        message: 'Debe seleccionar un piso',
         path: ['grade'],
       });
     }
@@ -121,14 +127,14 @@ const meetingFormSchema = z
     if (data.tipo === 'section' && !data.grade) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Debe seleccionar un grado',
+        message: 'Debe seleccionar un piso',
         path: ['grade'],
       });
     }
     if (data.tipo === 'section' && !data.section) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Debe seleccionar una sección',
+        message: 'Debe seleccionar un salón',
         path: ['section'],
       });
     }
@@ -164,10 +170,6 @@ const bulkMeetingDefaults: MeetingFormValues = {
 
 export const ParentMeetings = () => {
   const [meetings, setMeetings] = useState<ParentMeeting[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
-  const [studentPickerSearch, setStudentPickerSearch] = useState('');
-  const debouncedStudentSearch = useDebouncedValue(studentPickerSearch, 350);
-  const [studentsLoading, setStudentsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
@@ -252,33 +254,6 @@ export const ParentMeetings = () => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, meetingsDateRange.fechaDesde, meetingsDateRange.fechaHasta]);
-
-  useEffect(() => {
-    if (!dialogOpen) {
-      setStudentPickerSearch('');
-      setStudents([]);
-      return;
-    }
-
-    if (debouncedStudentSearch.trim().length < 2) {
-      setStudents([]);
-      return;
-    }
-
-    let cancelled = false;
-    setStudentsLoading(true);
-
-    void studentsService.searchByName(debouncedStudentSearch, 25).then(({ students: list, error }) => {
-      if (cancelled) return;
-      if (error) toast.error(error);
-      setStudents(list);
-      setStudentsLoading(false);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dialogOpen, debouncedStudentSearch]);
 
   const loadMeetings = async () => {
     if (!isMountedRef.current) return;
@@ -1186,8 +1161,8 @@ export const ParentMeetings = () => {
                       <SelectContent>
                         <SelectItem value="individual">Individual</SelectItem>
                         <SelectItem value="all">Todos los Padres (APAFA)</SelectItem>
-                        <SelectItem value="grade">Por Grado</SelectItem>
-                        <SelectItem value="section">Por Sección</SelectItem>
+                        <SelectItem value="grade">Por Piso</SelectItem>
+                        <SelectItem value="section">Por Salón</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -1200,43 +1175,10 @@ export const ParentMeetings = () => {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Estudiante</FormLabel>
-                    <div className="space-y-2">
-                      <Input
-                        placeholder="Buscar por nombre (mín. 2 letras)…"
-                        value={studentPickerSearch}
-                        onChange={(e) => setStudentPickerSearch(e.target.value)}
-                      />
-                      {studentsLoading ? (
-                        <p className="text-sm text-muted-foreground flex items-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Buscando…
-                        </p>
-                      ) : students.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                          {studentPickerSearch.trim().length < 2
-                            ? 'Escriba al menos 2 letras para buscar'
-                            : 'Sin coincidencias'}
-                        </p>
-                      ) : (
-                        <Select
-                          value={field.value ? String(field.value) : ''}
-                          onValueChange={(value) => field.onChange(Number(value))}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Seleccionar estudiante" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {students.map((student) => (
-                              <SelectItem key={student.id} value={String(student.id)}>
-                                {student.fullName} - {student.level} {student.grade} {student.section}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                    </div>
+                    <StudentSearchCombobox
+                      value={field.value || null}
+                      onChange={(id) => field.onChange(id)}
+                    />
                     <FormMessage />
                   </FormItem>
                 )}
@@ -1329,7 +1271,7 @@ export const ParentMeetings = () => {
           <DialogHeader>
             <DialogTitle>Crear Citas Masivas</DialogTitle>
             <DialogDescription>
-              Programe citas para múltiples padres de familia. Puede crear citas para todos los padres, por grado o por sección.
+              Programe citas para múltiples padres de familia. Puede crear citas para todos los padres, por piso o por salón.
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
@@ -1351,8 +1293,8 @@ export const ParentMeetings = () => {
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="all">Todos los Padres (Junta APAFA)</SelectItem>
-                        <SelectItem value="grade">Por Grado</SelectItem>
-                        <SelectItem value="section">Por Sección</SelectItem>
+                        <SelectItem value="grade">Por Piso</SelectItem>
+                        <SelectItem value="section">Por Salón</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -1377,8 +1319,11 @@ export const ParentMeetings = () => {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="Primaria">Primaria</SelectItem>
-                            <SelectItem value="Secundaria">Secundaria</SelectItem>
+                            {CLASSROOM_LEVELS.map((level) => (
+                              <SelectItem key={level} value={level}>
+                                {level}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -1390,23 +1335,22 @@ export const ParentMeetings = () => {
                     name="grade"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Grado</FormLabel>
+                        <FormLabel>{CLASSROOM_FIELD_LABELS.grade}</FormLabel>
                         <Select
                           value={field.value}
                           onValueChange={field.onChange}
                         >
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder="Seleccionar grado" />
+                              <SelectValue placeholder={`Seleccionar ${CLASSROOM_FIELD_LABELS.grade.toLowerCase()}`} />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="1ro">1ro</SelectItem>
-                            <SelectItem value="2do">2do</SelectItem>
-                            <SelectItem value="3ro">3ro</SelectItem>
-                            <SelectItem value="4to">4to</SelectItem>
-                            <SelectItem value="5to">5to</SelectItem>
-                            <SelectItem value="6to">6to</SelectItem>
+                            {CLASSROOM_GRADES.map((grade) => (
+                              <SelectItem key={grade} value={grade}>
+                                {grade}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -1433,8 +1377,11 @@ export const ParentMeetings = () => {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="Primaria">Primaria</SelectItem>
-                            <SelectItem value="Secundaria">Secundaria</SelectItem>
+                            {CLASSROOM_LEVELS.map((level) => (
+                              <SelectItem key={level} value={level}>
+                                {level}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -1446,23 +1393,22 @@ export const ParentMeetings = () => {
                     name="grade"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Grado</FormLabel>
+                        <FormLabel>{CLASSROOM_FIELD_LABELS.grade}</FormLabel>
                         <Select
                           value={field.value}
                           onValueChange={field.onChange}
                         >
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder="Seleccionar grado" />
+                              <SelectValue placeholder={`Seleccionar ${CLASSROOM_FIELD_LABELS.grade.toLowerCase()}`} />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="1ro">1ro</SelectItem>
-                            <SelectItem value="2do">2do</SelectItem>
-                            <SelectItem value="3ro">3ro</SelectItem>
-                            <SelectItem value="4to">4to</SelectItem>
-                            <SelectItem value="5to">5to</SelectItem>
-                            <SelectItem value="6to">6to</SelectItem>
+                            {CLASSROOM_GRADES.map((grade) => (
+                              <SelectItem key={grade} value={grade}>
+                                {grade}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -1474,21 +1420,22 @@ export const ParentMeetings = () => {
                     name="section"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Sección</FormLabel>
+                        <FormLabel>{CLASSROOM_FIELD_LABELS.section}</FormLabel>
                         <Select
                           value={field.value}
                           onValueChange={field.onChange}
                         >
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder="Seleccionar sección" />
+                              <SelectValue placeholder={`Seleccionar ${CLASSROOM_FIELD_LABELS.section.toLowerCase()}`} />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="A">A</SelectItem>
-                            <SelectItem value="B">B</SelectItem>
-                            <SelectItem value="C">C</SelectItem>
-                            <SelectItem value="D">D</SelectItem>
+                            {CLASSROOM_SECTIONS.map((section) => (
+                              <SelectItem key={section} value={section}>
+                                {section}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -1504,7 +1451,7 @@ export const ParentMeetings = () => {
                   <FormItem>
                     <FormLabel>Motivo de la Cita</FormLabel>
                     <FormControl>
-                      <Input placeholder="Ej: Junta de APAFA, Reunión de padres de 3ro A..." {...field} />
+                      <Input placeholder="Ej: Junta de APAFA, Reunión de padres del piso 2002..." {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

@@ -23,6 +23,8 @@ STABLE
 SET search_path = public
 AS $$
   SELECT CASE
+    WHEN replace(lower(coalesce(p_nivel, '')), '-', '') LIKE '%preuniv%'
+      THEN public._sie_config_hora('hora_limite_llegada_preuniversitario', public._sie_config_hora('hora_limite_llegada', '08:00'))
     WHEN lower(coalesce(p_nivel, '')) LIKE '%prim%'
       THEN public._sie_config_hora('hora_limite_llegada_primaria', public._sie_config_hora('hora_limite_llegada', '08:00'))
     WHEN lower(coalesce(p_nivel, '')) LIKE '%sec%'
@@ -57,6 +59,10 @@ AS $$
     ),
     'secundaria', public._sie_config_hora(
       'hora_limite_llegada_secundaria',
+      public._sie_config_hora('hora_limite_llegada', '08:00')
+    ),
+    'preuniversitario', public._sie_config_hora(
+      'hora_limite_llegada_preuniversitario',
       public._sie_config_hora('hora_limite_llegada', '08:00')
     )
   );

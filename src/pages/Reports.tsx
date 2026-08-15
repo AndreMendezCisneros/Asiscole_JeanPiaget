@@ -10,10 +10,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Download, TrendingUp, Users, AlertTriangle, Calendar, Loader2, Filter, BarChart3, FileDown, FileSpreadsheet } from 'lucide-react';
+import { TrendingUp, Users, AlertTriangle, Calendar, Loader2, BarChart3, FileDown, FileSpreadsheet, Search } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { StaffKpiStat, StaffToolbar } from '@/components/staff';
+import { StaffKpiStat, StaffToolbar, StaffDataPanel, StaffDataPanelHeader, StaffEmptyState } from '@/components/staff';
 import { Label } from '@/components/ui/label';
+import { StudentSearchCombobox } from '@/components/students/StudentSearchCombobox';
 
 import {
   BarChart,
@@ -28,11 +29,21 @@ import {
   Legend
 } from 'recharts';
 import { dashboardService, incidentsService } from '@/lib/services';
-import { DashboardStats, EducationalLevel } from '@/types';
+import { DashboardStats, EducationalLevel, Incident, Student } from '@/types';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getCurrentSchoolYear, getAllBimestres, formatBimestreLabel, type Bimestre } from '@/lib/utils/bimestreUtils';
+import { CLASSROOM_FIELD_LABELS, CLASSROOM_GRADES, CLASSROOM_LEVELS } from '@/lib/constants/classrooms';
+import { buildDashboardStatsFromIncidents } from '@/lib/utils/incidentReportStats';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 export const Reports = () => {
   const [selectedGrade, setSelectedGrade] = useState<string>('all');
@@ -40,6 +51,8 @@ export const Reports = () => {
   const [severityFilter, setSeverityFilter] = useState<'all' | 'moderate' | 'critical'>('all');
   const [bimestre, setBimestre] = useState<Bimestre | 'all'>('all');
   const [añoEscolar, setAñoEscolar] = useState<number>(getCurrentSchoolYear());
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const studentFilterActive = selectedStudent != null;
 
   // Filtros derivados memoizados — la clave de caché cambia solo cuando cambian los filtros
   const reportFilters = useMemo(() => ({
@@ -89,15 +102,52 @@ export const Reports = () => {
     placeholderData: keepPreviousData,
   });
 
+  const { data: studentIncidents = [], isFetching: fetchingStudentIncidents } = useQuery({
+    queryKey: ['reports', 'student-incidents', selectedStudent?.id, reportFilters.bimestre, reportFilters.añoEscolar],
+    enabled: studentFilterActive,
+    queryFn: async () => {
+      const { incidents, error } = await incidentsService.getAll({
+        estudianteId: selectedStudent!.id,
+        bimestre: reportFilters.bimestre,
+        añoEscolar: reportFilters.bimestre ? reportFilters.añoEscolar : undefined,
+        fetchAll: true,
+      });
+      if (error) {
+        toast.error(error);
+        return [] as Incident[];
+      }
+      return incidents;
+    },
+    staleTime: 60 * 1000,
+  });
+
   const stats: DashboardStats | null = reportsData?.stats ?? null;
   const monthlyTrend = reportsData?.monthlyTrend ?? [];
   const weeklyData = reportsData?.weeklyData ?? [];
   const comparisonByGrade = reportsData?.comparisonByGrade ?? [];
   const comparisonBySection = reportsData?.comparisonBySection ?? [];
   const loading = isLoading && !reportsData;
+  const studentReportStats = useMemo(
+    () => (studentFilterActive ? buildDashboardStatsFromIncidents(studentIncidents) : null),
+    [studentFilterActive, studentIncidents],
+  );
+  const viewStats = studentReportStats ?? stats;
+
+  const loadExportIncidents = async () => {
+    const { incidents: incidentsList, error } = await incidentsService.getAll({
+      nivelEducativo: selectedStudent ? undefined : selectedLevel === 'all' ? undefined : selectedLevel,
+      grado: selectedStudent ? undefined : selectedGrade === 'all' ? undefined : selectedGrade,
+      bimestre: bimestre !== 'all' ? bimestre : undefined,
+      añoEscolar: bimestre !== 'all' ? añoEscolar : undefined,
+      estudianteId: selectedStudent?.id,
+      fetchAll: true,
+    });
+    if (error) return { error, incidents: [] as Incident[] };
+    return { error: null, incidents: incidentsList };
+  };
 
   const exportToPDF = async () => {
-    if (!stats) {
+    if (!viewStats) {
       toast.error('No hay datos para exportar');
       return;
     }
@@ -105,18 +155,22 @@ export const Reports = () => {
     try {
       toast.loading('Generando PDF...', { id: 'pdf-export' });
 
-      const { incidents: incidentsList, error } = await incidentsService.getAll({
-        nivelEducativo: selectedLevel === 'all' ? undefined : selectedLevel,
-        grado: selectedGrade === 'all' ? undefined : selectedGrade,
-        bimestre: bimestre !== 'all' ? bimestre : undefined,
-        añoEscolar: bimestre !== 'all' ? añoEscolar : undefined,
-        fetchAll: true,
-      });
+      const { incidents: incidentsList, error } = await loadExportIncidents();
 
       if (error) {
         toast.error('Error al cargar incidencias para el PDF', { id: 'pdf-export' });
         return;
       }
+
+      if (selectedStudent && incidentsList.length === 0) {
+        toast.error('No hay incidencias de ese estudiante para exportar', { id: 'pdf-export' });
+        return;
+      }
+
+      const exportStats = selectedStudent
+        ? buildDashboardStatsFromIncidents(incidentsList)
+        : viewStats;
+      const studentLabel = selectedStudent ? [selectedStudent.fullName] : [];
 
       const { PdfReportDocument, buildFilterSubtitle } = await import('@/lib/utils/pdfReportBuilder');
 
@@ -128,28 +182,41 @@ export const Reports = () => {
       const subtitle = buildFilterSubtitle([
         `Generado ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm", { locale: es })}`,
         selectedLevel !== 'all' && `Nivel: ${selectedLevel}`,
-        selectedGrade !== 'all' && `Grado: ${selectedGrade}`,
+        selectedGrade !== 'all' && `${CLASSROOM_FIELD_LABELS.grade}: ${selectedGrade}`,
         bimestreInfo && `Período: ${formatBimestreLabel(bimestreInfo)}`,
+        studentLabel.length === 1 && `Estudiante: ${studentLabel[0]}`,
+        studentLabel.length > 1 && `Estudiantes: ${studentLabel.join(', ')}`,
       ]);
 
-      const doc = new PdfReportDocument('portrait', 'REPORTE DE INCIDENCIAS', subtitle);
+      const doc = new PdfReportDocument(
+        'portrait',
+        studentLabel.length === 1 ? 'REPORTE DE INCIDENCIAS DEL ESTUDIANTE' : 'REPORTE DE INCIDENCIAS',
+        subtitle,
+      );
       await doc.drawCoverHeader();
 
-      const criticalCount = stats.levelDistribution.level3 + stats.levelDistribution.level4;
+      const criticalCount =
+        exportStats.levelDistribution.level3 + exportStats.levelDistribution.level4;
 
       doc.drawKpiCards([
-        { label: 'Total incidencias', value: stats.totalIncidents, tone: 'primary' },
-        { label: 'Estudiantes involucrados', value: stats.studentsWithIncidents, tone: 'info' },
-        { label: 'Nivel promedio', value: stats.averageReincidenceLevel.toFixed(1), tone: 'warning' },
+        { label: 'Total incidencias', value: exportStats.totalIncidents, tone: 'primary' },
+        { label: 'Estudiantes involucrados', value: exportStats.studentsWithIncidents, tone: 'info' },
+        { label: 'Nivel promedio', value: exportStats.averageReincidenceLevel.toFixed(1), tone: 'warning' },
         { label: 'Casos críticos', value: criticalCount, tone: criticalCount > 0 ? 'error' : 'success' },
       ]);
 
       doc.drawSectionTitle('Distribución por nivel de reincidencia');
       doc.drawKeyValueList(
-        levelItems.map((item) => {
+        [
+          { level: 'Nivel 0 - Sin reincidencias', count: exportStats.levelDistribution.level0 },
+          { level: 'Nivel 1 - Primera reincidencia', count: exportStats.levelDistribution.level1 },
+          { level: 'Nivel 2 - Reincidencia moderada', count: exportStats.levelDistribution.level2 },
+          { level: 'Nivel 3 - Reincidencia alta', count: exportStats.levelDistribution.level3 },
+          { level: 'Nivel 4 - Reincidencia crítica', count: exportStats.levelDistribution.level4 },
+        ].map((item) => {
           const pct =
-            stats.totalIncidents > 0
-              ? ((item.count / stats.totalIncidents) * 100).toFixed(1)
+            exportStats.totalIncidents > 0
+              ? ((item.count / exportStats.totalIncidents) * 100).toFixed(1)
               : '0';
           return { label: item.level, value: `${item.count} registros (${pct}%)` };
         })
@@ -163,10 +230,10 @@ export const Reports = () => {
           { header: 'Cantidad', dataKey: 'count', width: 22, align: 'center' },
           { header: '% del total', dataKey: 'pct', width: 22, align: 'right' },
         ],
-        stats.topFaults.slice(0, 15).map((fault, index) => {
+        exportStats.topFaults.slice(0, 15).map((fault, index) => {
           const pct =
-            stats.totalIncidents > 0
-              ? `${((fault.count / stats.totalIncidents) * 100).toFixed(1)}%`
+            exportStats.totalIncidents > 0
+              ? `${((fault.count / exportStats.totalIncidents) * 100).toFixed(1)}%`
               : '0%';
           return {
             rank: String(index + 1),
@@ -185,7 +252,7 @@ export const Reports = () => {
         [
           { header: 'ID', dataKey: 'id', width: 12, align: 'center' },
           { header: 'Estudiante', dataKey: 'student', width: 42 },
-          { header: 'Grado', dataKey: 'grade', width: 18 },
+          { header: CLASSROOM_FIELD_LABELS.grade, dataKey: 'grade', width: 18 },
           { header: 'Falta', dataKey: 'fault', width: 38 },
           { header: 'Niv.', dataKey: 'level', width: 12, align: 'center' },
           { header: 'Estado', dataKey: 'status', width: 18 },
@@ -203,7 +270,10 @@ export const Reports = () => {
         { fontSize: 7.5, maxRows: 80 }
       );
 
-      const fileName = `Reporte_Incidencias_${format(new Date(), 'yyyy_MM_dd', { locale: es })}.pdf`;
+      const dateStamp = format(new Date(), 'yyyy_MM_dd', { locale: es });
+      const studentStamp =
+        studentLabel.length === 1 ? `_${studentLabel[0].replace(/\s+/g, '_')}` : '';
+      const fileName = `Reporte_Incidencias${studentStamp}_${dateStamp}.pdf`;
       await doc.finalize(fileName);
 
       toast.success('PDF generado exitosamente', { id: 'pdf-export' });
@@ -215,45 +285,49 @@ export const Reports = () => {
   };
 
   const exportToExcel = async () => {
-    if (!stats) {
+    if (!viewStats) {
       toast.error('No hay datos para exportar');
       return;
     }
 
     try {
-      const { incidents: incidentsList, error } = await incidentsService.getAll({
-        nivelEducativo: selectedLevel === 'all' ? undefined : selectedLevel,
-        grado: selectedGrade === 'all' ? undefined : selectedGrade,
-        bimestre: bimestre !== 'all' ? bimestre : undefined,
-        añoEscolar: bimestre !== 'all' ? añoEscolar : undefined,
-        fetchAll: true,
-      });
+      const { incidents: incidentsList, error } = await loadExportIncidents();
 
       if (error) {
         toast.error('Error al cargar incidencias para exportar');
         return;
       }
 
+      if (selectedStudent && incidentsList.length === 0) {
+        toast.error('No hay incidencias de ese estudiante para exportar');
+        return;
+      }
+
+      const exportStats = selectedStudent
+        ? buildDashboardStatsFromIncidents(incidentsList)
+        : viewStats;
+      const studentLabel = selectedStudent ? [selectedStudent.fullName] : [];
+
       let filterText = `Generado: ${format(new Date(), 'dd/MM/yyyy HH:mm', { locale: es })}`;
       if (selectedLevel !== 'all') filterText += ` · Nivel: ${selectedLevel}`;
-      if (selectedGrade !== 'all') filterText += ` · Grado: ${selectedGrade}`;
+      if (selectedGrade !== 'all') filterText += ` · ${CLASSROOM_FIELD_LABELS.grade}: ${selectedGrade}`;
       if (bimestre !== 'all') {
         const b = getAllBimestres(añoEscolar).find((x) => x.numero === bimestre);
         if (b) filterText += ` · ${formatBimestreLabel(b)}`;
       }
+      if (studentLabel.length === 1) filterText += ` · Estudiante: ${studentLabel[0]}`;
+      else if (studentLabel.length > 1) filterText += ` · Estudiantes: ${studentLabel.join(', ')}`;
 
-      const levelItemsForExport = stats
-        ? [
-            { level: 'Nivel 0 - Sin reincidencias', count: stats.levelDistribution.level0 },
-            { level: 'Nivel 1 - Primera reincidencia', count: stats.levelDistribution.level1 },
-            { level: 'Nivel 2 - Reincidencia moderada', count: stats.levelDistribution.level2 },
-            { level: 'Nivel 3 - Reincidencia alta', count: stats.levelDistribution.level3 },
-            { level: 'Nivel 4 - Reincidencia crítica', count: stats.levelDistribution.level4 },
-          ]
-        : [];
+      const levelItemsForExport = [
+        { level: 'Nivel 0 - Sin reincidencias', count: exportStats.levelDistribution.level0 },
+        { level: 'Nivel 1 - Primera reincidencia', count: exportStats.levelDistribution.level1 },
+        { level: 'Nivel 2 - Reincidencia moderada', count: exportStats.levelDistribution.level2 },
+        { level: 'Nivel 3 - Reincidencia alta', count: exportStats.levelDistribution.level3 },
+        { level: 'Nivel 4 - Reincidencia crítica', count: exportStats.levelDistribution.level4 },
+      ];
 
       const { exportIncidentsReportExcel } = await import('@/lib/utils/excelReportExports');
-      await exportIncidentsReportExcel(stats, incidentsList, {
+      await exportIncidentsReportExcel(exportStats, incidentsList, {
         filterText,
         levelItems: levelItemsForExport,
       });
@@ -268,20 +342,19 @@ export const Reports = () => {
   // monthlyTrend y weeklyData ahora vienen del estado, cargados desde la base de datos
 
   // Filter data by grade
-  const filteredIncidentsByGrade = (stats?.incidentsByGrade || []).filter((item) => {
+  const filteredIncidentsByGrade = (viewStats?.incidentsByGrade || []).filter((item) => {
     const matchesGrade = selectedGrade === 'all' || item.grade === selectedGrade;
     const matchesLevel = selectedLevel === 'all' || item.level === selectedLevel;
     return matchesGrade && matchesLevel;
   });
 
-  // Filter level distribution by severity focus
-  const levelItems = stats
+  const levelItems = viewStats
     ? [
-        { level: 'Nivel 0 - Sin reincidencias', key: 'level0' as const, count: stats.levelDistribution.level0, severity: 'low' },
-        { level: 'Nivel 1 - Primera reincidencia', key: 'level1' as const, count: stats.levelDistribution.level1, severity: 'moderate' },
-        { level: 'Nivel 2 - Reincidencia moderada', key: 'level2' as const, count: stats.levelDistribution.level2, severity: 'moderate' },
-        { level: 'Nivel 3 - Reincidencia alta', key: 'level3' as const, count: stats.levelDistribution.level3, severity: 'critical' },
-        { level: 'Nivel 4 - Reincidencia crítica', key: 'level4' as const, count: stats.levelDistribution.level4, severity: 'critical' },
+        { level: 'Nivel 0 - Sin reincidencias', key: 'level0' as const, count: viewStats.levelDistribution.level0, severity: 'low' },
+        { level: 'Nivel 1 - Primera reincidencia', key: 'level1' as const, count: viewStats.levelDistribution.level1, severity: 'moderate' },
+        { level: 'Nivel 2 - Reincidencia moderada', key: 'level2' as const, count: viewStats.levelDistribution.level2, severity: 'moderate' },
+        { level: 'Nivel 3 - Reincidencia alta', key: 'level3' as const, count: viewStats.levelDistribution.level3, severity: 'critical' },
+        { level: 'Nivel 4 - Reincidencia crítica', key: 'level4' as const, count: viewStats.levelDistribution.level4, severity: 'critical' },
       ]
     : [];
 
@@ -302,7 +375,7 @@ export const Reports = () => {
     );
   }
 
-  if (!stats) {
+  if (!viewStats) {
     return (
       <div className="app-page">
         <div className="app-page-state">
@@ -318,29 +391,55 @@ export const Reports = () => {
         icon={BarChart3}
         eyebrow="Reportes"
         title="Reportes de Incidencias"
-        description="Analice tendencias, distribución por nivel y faltas más frecuentes del período"
+        description={
+          studentFilterActive
+            ? 'Elija un estudiante de la lista y exporte su reporte de incidencias en PDF o Excel'
+            : 'Analice tendencias, distribución por nivel y faltas más frecuentes del período'
+        }
         accent="primary"
       />
       <StaffToolbar
         title="Período y filtros"
-        description="Ajuste el alcance del análisis y exporte"
+        description="Busque en la lista, elija un estudiante y exporte PDF o Excel"
         footer={
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => refetch()} variant="outline" size="sm" disabled={isFetching}>
               <Calendar className="mr-2 h-4 w-4" />
               {isFetching ? 'Cargando…' : 'Actualizar'}
             </Button>
-            <Button onClick={exportToPDF} disabled={!stats} variant="outline" size="sm">
+            <Button
+              onClick={exportToPDF}
+              disabled={!viewStats || (studentFilterActive && !fetchingStudentIncidents && studentIncidents.length === 0)}
+              variant="outline"
+              size="sm"
+            >
               <FileDown className="mr-2 h-4 w-4" />
               PDF
             </Button>
-            <Button onClick={exportToExcel} disabled={!stats} variant="outline" size="sm">
+            <Button
+              onClick={exportToExcel}
+              disabled={!viewStats || (studentFilterActive && !fetchingStudentIncidents && studentIncidents.length === 0)}
+              variant="outline"
+              size="sm"
+            >
               <FileSpreadsheet className="mr-2 h-4 w-4" />
               Excel
             </Button>
           </div>
         }
       >
+        <div className="col-span-full space-y-2">
+          <Label htmlFor="reports-student-search">Buscar estudiante</Label>
+          <StudentSearchCombobox
+            id="reports-student-search"
+            variant="search"
+            allowClear
+            value={selectedStudent?.id ?? null}
+            placeholder="Nombre completo del estudiante..."
+            onChange={(_id, student) => setSelectedStudent(student)}
+            onClear={() => setSelectedStudent(null)}
+          />
+        </div>
         <div className="space-y-2">
           <Label>Nivel</Label>
         <Select value={selectedLevel} onValueChange={(value) => setSelectedLevel(value as 'all' | EducationalLevel)}>
@@ -349,25 +448,27 @@ export const Reports = () => {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos los niveles</SelectItem>
-            <SelectItem value="Primaria">Primaria</SelectItem>
-            <SelectItem value="Secundaria">Secundaria</SelectItem>
+            {CLASSROOM_LEVELS.map((level) => (
+              <SelectItem key={level} value={level}>
+                {level}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         </div>
         <div className="space-y-2">
-          <Label>Grado</Label>
+          <Label>{CLASSROOM_FIELD_LABELS.grade}</Label>
         <Select value={selectedGrade} onValueChange={setSelectedGrade}>
           <SelectTrigger>
-            <SelectValue placeholder="Todos los grados" />
+            <SelectValue placeholder={CLASSROOM_FIELD_LABELS.allGrades} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todos los grados</SelectItem>
-            <SelectItem value="1ro">1ro</SelectItem>
-            <SelectItem value="2do">2do</SelectItem>
-            <SelectItem value="3ro">3ro</SelectItem>
-            <SelectItem value="4to">4to</SelectItem>
-            <SelectItem value="5to">5to</SelectItem>
-            <SelectItem value="6to">6to</SelectItem>
+            <SelectItem value="all">{CLASSROOM_FIELD_LABELS.allGrades}</SelectItem>
+            {CLASSROOM_GRADES.map((grade) => (
+              <SelectItem key={grade} value={grade}>
+                {grade}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         </div>
@@ -420,31 +521,102 @@ export const Reports = () => {
       <div className="app-kpi-grid">
         <StaffKpiStat
           label="Total incidencias"
-          value={stats.totalIncidents}
+          value={viewStats.totalIncidents}
           icon={TrendingUp}
           tone="primary"
+          hint={studentFilterActive ? 'Solo el estudiante buscado' : undefined}
         />
         <StaffKpiStat
           label="Estudiantes"
-          value={stats.studentsWithIncidents}
+          value={viewStats.studentsWithIncidents}
           icon={Users}
           tone="accent"
+          hint={selectedStudent?.fullName}
         />
         <StaffKpiStat
           label="Nivel promedio"
-          value={stats.averageReincidenceLevel.toFixed(1)}
+          value={viewStats.averageReincidenceLevel.toFixed(1)}
           icon={AlertTriangle}
           tone="warning"
         />
         <StaffKpiStat
           label="Casos críticos"
-          value={stats.levelDistribution.level3 + stats.levelDistribution.level4}
+          value={viewStats.levelDistribution.level3 + viewStats.levelDistribution.level4}
           icon={AlertTriangle}
           tone="secondary"
         />
       </div>
 
+      {studentFilterActive && (
+        <StaffDataPanel>
+          <StaffDataPanelHeader
+            accent="primary"
+            title={
+              selectedStudent
+                ? `Incidencias de ${selectedStudent.fullName}`
+                : 'Incidencias del estudiante'
+            }
+            description={
+              fetchingStudentIncidents
+                ? 'Buscando registros…'
+                : studentIncidents.length === 0
+                  ? 'No hay incidencias de este estudiante en el período seleccionado'
+                  : `${studentIncidents.length} registro(s) · ${selectedStudent?.level} · ${CLASSROOM_FIELD_LABELS.grade} ${selectedStudent?.grade} · ${CLASSROOM_FIELD_LABELS.section} ${selectedStudent?.section}`
+            }
+          />
+          <div className="p-4 pt-0 sm:p-5 sm:pt-0">
+            {fetchingStudentIncidents ? (
+              <div className="flex items-center justify-center py-16 text-muted-foreground">
+                <Loader2 className="mr-3 h-6 w-6 animate-spin" />
+                Cargando incidencias…
+              </div>
+            ) : studentIncidents.length === 0 ? (
+              <StaffEmptyState
+                icon={Search}
+                title="Sin incidencias para ese estudiante"
+                description="El estudiante no tiene incidencias en el período elegido. Pruebe otro bimestre o limpie la búsqueda."
+              />
+            ) : (
+              <div className="overflow-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Estudiante</TableHead>
+                      <TableHead>{CLASSROOM_FIELD_LABELS.grade}</TableHead>
+                      <TableHead>{CLASSROOM_FIELD_LABELS.section}</TableHead>
+                      <TableHead>Falta</TableHead>
+                      <TableHead className="text-center">Nivel</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead>Fecha</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {studentIncidents.map((incident) => (
+                      <TableRow key={incident.id}>
+                        <TableCell className="font-medium">
+                          {incident.student?.fullName ?? '—'}
+                        </TableCell>
+                        <TableCell>{incident.student?.grade ?? '—'}</TableCell>
+                        <TableCell>{incident.student?.section ?? '—'}</TableCell>
+                        <TableCell>{incident.faultType?.name ?? '—'}</TableCell>
+                        <TableCell className="text-center">{incident.reincidenceLevel}</TableCell>
+                        <TableCell>{incident.status}</TableCell>
+                        <TableCell>
+                          {format(new Date(incident.registeredAt), 'dd/MM/yyyy HH:mm', { locale: es })}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        </StaffDataPanel>
+      )}
+
       {/* Charts y detalle */}
+      {!studentFilterActive && (
+        <>
       {/* Tendencia mensual a ancho completo */}
       <Card className="app-card">
         <CardHeader className="app-card-header">
@@ -507,7 +679,7 @@ export const Reports = () => {
         <Card className="app-card">
           <CardHeader className="app-card-header">
             <CardTitle className="app-section-title">
-              Incidencias por Nivel / Grado
+              Incidencias por Nivel / Piso
               {(selectedLevel !== 'all' || selectedGrade !== 'all') && (
                 <>
                   {' '}
@@ -540,8 +712,10 @@ export const Reports = () => {
               </div>
             )}
           </CardContent>
-        </Card>
-      </div>
+          </Card>
+        </div>
+        </>
+      )}
 
       {/* Fila: Distribución de niveles vs faltas más frecuentes */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -561,7 +735,7 @@ export const Reports = () => {
                     <div
                       className="h-3 rounded-full transition-all duration-500 group-hover:shadow-lg"
                       style={{
-                        width: `${stats.totalIncidents > 0 ? (item.count / stats.totalIncidents) * 100 : 0}%`,
+                        width: `${viewStats.totalIncidents > 0 ? (item.count / viewStats.totalIncidents) * 100 : 0}%`,
                         background:
                           item.severity === 'low'
                             ? 'linear-gradient(90deg, #10b981, #059669)'
@@ -582,13 +756,13 @@ export const Reports = () => {
             <CardTitle className="app-section-title">Faltas Más Frecuentes</CardTitle>
           </CardHeader>
             <CardContent className="pt-6">
-            {stats.topFaults.length === 0 ? (
+            {viewStats.topFaults.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 No hay datos disponibles
               </div>
             ) : (
                 <div className="space-y-5">
-                  {stats.topFaults.map((fault, index) => {
+                  {viewStats.topFaults.map((fault, index) => {
                     const colors = [
                       'bg-blue-500',
                       'bg-purple-500',
@@ -610,15 +784,15 @@ export const Reports = () => {
                             <div
                               className={`${colors[index % colors.length]} h-3 rounded-full transition-all duration-500 group-hover:shadow-lg`}
                               style={{ 
-                                width: `${stats.topFaults.length > 0 && stats.topFaults[0].count > 0 
-                                  ? (fault.count / stats.topFaults[0].count) * 100 
+                                width: `${viewStats.topFaults.length > 0 && viewStats.topFaults[0].count > 0 
+                                  ? (fault.count / viewStats.topFaults[0].count) * 100 
                                   : 0}%` 
                               }}
                             />
                           </div>
                         </div>
                         <div className="text-sm font-semibold text-gray-500 min-w-[45px] text-right">
-                          {stats.totalIncidents > 0 ? ((fault.count / stats.totalIncidents) * 100).toFixed(1) : 0}%
+                          {viewStats.totalIncidents > 0 ? ((fault.count / viewStats.totalIncidents) * 100).toFixed(1) : 0}%
                         </div>
                       </div>
                     );
@@ -629,17 +803,17 @@ export const Reports = () => {
           </Card>
         </div>
 
-      {/* Cuadros Comparativos */}
+      {!studentFilterActive && (
       <div className="space-y-6">
         <h2 className="text-2xl font-bold text-gray-900 mt-8 mb-4 flex items-center gap-2">
           <BarChart3 className="w-6 h-6" />
-          Comparativas por Grado y Sección
+          Comparativas por Piso y Salón
         </h2>
 
         {/* Comparativa por Grados */}
         <Card className="app-card">
           <CardHeader className="app-card-header">
-            <CardTitle className="app-section-title">Comparativa por Grados</CardTitle>
+            <CardTitle className="app-section-title">Comparativa por Pisos</CardTitle>
           </CardHeader>
             <CardContent className="pt-6">
               {comparisonByGrade.length > 0 ? (
@@ -691,7 +865,7 @@ export const Reports = () => {
                     <table className="w-full border-collapse">
                       <thead>
                         <tr className="bg-gray-50">
-                          <th className="border border-gray-200 px-4 py-3 text-left text-sm font-bold text-gray-900">Grado</th>
+                          <th className="border border-gray-200 px-4 py-3 text-left text-sm font-bold text-gray-900">Piso</th>
                           <th className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">Total Incidencias</th>
                           <th className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">Estudiantes Involucrados</th>
                           <th className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">Nivel Promedio</th>
@@ -804,7 +978,7 @@ export const Reports = () => {
                     <table className="w-full border-collapse">
                       <thead>
                         <tr className="bg-gray-50">
-                          <th className="border border-gray-200 px-4 py-3 text-left text-sm font-bold text-gray-900">Sección</th>
+                          <th className="border border-gray-200 px-4 py-3 text-left text-sm font-bold text-gray-900">Salón</th>
                           <th className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">Total Incidencias</th>
                           <th className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">Estudiantes Involucrados</th>
                           <th className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">Nivel Promedio</th>
@@ -842,6 +1016,7 @@ export const Reports = () => {
             </CardContent>
           </Card>
         </div>
+      )}
     </div>
   );
 };

@@ -7,8 +7,10 @@ import { getLimaNow, getLimaTodayDate, getLimaMonthBounds, getMonthBounds } from
 import { getCached, invalidateCache, setCached } from '@/lib/utils/memoryCache';
 import type { ArrivalLimitsByLevel } from '@/lib/utils/arrivalLimit';
 import {
+  DEFAULT_ARRIVAL_LIMITS,
   resolveArrivalLimitForLevel,
   resolveArrivalStatusForStudent,
+  withArrivalLimitDefaults,
 } from '@/lib/utils/arrivalLimit';
 import { SYSTEM_SETTING_KEYS, normalizeTimeValue } from '@/config/systemSettings';
 
@@ -109,21 +111,16 @@ function buildArrivalLimitsFromConfigs(
     configs[SYSTEM_SETTING_KEYS.arrivalLimit]?.value,
     '08:00',
   );
-  return {
+  return withArrivalLimitDefaults({
     general,
-    primaria: normalizeTimeValue(
-      configs[SYSTEM_SETTING_KEYS.arrivalLimitPrimary]?.value,
-      general,
-    ),
-    secundaria: normalizeTimeValue(
-      configs[SYSTEM_SETTING_KEYS.arrivalLimitSecondary]?.value,
-      general,
-    ),
-  };
+    primaria: configs[SYSTEM_SETTING_KEYS.arrivalLimitPrimary]?.value,
+    secundaria: configs[SYSTEM_SETTING_KEYS.arrivalLimitSecondary]?.value,
+    preuniversitario: configs[SYSTEM_SETTING_KEYS.arrivalLimitPreuniversitario]?.value,
+  });
 }
 
 /**
- * Hora límite de llegada según nivel (Primaria / Secundaria / general).
+ * Hora límite de llegada según nivel (Primaria / Secundaria / Pre-universitario / general).
  */
 async function getArrivalLimitTime(level?: string): Promise<string> {
   const limits = await fetchArrivalLimits();
@@ -147,15 +144,11 @@ export async function fetchArrivalLimits(): Promise<ArrivalLimitsByLevel> {
     SYSTEM_SETTING_KEYS.arrivalLimit,
     SYSTEM_SETTING_KEYS.arrivalLimitPrimary,
     SYSTEM_SETTING_KEYS.arrivalLimitSecondary,
+    SYSTEM_SETTING_KEYS.arrivalLimitPreuniversitario,
   ];
   const { configs, error } = await configService.getByKeys(keys);
   if (error) {
-    const fallback: ArrivalLimitsByLevel = {
-      general: '08:00',
-      primaria: '08:00',
-      secundaria: '08:00',
-    };
-    return fallback;
+    return { ...DEFAULT_ARRIVAL_LIMITS };
   }
 
   const limits = buildArrivalLimitsFromConfigs(configs);
@@ -174,21 +167,18 @@ export async function fetchPublicArrivalLimits(): Promise<ArrivalLimitsByLevel> 
     const { data, error } = await supabase.rpc('limites_llegada_publicos');
     if (!error && data && typeof data === 'object') {
       const payload = data as Record<string, unknown>;
-      const general = normalizeTimeValue(payload.general, '08:00');
-      return {
-        general,
-        primaria: normalizeTimeValue(payload.primaria, general),
-        secundaria: normalizeTimeValue(payload.secundaria, general),
-      };
+      return withArrivalLimitDefaults({
+        general: typeof payload.general === 'string' ? payload.general : undefined,
+        primaria: typeof payload.primaria === 'string' ? payload.primaria : undefined,
+        secundaria: typeof payload.secundaria === 'string' ? payload.secundaria : undefined,
+        preuniversitario:
+          typeof payload.preuniversitario === 'string' ? payload.preuniversitario : undefined,
+      });
     }
   } catch {
     /* RPC opcional hasta aplicar PATCH SQL */
   }
-  return fetchArrivalLimits().catch(() => ({
-    general: '08:00',
-    primaria: '08:00',
-    secundaria: '08:00',
-  }));
+  return fetchArrivalLimits().catch(() => ({ ...DEFAULT_ARRIVAL_LIMITS }));
 }
 
 function getNowHHMM(): string {
@@ -203,7 +193,7 @@ export type CreateArrivalOptions = {
   date?: string;
   arrivalTime?: string;
   status?: 'A tiempo' | 'Tarde';
-  /** Nivel del estudiante para aplicar hora_limite_llegada_primaria / _secundaria. */
+  /** Nivel del estudiante para aplicar hora_limite_llegada_primaria / _secundaria / _preuniversitario. */
   studentLevel?: string | null;
 };
 
@@ -595,6 +585,7 @@ export async function getMonthlyAttendance(filters: {
   level?: EducationalLevel;
   grade?: string;
   section?: string;
+  search?: string;
   bimestre?: number; // 1-4
   añoEscolar?: number;
 }): Promise<{ rows: MonthlyAttendanceRow[]; daysInMonth: number; error: string | null }> {
@@ -612,6 +603,7 @@ export async function getMonthlyAttendance(filters: {
       level: filters.level,
       grade: filters.grade,
       section: filters.section,
+      search: filters.search?.trim() || undefined,
     });
 
     if (studentsError) {
@@ -737,6 +729,7 @@ export async function getBimestralAttendance(filters: {
   level?: EducationalLevel;
   grade?: string;
   section?: string;
+  search?: string;
 }): Promise<{ rows: MonthlyAttendanceRow[]; daysInBimestre: number; error: string | null }> {
   try {
     // Importar utilidades de bimestres
@@ -755,6 +748,7 @@ export async function getBimestralAttendance(filters: {
       level: filters.level,
       grade: filters.grade,
       section: filters.section,
+      search: filters.search?.trim() || undefined,
     });
 
     if (studentsError) {

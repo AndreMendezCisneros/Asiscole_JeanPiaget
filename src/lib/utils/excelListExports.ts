@@ -60,8 +60,8 @@ export async function exportIncidentsListExcel(
         'ID',
         'Estudiante',
         'Nivel',
-        'Grado',
-        'Sección',
+        'Piso',
+        'Salón',
         'Tipo de falta',
         'Categoría',
         'Gravedad',
@@ -69,6 +69,7 @@ export async function exportIncidentsListExcel(
         'Fecha',
         'Hora',
         'Estado',
+        'Revisado',
         'Evidencias',
         'Observaciones',
       ],
@@ -87,11 +88,12 @@ export async function exportIncidentsListExcel(
           dt.date,
           dt.time,
           inc.status,
+          inc.confirmadaApp ? 'Confirmada' : inc.revisadoApp ? 'Visto' : 'No',
           inc.hasEvidence ? inc.evidenceCount : 0,
           inc.observations ?? '',
         ];
       }),
-      [8, 28, 12, 10, 8, 24, 14, 10, 10, 12, 8, 12, 10, 36]
+      [8, 28, 12, 10, 8, 24, 14, 10, 10, 12, 8, 12, 10, 10, 36]
     );
 
     await saveWorkbook(workbook, defaultExportFilename('Incidencias'));
@@ -126,8 +128,8 @@ export async function exportStudentsListExcel(
         'Código',
         'Nombre completo',
         'Nivel',
-        'Grado',
-        'Sección',
+        'Piso',
+        'Salón',
         'Nivel reincidencia',
         'Responsable',
         'Parentesco',
@@ -204,8 +206,8 @@ export async function exportParentMeetingsExcel(meetings: ParentMeeting[]): Prom
       [
         'ID',
         'Estudiante',
-        'Grado',
-        'Sección',
+        'Piso',
+        'Salón',
         'Motivo',
         'Fecha',
         'Hora',
@@ -257,8 +259,8 @@ export async function buildAttendanceDetailSheet(
   const headers = [
     'Estudiante',
     'Nivel',
-    'Grado',
-    'Sección',
+    'Piso',
+    'Salón',
     ...daysArray.map((d) => `Día ${d}`),
     'A tiempo',
     'Tardanzas',

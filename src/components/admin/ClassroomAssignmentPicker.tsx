@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { CLASSROOM_GRADES, CLASSROOM_LEVELS, CLASSROOM_SECTIONS } from '@/lib/constants/classrooms';
+import { CLASSROOM_GRADES, CLASSROOM_LEVELS, CLASSROOM_SECTIONS, CLASSROOM_FIELD_LABELS } from '@/lib/constants/classrooms';
 import type { DocenteClassroom, EducationalLevel } from '@/types';
 import { formatClassroomLabel } from '@/lib/utils/docenteAssignments';
 import { Plus, X } from 'lucide-react';
@@ -56,7 +56,7 @@ export function ClassroomAssignmentPicker({ value, onChange, disabled }: Classro
         </Select>
         <Select value={draftGrade} onValueChange={setDraftGrade} disabled={disabled}>
           <SelectTrigger>
-            <SelectValue placeholder="Grado" />
+            <SelectValue placeholder={CLASSROOM_FIELD_LABELS.grade} />
           </SelectTrigger>
           <SelectContent>
             {CLASSROOM_GRADES.map((grade) => (
@@ -68,7 +68,7 @@ export function ClassroomAssignmentPicker({ value, onChange, disabled }: Classro
         </Select>
         <Select value={draftSection} onValueChange={setDraftSection} disabled={disabled}>
           <SelectTrigger>
-            <SelectValue placeholder="Sección" />
+            <SelectValue placeholder={CLASSROOM_FIELD_LABELS.section} />
           </SelectTrigger>
           <SelectContent>
             {CLASSROOM_SECTIONS.map((section) => (

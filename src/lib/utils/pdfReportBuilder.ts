@@ -87,10 +87,12 @@ export class PdfReportDocument {
     this.pdf.text(subLines, this.pageWidth - this.margin, 22, { align: 'right' });
 
     this.pdf.setFontSize(8);
-    this.pdf.text('SIE — Sistema de Incidencias Escolares', this.pageWidth - this.margin, 30, {
+    const school =
+      (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() || 'Asiscole';
+    this.pdf.text(school, this.pageWidth - this.margin, 30, {
       align: 'right',
     });
-    this.pdf.text('Powered by Guardy', this.pageWidth - this.margin, 34, { align: 'right' });
+    this.pdf.text('Informe académico', this.pageWidth - this.margin, 34, { align: 'right' });
 
     this.y = bandH + 10;
     this.pdf.setTextColor(...PDF_THEME.text);
@@ -287,6 +289,17 @@ export class PdfReportDocument {
     this.pdf.save(filename);
   }
 
+  /** Pie de página + marca de agua; devuelve Blob (sin descargar). */
+  async toBlob(watermarkOpacity = 0.07): Promise<Blob> {
+    const totalPages = this.pdf.getNumberOfPages();
+    for (let p = 1; p <= totalPages; p++) {
+      this.pdf.setPage(p);
+      this.drawFooter(p, totalPages);
+    }
+    await drawPdfWatermark(this.pdf, watermarkOpacity);
+    return this.pdf.output('blob');
+  }
+
   private drawFooter(page: number, total: number): void {
     const y = this.pageHeight - 10;
     this.pdf.setDrawColor(...PDF_THEME.border);
@@ -296,7 +309,9 @@ export class PdfReportDocument {
     this.pdf.setFont('helvetica', 'normal');
     this.pdf.setFontSize(7.5);
     this.pdf.setTextColor(...PDF_THEME.textMuted);
-    this.pdf.text('SIE — Sistema de Incidencias Escolares · Guardy', this.margin, y);
+    const school =
+      (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() || 'Asiscole';
+    this.pdf.text(`${school} · Informe de notas`, this.margin, y);
     this.pdf.text(`Página ${page} de ${total}`, this.pageWidth - this.margin, y, { align: 'right' });
     this.pdf.text(
       format(new Date(), "dd/MM/yyyy HH:mm", { locale: es }),

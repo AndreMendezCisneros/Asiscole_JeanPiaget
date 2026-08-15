@@ -203,7 +203,7 @@ export async function exportIncidentReportPdf(
   doc.drawKeyValueList([
     { label: 'Nombre completo', value: incident.student?.fullName ?? '—' },
     {
-      label: 'Grado y sección',
+      label: 'Piso y salón',
       value: `${incident.student?.level ?? '—'} · ${incident.student?.grade ?? '—'} "${incident.student?.section ?? '—'}"`,
     },
     { label: 'Código de barras', value: incident.student?.barcode ?? '—' },

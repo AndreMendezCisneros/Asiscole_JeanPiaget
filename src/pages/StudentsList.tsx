@@ -80,9 +80,7 @@ import {
   PaginationPrevious,
 } from '@/components/ui/pagination';
 
-import { CLASSROOM_GRADES, CLASSROOM_SECTIONS } from '@/lib/constants/classrooms';
-
-const EDUCATIONAL_LEVELS: EducationalLevel[] = ['Primaria', 'Secundaria'];
+import { CLASSROOM_FIELD_LABELS, CLASSROOM_GRADES, CLASSROOM_LEVELS, CLASSROOM_SECTIONS } from '@/lib/constants/classrooms';
 
 const studentFormSchema = z.object({
   codigo_barras: z.string()
@@ -91,9 +89,9 @@ const studentFormSchema = z.object({
   nombre_completo: z.string()
     .min(3, 'El nombre debe tener al menos 3 caracteres')
     .max(150, 'Máximo 150 caracteres'),
-  grado: z.string().min(1, 'El grado es requerido'),
-  seccion: z.string().min(1, 'La sección es requerida'),
-  nivel_educativo: z.enum(['Primaria', 'Secundaria'], {
+  grado: z.string().min(1, 'El piso es requerido'),
+  seccion: z.string().min(1, 'El salón es requerido'),
+  nivel_educativo: z.enum(['Primaria', 'Secundaria', 'Pre-universitario'], {
     required_error: 'El nivel educativo es requerido',
   }),
   // Campos de contacto familiar (opcionales)
@@ -388,8 +386,8 @@ export const StudentsList = () => {
   const handleExportExcel = async () => {
     const filterParts: string[] = [];
     if (levelFilter !== 'all') filterParts.push(`Nivel: ${levelFilter}`);
-    if (gradeFilter !== 'all') filterParts.push(`Grado: ${gradeFilter}`);
-    if (sectionFilter !== 'all') filterParts.push(`Sección: ${sectionFilter}`);
+    if (gradeFilter !== 'all') filterParts.push(`${CLASSROOM_FIELD_LABELS.grade}: ${gradeFilter}`);
+    if (sectionFilter !== 'all') filterParts.push(`${CLASSROOM_FIELD_LABELS.section}: ${sectionFilter}`);
     if (searchTerm) filterParts.push(`Búsqueda: ${searchTerm}`);
     const filters = filterParts.length > 0 ? filterParts.join(' · ') : undefined;
     const { students: allRows, error } = await studentsService.getAll({
@@ -507,7 +505,7 @@ export const StudentsList = () => {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {EDUCATIONAL_LEVELS.map((level) => (
+                            {CLASSROOM_LEVELS.map((level) => (
                               <SelectItem key={level} value={level}>
                                 {level}
                               </SelectItem>
@@ -524,7 +522,7 @@ export const StudentsList = () => {
                       name="grado"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Grado</FormLabel>
+                          <FormLabel>{CLASSROOM_FIELD_LABELS.grade}</FormLabel>
                           <Select 
                             value={tempGrado || undefined}
                             onValueChange={(value) => {
@@ -534,16 +532,15 @@ export const StudentsList = () => {
                           >
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder="Seleccionar grado" />
+                                <SelectValue placeholder={`Seleccionar ${CLASSROOM_FIELD_LABELS.grade.toLowerCase()}`} />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="1ro">1ro</SelectItem>
-                              <SelectItem value="2do">2do</SelectItem>
-                              <SelectItem value="3ro">3ro</SelectItem>
-                              <SelectItem value="4to">4to</SelectItem>
-                              <SelectItem value="5to">5to</SelectItem>
-                              <SelectItem value="6to">6to</SelectItem>
+                              {CLASSROOM_GRADES.map((grade) => (
+                                <SelectItem key={grade} value={grade}>
+                                  {grade}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -555,7 +552,7 @@ export const StudentsList = () => {
                       name="seccion"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Sección</FormLabel>
+                          <FormLabel>{CLASSROOM_FIELD_LABELS.section}</FormLabel>
                           <Select 
                             value={tempSeccion || undefined}
                             onValueChange={(value) => {
@@ -565,14 +562,15 @@ export const StudentsList = () => {
                           >
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder="Seleccionar sección" />
+                                <SelectValue placeholder={`Seleccionar ${CLASSROOM_FIELD_LABELS.section.toLowerCase()}`} />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="A">A</SelectItem>
-                              <SelectItem value="B">B</SelectItem>
-                              <SelectItem value="C">C</SelectItem>
-                              <SelectItem value="D">D</SelectItem>
+                              {CLASSROOM_SECTIONS.map((section) => (
+                                <SelectItem key={section} value={section}>
+                                  {section}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -728,13 +726,13 @@ export const StudentsList = () => {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label className="text-muted-foreground">Nivel / Grado</Label>
+                      <Label className="text-muted-foreground">{CLASSROOM_FIELD_LABELS.levelGrade}</Label>
                       <p className="text-lg font-semibold">
                         {selectedStudent.level} • {selectedStudent.grade}
                       </p>
                     </div>
                     <div>
-                      <Label className="text-muted-foreground">Sección</Label>
+                      <Label className="text-muted-foreground">{CLASSROOM_FIELD_LABELS.section}</Label>
                       <p className="text-lg font-semibold">{selectedStudent.section}</p>
                     </div>
                     <div>
@@ -837,7 +835,7 @@ export const StudentsList = () => {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {EDUCATIONAL_LEVELS.map((level) => (
+                            {CLASSROOM_LEVELS.map((level) => (
                               <SelectItem key={level} value={level}>
                                 {level}
                               </SelectItem>
@@ -854,7 +852,7 @@ export const StudentsList = () => {
                       name="grado"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Grado</FormLabel>
+                          <FormLabel>{CLASSROOM_FIELD_LABELS.grade}</FormLabel>
                           <Select 
                             value={tempGrado || undefined}
                             onValueChange={(value) => {
@@ -864,16 +862,15 @@ export const StudentsList = () => {
                           >
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder="Seleccionar grado" />
+                                <SelectValue placeholder={`Seleccionar ${CLASSROOM_FIELD_LABELS.grade.toLowerCase()}`} />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="1ro">1ro</SelectItem>
-                              <SelectItem value="2do">2do</SelectItem>
-                              <SelectItem value="3ro">3ro</SelectItem>
-                              <SelectItem value="4to">4to</SelectItem>
-                              <SelectItem value="5to">5to</SelectItem>
-                              <SelectItem value="6to">6to</SelectItem>
+                              {CLASSROOM_GRADES.map((grade) => (
+                                <SelectItem key={grade} value={grade}>
+                                  {grade}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -885,7 +882,7 @@ export const StudentsList = () => {
                       name="seccion"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Sección</FormLabel>
+                          <FormLabel>{CLASSROOM_FIELD_LABELS.section}</FormLabel>
                           <Select 
                             value={tempSeccion || undefined}
                             onValueChange={(value) => {
@@ -895,14 +892,15 @@ export const StudentsList = () => {
                           >
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder="Seleccionar sección" />
+                                <SelectValue placeholder={`Seleccionar ${CLASSROOM_FIELD_LABELS.section.toLowerCase()}`} />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="A">A</SelectItem>
-                              <SelectItem value="B">B</SelectItem>
-                              <SelectItem value="C">C</SelectItem>
-                              <SelectItem value="D">D</SelectItem>
+                              {CLASSROOM_SECTIONS.map((section) => (
+                                <SelectItem key={section} value={section}>
+                                  {section}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -1088,7 +1086,7 @@ export const StudentsList = () => {
         />
       </div>
 
-      <StaffToolbar title="Buscar y filtrar" description="Refine por nombre, código, nivel, grado o sección">
+      <StaffToolbar title="Buscar y filtrar" description="Refine por nombre, código, nivel, piso o salón">
         <div className="col-span-full space-y-2">
           <Label htmlFor="students-search">Buscar</Label>
           <div className="relative">
@@ -1097,7 +1095,7 @@ export const StudentsList = () => {
               id="students-search"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Nombre, código de barras o grado..."
+              placeholder="Nombre, código de barras o piso..."
               className="pl-10"
             />
           </div>
@@ -1113,7 +1111,7 @@ export const StudentsList = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos los niveles</SelectItem>
-              {EDUCATIONAL_LEVELS.map((level) => (
+              {CLASSROOM_LEVELS.map((level) => (
                 <SelectItem key={level} value={level}>
                   {level}
                 </SelectItem>
@@ -1122,7 +1120,7 @@ export const StudentsList = () => {
           </Select>
         </div>
         <div className="space-y-2">
-          <Label>Grado</Label>
+          <Label>{CLASSROOM_FIELD_LABELS.grade}</Label>
           <Select value={gradeFilter} onValueChange={setGradeFilter}>
             <SelectTrigger>
               <SelectValue placeholder="Todos" />
@@ -1138,7 +1136,7 @@ export const StudentsList = () => {
           </Select>
         </div>
         <div className="space-y-2">
-          <Label>Sección</Label>
+          <Label>{CLASSROOM_FIELD_LABELS.section}</Label>
           <Select value={sectionFilter} onValueChange={setSectionFilter}>
             <SelectTrigger>
               <SelectValue placeholder="Todas" />
@@ -1175,7 +1173,7 @@ export const StudentsList = () => {
             <StaffEmptyState
               icon={Users}
               title="No se encontraron estudiantes"
-              description="Prueba otro término de búsqueda o cambia los filtros de nivel, grado o sección"
+              description="Prueba otro término de búsqueda o cambia los filtros de nivel, piso o salón"
             />
           ) : (
             <>
@@ -1185,8 +1183,8 @@ export const StudentsList = () => {
                 <TableRow>
                   <TableHead scope="col">Código</TableHead>
                   <TableHead scope="col">Nombre</TableHead>
-                  <TableHead scope="col">Nivel / Grado</TableHead>
-                  <TableHead scope="col">Sección</TableHead>
+                  <TableHead scope="col">{CLASSROOM_FIELD_LABELS.levelGrade}</TableHead>
+                  <TableHead scope="col">{CLASSROOM_FIELD_LABELS.section}</TableHead>
                   <TableHead scope="col">Faltas (60d)</TableHead>
                   <TableHead scope="col">Nivel Reincidencia</TableHead>
                   <TableHead scope="col">Estado</TableHead>

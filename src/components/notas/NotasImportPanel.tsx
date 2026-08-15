@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Upload } from 'lucide-react';
+import { Loader2, Upload, FileSpreadsheet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Table,
@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import type { Student } from '@/types';
-import type { NotasImportPreviewRow } from '@/types/notas';
+import type { NotasDeclaracion, NotasImportPreviewRow } from '@/types/notas';
 import { notasService, studentsService, whatsappService } from '@/lib/services';
 import {
   isNotaValida,
@@ -20,51 +20,24 @@ import {
   parseNotasExcelBuffer,
 } from '@/lib/utils/notasExcelParser';
 import { matchNotasCandidate } from '@/lib/utils/notasMatch';
+import { loadActiveNomina } from '@/lib/utils/loadActiveNomina';
+import { downloadNotasImportNominaTemplate } from '@/lib/utils/nominaExcelTemplates';
 
 type Props = {
   semanaId: number;
   semanaCodigo: string;
   semanaEtiqueta: string;
   semanaAbiertaCarga: boolean;
+  declaraciones?: NotasDeclaracion[];
   onImported: () => void;
 };
-
-async function loadAllActiveStudents(): Promise<{ students: Student[]; error: string | null }> {
-  const first = await studentsService.getAll({ active: true, fetchAll: true });
-  if (!first.error && first.students.length >= 20) {
-    return { students: first.students, error: null };
-  }
-
-  const pageSize = 100;
-  let page = 1;
-  let total = Number.POSITIVE_INFINITY;
-  const all: Student[] = [];
-  let lastError: string | null = first.error;
-
-  while (all.length < total && page <= 50) {
-    const res = await studentsService.getAll({ active: true, page, pageSize });
-    if (res.error) {
-      lastError = res.error;
-      break;
-    }
-    all.push(...res.students);
-    total = res.total || all.length;
-    if (res.students.length === 0) break;
-    page += 1;
-  }
-
-  if (all.length > 0) return { students: all, error: null };
-  if (!first.error && first.students.length > 0) {
-    return { students: first.students, error: null };
-  }
-  return { students: [], error: lastError || 'Nómina vacía' };
-}
 
 export function NotasImportPanel({
   semanaId,
   semanaCodigo,
   semanaEtiqueta,
   semanaAbiertaCarga,
+  declaraciones = [],
   onImported,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -72,6 +45,29 @@ export function NotasImportPanel({
   const [fileName, setFileName] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  const downloadTemplate = async () => {
+    setDownloading(true);
+    try {
+      const { students, error } = await loadActiveNomina();
+      if (error) {
+        toast.error(error);
+        return;
+      }
+      if (!students.length) {
+        toast.error('No hay alumnos activos para armar la plantilla');
+        return;
+      }
+      await downloadNotasImportNominaTemplate(students, { declaraciones });
+      toast.success(`Plantilla con ${students.length} alumnos. Escriba la nota (0–20) en la columna Nota.`);
+    } catch (err) {
+      console.error(err);
+      toast.error('No se pudo generar la plantilla');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const resetFile = () => {
     setPreview([]);
@@ -105,7 +101,7 @@ export function NotasImportPanel({
         return;
       }
 
-      const { students: indexStudents, error } = await loadAllActiveStudents();
+      const { students: indexStudents, error } = await loadActiveNomina();
       if (error) {
         toast.error(error);
         resetFile();
@@ -301,6 +297,19 @@ export function NotasImportPanel({
         <Button
           type="button"
           variant="outline"
+          disabled={downloading}
+          onClick={() => void downloadTemplate()}
+        >
+          {downloading ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <FileSpreadsheet className="mr-2 h-4 w-4" />
+          )}
+          Descargar plantilla
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
           disabled={parsing || !semanaAbiertaCarga}
           onClick={() => inputRef.current?.click()}
         >
@@ -318,8 +327,9 @@ export function NotasImportPanel({
         )}
       </div>
       <p className="text-xs text-muted-foreground">
-        Columnas: DNI/Código, Nombre, Nota (0–20), Carrera (recomendado), Área (opcional),
-        Observación. Si no hay declaración previa, la carrera/área del Excel crea la
+        Descargue la plantilla con toda la nómina. Escriba la calificación (0–20) en la columna{' '}
+        <strong>Nota</strong> — no se carga en Declaraciones. Columnas: DNI, Nombre, Nota, Carrera,
+        Área, Observación. Si no hay declaración previa, la carrera/área del Excel crea la
         declaración automáticamente.
       </p>
 

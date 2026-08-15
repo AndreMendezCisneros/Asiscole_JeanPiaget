@@ -217,7 +217,7 @@ export const ParentPortal = () => {
                   <span className="text-border">·</span>
                   <span>{student.grade}</span>
                   <span className="text-border">·</span>
-                  <span>Sección {student.section}</span>
+                  <span>Salón {student.section}</span>
                 </p>
                 {!isParentRole && (
                   <p className="mt-1 text-xs text-muted-foreground/90">

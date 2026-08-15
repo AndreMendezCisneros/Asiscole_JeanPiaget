@@ -20,6 +20,8 @@ import {
   PENSIONES_EXCEL_MAX_BYTES,
 } from '@/lib/utils/pensionesExcelParser';
 import { matchPensionCandidate } from '@/lib/utils/pensionesMatch';
+import { loadActiveNomina } from '@/lib/utils/loadActiveNomina';
+import { downloadPensionesNominaTemplate } from '@/lib/utils/nominaExcelTemplates';
 import { fechaVencimientoForPeriodo, resolveEstadoPension } from '@/lib/utils/pensionPeriod';
 import { getLimaTodayDate } from '@/lib/utils/limaDateTime';
 
@@ -29,37 +31,6 @@ type Props = {
   montoMensual: number | null;
   onImported: () => void;
 };
-
-async function loadAllActiveStudents(): Promise<{ students: Student[]; error: string | null }> {
-  const first = await studentsService.getAll({ active: true, fetchAll: true });
-  if (!first.error && first.students.length >= 20) {
-    return { students: first.students, error: null };
-  }
-
-  const pageSize = 100;
-  let page = 1;
-  let total = Number.POSITIVE_INFINITY;
-  const all: Student[] = [];
-  let lastError: string | null = first.error;
-
-  while (all.length < total && page <= 50) {
-    const res = await studentsService.getAll({ active: true, page, pageSize });
-    if (res.error) {
-      lastError = res.error;
-      break;
-    }
-    all.push(...res.students);
-    total = res.total || all.length;
-    if (res.students.length === 0) break;
-    page += 1;
-  }
-
-  if (all.length > 0) return { students: all, error: null };
-  if (!first.error && first.students.length > 0) {
-    return { students: first.students, error: null };
-  }
-  return { students: [], error: lastError || 'Nómina vacía' };
-}
 
 export function PensionImportPanel({
   periodo,
@@ -74,6 +45,29 @@ export function PensionImportPanel({
   const [parsing, setParsing] = useState(false);
   const [importing, setImporting] = useState(false);
   const [notifyOnImport, setNotifyOnImport] = useState(true);
+  const [downloading, setDownloading] = useState(false);
+
+  const downloadTemplate = async () => {
+    setDownloading(true);
+    try {
+      const { students, error } = await loadActiveNomina();
+      if (error) {
+        toast.error(error);
+        return;
+      }
+      if (!students.length) {
+        toast.error('No hay alumnos activos para armar la plantilla');
+        return;
+      }
+      await downloadPensionesNominaTemplate(students, { montoMensual });
+      toast.success(`Plantilla con ${students.length} alumnos`);
+    } catch (err) {
+      console.error(err);
+      toast.error('No se pudo generar la plantilla');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const resetFile = () => {
     setPreview([]);
@@ -103,7 +97,7 @@ export function PensionImportPanel({
         return;
       }
 
-      const { students: indexStudents, error } = await loadAllActiveStudents();
+      const { students: indexStudents, error } = await loadActiveNomina();
       if (error) {
         toast.error(error);
         resetFile();
@@ -302,6 +296,19 @@ export function PensionImportPanel({
         <Button
           type="button"
           variant="outline"
+          disabled={downloading}
+          onClick={() => void downloadTemplate()}
+        >
+          {downloading ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <FileSpreadsheet className="mr-2 h-4 w-4" />
+          )}
+          Descargar plantilla
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
           disabled={parsing}
           onClick={() => inputRef.current?.click()}
         >
@@ -323,9 +330,8 @@ export function PensionImportPanel({
         )}
       </div>
       <p className="text-xs text-muted-foreground">
-        Sube el Excel del banco (pagaron o no pagaron). El sistema detecta columnas (DNI, nombre,
-        monto, fecha) y cruza cada fila con la nómina de SIE. Solo se importan las filas con match;
-        las «Sin match» se omiten.
+        Descargue la plantilla con toda la nómina (DNI, Nombre, Monto, Fecha), complete los pagos y
+        vuelva a importar. El sistema detecta esas columnas y cruza cada fila con SIE.
       </p>
 
       {preview.length > 0 && (

@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { arrivalService } from '@/lib/services';
-import { EducationalLevel, MonthlyAttendanceRow } from '@/types';
+import { EducationalLevel, MonthlyAttendanceRow, Student } from '@/types';
 import {
   Loader2,
   Printer,
@@ -47,7 +47,8 @@ import { buildAttendanceDetailSheet } from '@/lib/utils/excelListExports';
 import { PdfReportDocument, buildFilterSubtitle } from '@/lib/utils/pdfReportBuilder';
 import { REPORT_LOGO_PATH } from '@/lib/utils/reportLogo';
 import { getCurrentSchoolYear, getAllBimestres, formatBimestreLabel, type Bimestre } from '@/lib/utils/bimestreUtils';
-import { CLASSROOM_GRADES, CLASSROOM_SECTIONS, CLASSROOM_LEVELS } from '@/lib/constants/classrooms';
+import { CLASSROOM_FIELD_LABELS, CLASSROOM_GRADES, CLASSROOM_SECTIONS, CLASSROOM_LEVELS } from '@/lib/constants/classrooms';
+import { StudentSearchCombobox } from '@/components/students/StudentSearchCombobox';
 import {
   Pagination,
   PaginationContent,
@@ -78,14 +79,26 @@ function filtersAreComplete(
   levelFilter: 'all' | EducationalLevel,
   gradeFilter: 'all' | string,
   sectionFilter: 'all' | string,
+  selectedStudent: Student | null,
 ): boolean {
-  if (levelFilter === 'all' || gradeFilter === 'all' || sectionFilter === 'all') {
+  const hasStudent = selectedStudent != null;
+  const hasClassroom =
+    levelFilter !== 'all' && gradeFilter !== 'all' && sectionFilter !== 'all';
+  if (!hasStudent && !hasClassroom) {
     return false;
   }
   if (reportType === 'bimestral' && bimestre === 'all') {
     return false;
   }
   return true;
+}
+
+function narrowAttendanceToStudent(
+  reportRows: MonthlyAttendanceRow[],
+  studentId: number | null,
+): MonthlyAttendanceRow[] {
+  if (studentId == null) return reportRows;
+  return reportRows.filter((row) => row.student.id === studentId);
 }
 
 export const AttendanceReport = () => {
@@ -96,6 +109,7 @@ export const AttendanceReport = () => {
   const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('all');
   const [gradeFilter, setGradeFilter] = useState<'all' | string>('all');
   const [sectionFilter, setSectionFilter] = useState<'all' | string>('all');
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [rows, setRows] = useState<MonthlyAttendanceRow[]>([]);
   const [daysInMonth, setDaysInMonth] = useState<number>(new Date().getDate());
   const [loading, setLoading] = useState(false);
@@ -109,13 +123,14 @@ export const AttendanceReport = () => {
     levelFilter,
     gradeFilter,
     sectionFilter,
+    selectedStudent,
   );
 
   const fetchReport = async () => {
     if (!isMountedRef.current) return;
 
     if (!filtersReady) {
-      toast.error('Seleccione nivel, grado y sección antes de consultar');
+      toast.error('Seleccione un estudiante de la lista o nivel, piso y salón');
       return;
     }
 
@@ -133,9 +148,10 @@ export const AttendanceReport = () => {
         const { rows: reportRows, daysInBimestre: totalDays, error } = await arrivalService.getBimestralAttendance({
           bimestre: bimestre,
           añoEscolar: añoEscolar,
-          level: levelFilter === 'all' ? undefined : levelFilter,
-          grade: gradeFilter === 'all' ? undefined : gradeFilter,
-          section: sectionFilter === 'all' ? undefined : sectionFilter,
+          level: selectedStudent ? selectedStudent.level : levelFilter === 'all' ? undefined : levelFilter,
+          grade: selectedStudent ? selectedStudent.grade : gradeFilter === 'all' ? undefined : gradeFilter,
+          section: selectedStudent ? selectedStudent.section : sectionFilter === 'all' ? undefined : sectionFilter,
+          search: selectedStudent?.fullName,
         });
 
         if (!isMountedRef.current) return;
@@ -146,7 +162,7 @@ export const AttendanceReport = () => {
           setDaysInMonth(0);
           setHasQueried(false);
         } else {
-          setRows(reportRows);
+          setRows(narrowAttendanceToStudent(reportRows, selectedStudent?.id ?? null));
           setDaysInMonth(totalDays);
           setHasQueried(true);
           setCurrentPage(1);
@@ -163,9 +179,10 @@ export const AttendanceReport = () => {
         const { rows: reportRows, daysInMonth: totalDays, error } = await arrivalService.getMonthlyAttendance({
           month: Number(monthStr),
           year: Number(yearStr),
-          level: levelFilter === 'all' ? undefined : levelFilter,
-          grade: gradeFilter === 'all' ? undefined : gradeFilter,
-          section: sectionFilter === 'all' ? undefined : sectionFilter,
+          level: selectedStudent ? selectedStudent.level : levelFilter === 'all' ? undefined : levelFilter,
+          grade: selectedStudent ? selectedStudent.grade : gradeFilter === 'all' ? undefined : gradeFilter,
+          section: selectedStudent ? selectedStudent.section : sectionFilter === 'all' ? undefined : sectionFilter,
+          search: selectedStudent?.fullName,
         });
 
         if (!isMountedRef.current) return;
@@ -176,7 +193,7 @@ export const AttendanceReport = () => {
           setDaysInMonth(0);
           setHasQueried(false);
         } else {
-          setRows(reportRows);
+          setRows(narrowAttendanceToStudent(reportRows, selectedStudent?.id ?? null));
           setDaysInMonth(totalDays);
           setHasQueried(true);
           setCurrentPage(1);
@@ -206,7 +223,7 @@ export const AttendanceReport = () => {
     setHasQueried(false);
     setRows([]);
     setCurrentPage(1);
-  }, [reportType, monthValue, bimestre, añoEscolar, levelFilter, gradeFilter, sectionFilter]);
+  }, [reportType, monthValue, bimestre, añoEscolar, levelFilter, gradeFilter, sectionFilter, selectedStudent?.id]);
 
   const daysArray = useMemo(() => Array.from({ length: daysInMonth }, (_, idx) => idx + 1), [daysInMonth]);
 
@@ -261,15 +278,18 @@ export const AttendanceReport = () => {
         `Período: ${monthLabel}`,
         `Generado ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm", { locale: es })}`,
         levelFilter !== 'all' && `Nivel: ${levelFilter}`,
-        gradeFilter !== 'all' && `Grado: ${gradeFilter}`,
-        sectionFilter !== 'all' && `Sección: ${sectionFilter}`,
+        gradeFilter !== 'all' && `${CLASSROOM_FIELD_LABELS.grade}: ${gradeFilter}`,
+        sectionFilter !== 'all' && `${CLASSROOM_FIELD_LABELS.section}: ${sectionFilter}`,
+        selectedStudent && `Estudiante: ${selectedStudent.fullName}`,
       ]);
 
-      const doc = new PdfReportDocument(
-        'landscape',
-        'REPORTE MENSUAL DE ASISTENCIAS',
-        subtitle
-      );
+      const attendanceTitle =
+        rows.length === 1
+          ? 'REPORTE DE ASISTENCIAS DEL ESTUDIANTE'
+          : reportType === 'bimestral'
+            ? 'REPORTE BIMESTRAL DE ASISTENCIAS'
+            : 'REPORTE MENSUAL DE ASISTENCIAS';
+      const doc = new PdfReportDocument('landscape', attendanceTitle, subtitle);
       await doc.drawCoverHeader();
 
       doc.drawKpiCards([
@@ -288,7 +308,7 @@ export const AttendanceReport = () => {
         [
           { header: 'Estudiante', dataKey: 'student', width: 52 },
           { header: 'Nivel', dataKey: 'level', width: 22 },
-          { header: 'Grado', dataKey: 'grade', width: 16 },
+          { header: CLASSROOM_FIELD_LABELS.grade, dataKey: 'grade', width: 16 },
           { header: 'Sec.', dataKey: 'section', width: 12, align: 'center' },
           { header: 'A tiempo', dataKey: 'onTime', width: 16, align: 'center' },
           { header: 'Tardanzas', dataKey: 'late', width: 16, align: 'center' },
@@ -391,8 +411,9 @@ export const AttendanceReport = () => {
 
     const filterParts = [`Mes: ${monthValue}`];
     if (levelFilter !== 'all') filterParts.push(`Nivel: ${levelFilter}`);
-    if (gradeFilter !== 'all') filterParts.push(`Grado: ${gradeFilter}`);
-    if (sectionFilter !== 'all') filterParts.push(`Sección: ${sectionFilter}`);
+    if (gradeFilter !== 'all') filterParts.push(`${CLASSROOM_FIELD_LABELS.grade}: ${gradeFilter}`);
+    if (sectionFilter !== 'all') filterParts.push(`${CLASSROOM_FIELD_LABELS.section}: ${sectionFilter}`);
+    if (selectedStudent) filterParts.push(`Estudiante: ${selectedStudent.fullName}`);
 
     await runExcelExport('reporte de asistencias', async () => {
       const workbook = createWorkbook('Reporte de asistencias');
@@ -571,7 +592,7 @@ export const AttendanceReport = () => {
         <StaffToolbar
           className="print-hidden"
           title="Filtros del reporte"
-          description="Seleccione nivel, grado y sección; luego pulse Consultar para cargar la planilla"
+          description="Seleccione un estudiante de la lista o elija nivel, piso y salón; luego pulse Consultar"
           footer={
             <div className="flex flex-wrap gap-4 text-sm">
               {Object.entries(statusMap).map(([key, value]) => (
@@ -587,6 +608,18 @@ export const AttendanceReport = () => {
             </div>
           }
         >
+          <div className="col-span-full space-y-2">
+            <Label htmlFor="attendance-student-search">Buscar estudiante</Label>
+            <StudentSearchCombobox
+              id="attendance-student-search"
+              variant="search"
+              allowClear
+              value={selectedStudent?.id ?? null}
+              placeholder="Nombre completo del estudiante..."
+              onChange={(_id, student) => setSelectedStudent(student)}
+              onClear={() => setSelectedStudent(null)}
+            />
+          </div>
           <div className="space-y-2">
             <Label>Tipo de reporte</Label>
             <Select value={reportType} onValueChange={(value: 'monthly' | 'bimestral') => setReportType(value)}>
@@ -665,7 +698,7 @@ export const AttendanceReport = () => {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Grado</Label>
+            <Label>{CLASSROOM_FIELD_LABELS.grade}</Label>
             <Select value={gradeFilter} onValueChange={(value) => setGradeFilter(value)}>
               <SelectTrigger>
                 <SelectValue placeholder="Todos" />
@@ -681,7 +714,7 @@ export const AttendanceReport = () => {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Sección</Label>
+            <Label>{CLASSROOM_FIELD_LABELS.section}</Label>
             <Select value={sectionFilter} onValueChange={(value) => setSectionFilter(value)}>
               <SelectTrigger>
                 <SelectValue placeholder="Todas" />
@@ -703,7 +736,7 @@ export const AttendanceReport = () => {
           </div>
           {!filtersReady && (
             <p className="col-span-full text-sm text-muted-foreground">
-              Indique nivel, grado y sección para habilitar la consulta
+              Indique un estudiante de la lista o nivel, piso y salón para habilitar la consulta
               {reportType === 'bimestral' ? ' y seleccione un bimestre' : ''}.
             </p>
           )}
@@ -731,7 +764,7 @@ export const AttendanceReport = () => {
               <StaffEmptyState
                 icon={Calendar}
                 title="Sin consulta realizada"
-                description="Elija nivel, grado y sección, luego pulse Consultar para generar la planilla del período"
+                description="Seleccione un estudiante de la lista o elija nivel, piso y salón, luego pulse Consultar para generar la planilla del período"
               />
             ) : rows.length === 0 ? (
               <StaffEmptyState

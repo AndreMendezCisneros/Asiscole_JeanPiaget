@@ -34,9 +34,13 @@ import { toast } from 'sonner';
 import { staffNotify } from '@/lib/utils/staffNotify';
 import { isPensionesEnabled } from '@/config/features';
 import { playPensionMorosoBeep } from '@/lib/utils/pensionBeep';
+import {
+  CLASSROOM_FIELD_LABELS,
+  CLASSROOM_GRADES,
+  CLASSROOM_LEVELS,
+  CLASSROOM_SECTIONS,
+} from '@/lib/constants/classrooms';
 
-const GRADES = ['1ro', '2do', '3ro', '4to', '5to', '6to'];
-const SECTIONS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 const PAGE_SIZE = 15;
 
 type ArrivalStatusFilter = 'all' | 'A tiempo' | 'Tarde' | 'Sin registrar';
@@ -421,20 +425,23 @@ export const ArrivalControl = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="Primaria">Primaria</SelectItem>
-                <SelectItem value="Secundaria">Secundaria</SelectItem>
+                {CLASSROOM_LEVELS.map((level) => (
+                  <SelectItem key={level} value={level}>
+                    {level}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Grado</Label>
+            <Label>{CLASSROOM_FIELD_LABELS.grade}</Label>
             <Select value={gradeFilter} onValueChange={(value) => setGradeFilter(value)}>
               <SelectTrigger>
                 <SelectValue placeholder="Todos" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
-                {GRADES.map((grade) => (
+                {CLASSROOM_GRADES.map((grade) => (
                   <SelectItem key={grade} value={grade}>
                     {grade}
                   </SelectItem>
@@ -443,14 +450,14 @@ export const ArrivalControl = () => {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Sección</Label>
+            <Label>{CLASSROOM_FIELD_LABELS.section}</Label>
             <Select value={sectionFilter} onValueChange={(value) => setSectionFilter(value)}>
               <SelectTrigger>
                 <SelectValue placeholder="Todas" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas</SelectItem>
-                {SECTIONS.map((section) => (
+                {CLASSROOM_SECTIONS.map((section) => (
                   <SelectItem key={section} value={section}>
                     {section}
                   </SelectItem>
@@ -503,7 +510,7 @@ export const ArrivalControl = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Estudiante</TableHead>
-                  <TableHead>Nivel / Grado</TableHead>
+                    <TableHead>{CLASSROOM_FIELD_LABELS.levelGrade}</TableHead>
                   <TableHead>Hora de Llegada</TableHead>
                   <TableHead>Hora de Salida</TableHead>
                   <TableHead>Estado</TableHead>

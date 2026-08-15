@@ -1,4 +1,5 @@
 import type { ArrivalRecord, FaultType, Incident, Student } from '@/types';
+import { CLASSROOM_FIELD_LABELS } from '@/lib/constants/classrooms';
 import { toWhatsAppChatId, toWhatsAppPhone } from '@/lib/utils/phoneUtils';
 import {
   buildArrivalIngestBody,
@@ -172,8 +173,8 @@ function getStudentAttendanceLink(student: Student, record: ArrivalRecord): stri
 function formatStudentAcademicLines(student: Student): string[] {
   const lines: string[] = [];
   if (student.level) lines.push(`*Nivel:* ${student.level}`);
-  if (student.grade) lines.push(`*Grado:* ${student.grade}`);
-  if (student.section) lines.push(`*Sección:* ${student.section}`);
+  if (student.grade) lines.push(`*${CLASSROOM_FIELD_LABELS.grade}:* ${student.grade}`);
+  if (student.section) lines.push(`*${CLASSROOM_FIELD_LABELS.section}:* ${student.section}`);
   return lines;
 }
 

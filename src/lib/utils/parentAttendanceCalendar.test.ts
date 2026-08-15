@@ -7,6 +7,7 @@ const limits: ArrivalLimitsByLevel = {
   general: '08:00',
   primaria: '08:00',
   secundaria: '19:20',
+  preuniversitario: '08:10',
 };
 
 const ctx = { limits, level: 'Secundaria' as const };

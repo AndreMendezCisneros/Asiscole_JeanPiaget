@@ -49,7 +49,7 @@ export function IncidentConfirmDialog({
           <div className="min-w-0 space-y-1">
             <p className="text-lg font-semibold leading-tight">{student.fullName}</p>
             <p className="text-sm text-muted-foreground">
-              {student.level} · {student.grade} — Sección {student.section}
+              {student.level} · {student.grade} — Salón {student.section}
             </p>
           </div>
         </div>

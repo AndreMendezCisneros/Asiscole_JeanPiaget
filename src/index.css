@@ -184,6 +184,30 @@
     color: hsl(var(--sidebar-foreground));
   }
 
+  /* Solo el menú hace scroll; logo y perfil quedan fijos. Barra fina como en SIE clásico. */
+  .staff-sidebar-nav {
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--sidebar-primary) / 0.45) transparent;
+  }
+
+  .staff-sidebar-nav::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .staff-sidebar-nav::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .staff-sidebar-nav::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--sidebar-primary) / 0.4);
+    border-radius: 999px;
+  }
+
+  .staff-sidebar-nav::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--sidebar-primary) / 0.65);
+  }
+
   .font-display {
     font-family: 'Nunito', 'Inter', ui-sans-serif, sans-serif;
   }
@@ -256,6 +280,17 @@
     @apply hover:border-primary hover:bg-primary hover:text-primary-foreground;
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30;
     @apply disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  /* Cabecera de tablas Notas: contraste forzado (evita muted sobre muted) */
+  .notas-table-th {
+    @apply sticky top-0 z-20 h-12 border-b border-primary/30 px-4 text-left text-sm font-semibold tracking-wide shadow-sm;
+    background-color: hsl(var(--primary)) !important;
+    color: hsl(var(--primary-foreground)) !important;
+  }
+
+  .notas-table-wrap {
+    @apply max-h-[min(70vh,560px)] overflow-auto rounded-xl border-2 border-border bg-card shadow-sm;
   }
 
   .app-kpi-grid {

@@ -1,4 +1,5 @@
 import type { DocenteAssignments, DocenteClassroom, EducationalLevel } from '@/types';
+import { CLASSROOM_FIELD_LABELS } from '@/lib/constants/classrooms';
 
 export function parseDocenteAssignments(raw: unknown): DocenteAssignments {
   if (!raw || typeof raw !== 'object') {
@@ -27,7 +28,7 @@ export function parseDocenteAssignments(raw: unknown): DocenteAssignments {
 }
 
 export function formatClassroomLabel(classroom: DocenteClassroom): string {
-  return `${classroom.level} ${classroom.grade} - ${classroom.section}`;
+  return `${classroom.level} ${classroom.grade} · ${CLASSROOM_FIELD_LABELS.section} ${classroom.section}`;
 }
 
 export function serializeDocenteAssignments(classrooms: DocenteClassroom[]): DocenteAssignments {

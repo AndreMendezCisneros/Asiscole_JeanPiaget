@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { FileSpreadsheet, Loader2, Upload, Users } from 'lucide-react';
-import ExcelJS from 'exceljs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -20,7 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import type { Student } from '@/types';
-import type { NotasArea, NotasCarrera } from '@/types/notas';
+import type { NotasArea, NotasCarrera, NotasDeclaracion } from '@/types/notas';
 import {
   NOTAS_EXCEL_MAX_BYTES,
   parseNotasExcelBuffer,
@@ -30,6 +29,7 @@ import {
   areaShortLabel,
   resolveNotasCarreraArea,
 } from '@/lib/utils/notasCatalogResolve';
+import { downloadDeclaracionesNominaTemplate } from '@/lib/utils/nominaExcelTemplates';
 
 export type DeclDraft = { areaId: number | null; carreraId: number | null };
 
@@ -168,29 +168,32 @@ export function NotasDeclaracionesPanel({
   };
 
   const downloadTemplate = async () => {
-    const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('Declaraciones');
-    ws.addRow(['DNI', 'Nombre', 'Carrera', 'Área']);
-    ws.addRow(['92010007', 'ALARCON RUIZ CAMILA SOFIA', 'Medicina Humana', 'salud']);
-    ws.addRow([
-      '92010008',
-      'BENAVIDES TORRES LUIS ENRIQUE',
-      'Ingeniería de Sistemas / Software',
-      'ingenierias',
-    ]);
-    ws.addRow(['92010009', 'CASTRO MENDOZA ANA LUCIA', 'Educación', 'letras']);
-    ws.getRow(1).font = { bold: true };
-    ws.columns = [{ width: 14 }, { width: 36 }, { width: 40 }, { width: 14 }];
-    const buf = await wb.xlsx.writeBuffer();
-    const blob = new Blob([buf], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    if (!students.length) {
+      toast.error('No hay alumnos activos para armar la plantilla');
+      return;
+    }
+    const declaraciones: NotasDeclaracion[] = students.flatMap((student) => {
+      const draft = drafts[student.id];
+      if (!draft?.areaId && !draft?.carreraId) return [];
+      const area = areas.find((a) => a.id === draft.areaId);
+      const carrera = carreras.find((c) => c.id === draft.carreraId);
+      return [
+        {
+          id: 0,
+          idEstudiante: student.id,
+          nombreEstudiante: student.fullName,
+          barcode: student.barcode,
+          semanaId: 0,
+          areaId: draft.areaId ?? 0,
+          areaNombre: area?.nombre ?? '',
+          carreraId: draft.carreraId,
+          carreraNombre: carrera?.nombre ?? null,
+          declaradoEn: '',
+        },
+      ];
     });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'plantilla_declaraciones_carrera.xlsx';
-    a.click();
-    URL.revokeObjectURL(url);
+    await downloadDeclaracionesNominaTemplate(students, { declaraciones });
+    toast.success(`Plantilla con ${students.length} alumnos`);
   };
 
   return (
@@ -285,20 +288,16 @@ export function NotasDeclaracionesPanel({
         </p>
       </div>
 
-      <div className="app-table-wrap max-h-[min(70vh,560px)] shadow-sm">
+      <div className="notas-table-wrap">
         <Table className="min-w-[720px]">
           <TableHeader>
-            <TableRow className="app-table-head hover:bg-muted/60">
-              <TableHead className="w-[28%] min-w-[12rem] sticky top-0 z-10 bg-muted/90 backdrop-blur-sm">
+            <TableRow className="border-0 hover:bg-transparent">
+              <TableHead className="notas-table-th w-[28%] min-w-[12rem]">
                 Estudiante
               </TableHead>
-              <TableHead className="w-[12%] min-w-[6.5rem] sticky top-0 z-10 bg-muted/90 backdrop-blur-sm">
-                DNI
-              </TableHead>
-              <TableHead className="w-[28%] min-w-[14rem] sticky top-0 z-10 bg-muted/90 backdrop-blur-sm">
-                Área
-              </TableHead>
-              <TableHead className="w-[32%] min-w-[16rem] sticky top-0 z-10 bg-muted/90 backdrop-blur-sm">
+              <TableHead className="notas-table-th w-[12%] min-w-[6.5rem]">DNI</TableHead>
+              <TableHead className="notas-table-th w-[28%] min-w-[14rem]">Área</TableHead>
+              <TableHead className="notas-table-th w-[32%] min-w-[16rem]">
                 Carrera (postulación)
               </TableHead>
             </TableRow>

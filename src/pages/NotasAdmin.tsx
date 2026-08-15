@@ -55,7 +55,7 @@ import type {
 import type { Student } from '@/types';
 import {
   buildNotasRankingExcelBuffer,
-  buildNotasRankingPdfHtml,
+  buildNotasRankingPdfBlob,
 } from '@/lib/utils/notasReportExport';
 
 export const NotasAdmin = () => {
@@ -203,30 +203,43 @@ export const NotasAdmin = () => {
 
   const downloadExcel = async () => {
     if (!semana) return;
-    const buf = await buildNotasRankingExcelBuffer(semana.etiqueta, ranking, notas);
-    const blob = new Blob([buf], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ranking-notas-${semana.codigo}.xlsx`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const buf = await buildNotasRankingExcelBuffer(semana.etiqueta, ranking, notas, {
+        semanaCodigo: semana.codigo,
+      });
+      const blob = new Blob([buf], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ranking-notas-${semana.codigo}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Excel de ranking descargado');
+    } catch (e) {
+      console.error(e);
+      toast.error('No se pudo generar el Excel');
+    }
   };
 
-  const downloadPdf = () => {
+  const downloadPdf = async () => {
     if (!semana) return;
-    const html = buildNotasRankingPdfHtml(semana.etiqueta, ranking);
-    const w = window.open('', '_blank');
-    if (!w) {
-      toast.error('Permite ventanas emergentes para exportar PDF');
-      return;
+    try {
+      const blob = await buildNotasRankingPdfBlob(semana.etiqueta, ranking, notas, {
+        semanaCodigo: semana.codigo,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ranking-notas-${semana.codigo}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('PDF de ranking descargado');
+    } catch (e) {
+      console.error(e);
+      toast.error('No se pudo generar el PDF');
     }
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    w.print();
   };
 
   if (loading) return <PageLoader />;
@@ -367,7 +380,7 @@ export const NotasAdmin = () => {
               <StaffDataPanelHeader
                 accent="info"
                 title="Importar Excel de notas"
-                description="Parseo en el navegador. Incluya Carrera (o Área); si no hay declaración previa, se crea al importar. Aviso al padre por la app."
+                description="Parseo en el navegador. Descargue la plantilla, complete la columna Nota (0–20) e importe. Si no hay declaración previa, Carrera/Área del Excel la crea."
               />
               <StaffDataPanelBody>
                 <NotasImportPanel
@@ -375,6 +388,7 @@ export const NotasAdmin = () => {
                   semanaCodigo={semana.codigo}
                   semanaEtiqueta={semana.etiqueta}
                   semanaAbiertaCarga={semana.abiertaCargaNotas}
+                  declaraciones={declaraciones}
                   onImported={() => void loadWeekData(semanaId, true)}
                 />
               </StaffDataPanelBody>
@@ -422,20 +436,16 @@ export const NotasAdmin = () => {
                     description="Importe un Excel o cambie de semana."
                   />
                 ) : (
-                  <div className="app-table-wrap max-h-[min(70vh,560px)] shadow-sm">
+                  <div className="notas-table-wrap">
                     <Table className="min-w-[640px]">
                       <TableHeader>
-                        <TableRow className="app-table-head hover:bg-muted/60">
-                          <TableHead className="sticky top-0 z-10 bg-muted/90">Estudiante</TableHead>
-                          <TableHead className="sticky top-0 z-10 bg-muted/90">DNI</TableHead>
-                          <TableHead className="sticky top-0 z-10 bg-muted/90 min-w-[12rem]">
-                            Área
-                          </TableHead>
-                          <TableHead className="sticky top-0 z-10 bg-muted/90 min-w-[10rem]">
-                            Carrera
-                          </TableHead>
-                          <TableHead className="sticky top-0 z-10 bg-muted/90">Nota</TableHead>
-                          <TableHead className="sticky top-0 z-10 bg-muted/90">Obs.</TableHead>
+                        <TableRow className="border-0 hover:bg-transparent">
+                          <TableHead className="notas-table-th">Estudiante</TableHead>
+                          <TableHead className="notas-table-th">DNI</TableHead>
+                          <TableHead className="notas-table-th min-w-[12rem]">Área</TableHead>
+                          <TableHead className="notas-table-th min-w-[10rem]">Carrera</TableHead>
+                          <TableHead className="notas-table-th">Nota</TableHead>
+                          <TableHead className="notas-table-th">Obs.</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -471,7 +481,7 @@ export const NotasAdmin = () => {
             <StaffDataPanel>
               <StaffDataPanelHeader
                 title="Ranking por área"
-                description="Top por área + export Excel (3 hojas) y PDF imprimible"
+                description="Ranking por área + Excel (todas las notas por sección) y PDF"
               />
               <StaffDataPanelBody className="space-y-4">
                 <div className="flex flex-wrap gap-2">
@@ -479,9 +489,9 @@ export const NotasAdmin = () => {
                     <Download className="mr-2 h-4 w-4" />
                     Excel ranking
                   </Button>
-                  <Button type="button" variant="outline" onClick={downloadPdf}>
+                  <Button type="button" variant="outline" onClick={() => void downloadPdf()}>
                     <FileText className="mr-2 h-4 w-4" />
-                    PDF / imprimir
+                    PDF ranking
                   </Button>
                 </div>
                 {ranking.length === 0 ? (
@@ -535,30 +545,32 @@ export const NotasAdmin = () => {
                 {logs.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Aún no hay imports.</p>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Fecha</TableHead>
-                        <TableHead>Semana</TableHead>
-                        <TableHead>Archivo</TableHead>
-                        <TableHead>OK</TableHead>
-                        <TableHead>Sin decl.</TableHead>
-                        <TableHead>Sin match</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {logs.map((l) => (
-                        <TableRow key={l.id}>
-                          <TableCell className="text-xs">{l.importadoEn}</TableCell>
-                          <TableCell>{l.semanaCodigo}</TableCell>
-                          <TableCell>{l.nombreArchivo || '—'}</TableCell>
-                          <TableCell>{l.filasOk}</TableCell>
-                          <TableCell>{l.filasSinDeclaracion}</TableCell>
-                          <TableCell>{l.filasSinMatch}</TableCell>
+                  <div className="notas-table-wrap">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-0 hover:bg-transparent">
+                          <TableHead className="notas-table-th">Fecha</TableHead>
+                          <TableHead className="notas-table-th">Semana</TableHead>
+                          <TableHead className="notas-table-th">Archivo</TableHead>
+                          <TableHead className="notas-table-th">OK</TableHead>
+                          <TableHead className="notas-table-th">Sin decl.</TableHead>
+                          <TableHead className="notas-table-th">Sin match</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {logs.map((l) => (
+                          <TableRow key={l.id}>
+                            <TableCell className="text-xs">{l.importadoEn}</TableCell>
+                            <TableCell>{l.semanaCodigo}</TableCell>
+                            <TableCell>{l.nombreArchivo || '—'}</TableCell>
+                            <TableCell>{l.filasOk}</TableCell>
+                            <TableCell>{l.filasSinDeclaracion}</TableCell>
+                            <TableCell>{l.filasSinMatch}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 )}
               </StaffDataPanelBody>
             </StaffDataPanel>

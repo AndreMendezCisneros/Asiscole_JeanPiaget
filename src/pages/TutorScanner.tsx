@@ -54,6 +54,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { getLimaNow, getLimaTodayDate } from '@/lib/utils/limaDateTime';
 import {
+  DEFAULT_ARRIVAL_LIMITS,
   resolveArrivalLimitForLevel,
   resolveArrivalStatusForStudent,
   type ArrivalLimitsByLevel,
@@ -104,9 +105,7 @@ export const TutorScanner = () => {
   const [showStudentProfile, setShowStudentProfile] = useState(false);
   const [arrivalRecord, setArrivalRecord] = useState<ArrivalRecord | null>(null);
   const [arrivalLimits, setArrivalLimits] = useState<ArrivalLimitsByLevel>({
-    general: '08:00',
-    primaria: '08:00',
-    secundaria: '08:00',
+    ...DEFAULT_ARRIVAL_LIMITS,
   });
   const [schoolCloseTime, setSchoolCloseTime] = useState<string>('18:00');
   const [nowHHMM, setNowHHMM] = useState<string>('');
@@ -1901,6 +1900,10 @@ export const TutorScanner = () => {
                 <div className="tutor-meta__item">
                   <p className="tutor-meta__k">Límite Secundaria</p>
                   <p className="tutor-meta__v">{arrivalLimits.secundaria}</p>
+                </div>
+                <div className="tutor-meta__item">
+                  <p className="tutor-meta__k">Límite Pre-universitario</p>
+                  <p className="tutor-meta__v">{arrivalLimits.preuniversitario}</p>
                 </div>
               </div>
               <div className="tutor-kpis">

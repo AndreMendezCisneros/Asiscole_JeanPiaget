@@ -1,6 +1,6 @@
 // Tipos que coinciden con el esquema de la base de datos
 export type UserRole = 'Supervisor' | 'Tutor' | 'Director' | 'Admin' | 'Padre';
-export type EducationalLevel = 'Primaria' | 'Secundaria';
+export type EducationalLevel = 'Primaria' | 'Secundaria' | 'Pre-universitario';
 
 export type ReincidenceLevel = 0 | 1 | 2 | 3 | 4 | 5;
 
@@ -236,6 +236,14 @@ export interface Incident {
   annulledBy?: number | null;
   annulledAt?: string | null;
   annulmentReason?: string | null;
+  tallerId?: string | null;
+  tallerNombre?: string | null;
+  /** El apoderado abrió el aviso en la app (check azul / mensaje leído). */
+  revisadoApp?: boolean;
+  revisadoAppAt?: string | null;
+  /** El apoderado confirmó la incidencia en la página Incidencias de la app. */
+  confirmadaApp?: boolean;
+  confirmadaAppAt?: string | null;
 }
 
 export interface IncidentEvidence {
@@ -366,6 +374,39 @@ export interface ArrivalRecord {
   departureTime?: string | null;
   departureRegisteredBy?: number | null;
   departureType?: 'Normal' | 'Autorizada' | 'Sin registro' | null;
+}
+
+export interface Taller {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+  diaSemana: number[] | null; // 1=Lun … 7=Dom
+  horaInicio: string | null; // HH:mm
+  horaFin: string | null;
+  activo: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TallerInscrito {
+  id: string;
+  tallerId: string;
+  studentId: number;
+  activo: boolean;
+  student?: Student;
+}
+
+export interface TallerAsistencia {
+  id: number;
+  tallerId: string;
+  tallerNombre?: string;
+  studentId: number;
+  date: string;
+  arrivalTime: string | null;
+  departureTime: string | null;
+  arrivalStatus: 'A tiempo' | 'Tarde' | null;
+  departureType: 'Normal' | 'Autorizada' | 'Sin registro' | null;
+  registeredBy: number | null;
 }
 
 export interface MonthlyAttendanceDay {

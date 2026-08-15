@@ -50,6 +50,7 @@ import { getLimaDayRangeISO } from '@/lib/utils/limaDateTime';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { incidentsService, authService } from '@/lib/services';
 import { Incident, EducationalLevel } from '@/types';
+import { CLASSROOM_LEVELS } from '@/lib/constants/classrooms';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -256,8 +257,11 @@ export const JustifyFaults = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="Primaria">Primaria</SelectItem>
-              <SelectItem value="Secundaria">Secundaria</SelectItem>
+              {CLASSROOM_LEVELS.map((level) => (
+                <SelectItem key={level} value={level}>
+                  {level}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

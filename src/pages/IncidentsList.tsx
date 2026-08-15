@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Eye, Edit, Printer, Camera, FileSpreadsheet, FileText, AlertCircle, CheckCircle2, Sparkles, Loader2 } from 'lucide-react';
+import { Search, Eye, Edit, Printer, Camera, FileSpreadsheet, FileText, AlertCircle, CheckCircle2, Sparkles, Loader2, Check } from 'lucide-react';
 import {
   StaffKpiStat,
   StaffToolbar,
@@ -35,6 +35,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Incident, EducationalLevel, IncidentEvidence } from '@/types';
+import { CLASSROOM_LEVELS } from '@/lib/constants/classrooms';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
@@ -45,6 +46,7 @@ import {
 } from '@/hooks/queries/useIncidentsQuery';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { incidentsService, evidenceService, authService } from '@/lib/services';
+import { revisadoAppEstado } from '@/lib/utils/revisadoAppEstado';
 import {
   Pagination,
   PaginationContent,
@@ -341,8 +343,11 @@ export const IncidentsList = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos los niveles</SelectItem>
-                <SelectItem value="Primaria">Primaria</SelectItem>
-                <SelectItem value="Secundaria">Secundaria</SelectItem>
+                {CLASSROOM_LEVELS.map((level) => (
+                  <SelectItem key={level} value={level}>
+                    {level}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -399,6 +404,7 @@ export const IncidentsList = () => {
                       <TableHead scope="col">Nivel</TableHead>
                       <TableHead scope="col">Evidencia</TableHead>
                       <TableHead scope="col">Estado</TableHead>
+                      <TableHead scope="col">Revisado</TableHead>
                       <TableHead scope="col">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -453,6 +459,37 @@ export const IncidentsList = () => {
                         <Badge variant={incident.status === 'Activa' ? 'default' : 'secondary'}>
                           {incident.status}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {revisadoAppEstado(incident) === 'confirmado' ? (
+                          <Badge
+                            variant="secondary"
+                            className="gap-1 bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
+                            title={
+                              incident.confirmadaAppAt
+                                ? `Confirmada en la app el ${format(new Date(incident.confirmadaAppAt), 'dd/MM/yyyy HH:mm', { locale: es })}`
+                                : 'Confirmada en la página Incidencias'
+                            }
+                          >
+                            <Check className="h-3 w-3" aria-hidden />
+                            Confirmada
+                          </Badge>
+                        ) : revisadoAppEstado(incident) === 'visto' ? (
+                          <Badge
+                            variant="secondary"
+                            className="gap-1 bg-sky-100 text-sky-800 hover:bg-sky-100"
+                            title={
+                              incident.revisadoAppAt
+                                ? `Visto en mensajes el ${format(new Date(incident.revisadoAppAt), 'dd/MM/yyyy HH:mm', { locale: es })}`
+                                : 'Visto en la bandeja de mensajes'
+                            }
+                          >
+                            <Check className="h-3 w-3" aria-hidden />
+                            Visto
+                          </Badge>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">No</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1">
@@ -588,6 +625,34 @@ export const IncidentsList = () => {
                     {detailIncident.status}
                   </Badge>
                 </div>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">Revisado en la app</p>
+                {revisadoAppEstado(detailIncident) === 'confirmado' ? (
+                  <Badge
+                    variant="secondary"
+                    className="gap-1 bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
+                  >
+                    <Check className="h-3 w-3" aria-hidden />
+                    Confirmada
+                    {detailIncident.confirmadaAppAt
+                      ? ` · ${format(new Date(detailIncident.confirmadaAppAt), 'dd/MM/yyyy HH:mm', { locale: es })}`
+                      : ''}
+                  </Badge>
+                ) : revisadoAppEstado(detailIncident) === 'visto' ? (
+                  <Badge
+                    variant="secondary"
+                    className="gap-1 bg-sky-100 text-sky-800 hover:bg-sky-100"
+                  >
+                    <Check className="h-3 w-3" aria-hidden />
+                    Visto en mensajes
+                    {detailIncident.revisadoAppAt
+                      ? ` · ${format(new Date(detailIncident.revisadoAppAt), 'dd/MM/yyyy HH:mm', { locale: es })}`
+                      : ''}
+                  </Badge>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Aún no la confirmó el apoderado</p>
+                )}
               </div>
 
               <div>

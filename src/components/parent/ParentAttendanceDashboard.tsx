@@ -4,7 +4,7 @@ import { es } from 'date-fns/locale';
 import { arrivalService } from '@/lib/services';
 import type { ArrivalRecord, Student } from '@/types';
 import type { ArrivalLimitsByLevel } from '@/lib/utils/arrivalLimit';
-import { resolveArrivalLimitForLevel } from '@/lib/utils/arrivalLimit';
+import { DEFAULT_ARRIVAL_LIMITS, resolveArrivalLimitForLevel } from '@/lib/utils/arrivalLimit';
 import { StudentPhoto } from '@/components/shared/StudentPhoto';
 import { getLimaMonthBounds, getLimaTodayDate } from '@/lib/utils/limaDateTime';
 import {
@@ -51,9 +51,7 @@ export function ParentAttendanceDashboard({
   const [loadingMonth, setLoadingMonth] = useState(false);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [arrivalLimits, setArrivalLimits] = useState<ArrivalLimitsByLevel>({
-    general: '08:00',
-    primaria: '08:00',
-    secundaria: '08:00',
+    ...DEFAULT_ARRIVAL_LIMITS,
   });
 
   useEffect(() => {

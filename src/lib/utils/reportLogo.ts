@@ -3,12 +3,21 @@ import {
   BRAND_REPORT_LOGO,
 } from '@/config/brandAssets';
 
-/** Logo Guardy para reportes Excel (marca de agua) y PDF — solo PNG SIE */
+/** Logo Guardy / Asiscole para reportes Excel y PDF */
 
-const WATERMARK_SOURCES = [BRAND_WATERMARK, BRAND_REPORT_LOGO] as const;
+function schoolBrandPaths(): string[] {
+  const school = (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.toLowerCase() || '';
+  const asiscoleFirst = /asis|academy|san\s*ram[oó]n|cole/.test(school);
+  const asiscole = ['/logo_asiscole_sf.png', '/logo2.png', '/og-asiscole.png', '/login-brand.png'];
+  const guardy = [BRAND_REPORT_LOGO, BRAND_WATERMARK, '/guardy-logo.png'];
+  return asiscoleFirst ? [...asiscole, ...guardy] : [...guardy, ...asiscole];
+}
+
+const WATERMARK_SOURCES = () => schoolBrandPaths();
 
 let headerLogoCache: ArrayBuffer | null = null;
 let watermarkCache: ArrayBuffer | null = null;
+let resolvedLogoSrc: string | null | undefined;
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -21,14 +30,19 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 }
 
 async function resolveWatermarkSrc(): Promise<string | null> {
-  for (const path of WATERMARK_SOURCES) {
+  if (resolvedLogoSrc !== undefined) return resolvedLogoSrc;
+  for (const path of WATERMARK_SOURCES()) {
     try {
       const res = await fetch(path);
-      if (res.ok) return path;
+      if (res.ok) {
+        resolvedLogoSrc = path;
+        return path;
+      }
     } catch {
       /* siguiente */
     }
   }
+  resolvedLogoSrc = null;
   return null;
 }
 

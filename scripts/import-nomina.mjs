@@ -20,7 +20,7 @@ const GRADE_MAP = {
 };
 
 const BATCH_SIZE = 100;
-const VALID_LEVELS = new Set(['Primaria', 'Secundaria']);
+const VALID_LEVELS = new Set(['Primaria', 'Secundaria', 'Pre-universitario']);
 
 function loadEnvLocal() {
   const path = resolve(process.cwd(), '.env.local');

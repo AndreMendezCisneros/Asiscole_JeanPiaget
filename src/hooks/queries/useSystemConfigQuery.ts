@@ -35,7 +35,8 @@ export function useAttendanceSettingsQuery() {
         const hasValue = Boolean(coerceTimeConfigValue(config?.value));
         const fallback =
           def.key === SYSTEM_SETTING_KEYS.arrivalLimitPrimary ||
-          def.key === SYSTEM_SETTING_KEYS.arrivalLimitSecondary
+          def.key === SYSTEM_SETTING_KEYS.arrivalLimitSecondary ||
+          def.key === SYSTEM_SETTING_KEYS.arrivalLimitPreuniversitario
             ? legacyLimit
             : def.defaultValue;
         values[def.key] = normalizeTimeValue(

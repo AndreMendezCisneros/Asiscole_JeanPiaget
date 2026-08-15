@@ -56,7 +56,7 @@ const listado: NotasRow[] = [
     areaId: 1,
     areaNombre: 'Salud',
     carreraId: null,
-    carreraNombre: null,
+    carreraNombre: 'Medicina Humana',
     nota: 19,
     observacion: null,
     registradoEn: '',
@@ -78,21 +78,29 @@ const listado: NotasRow[] = [
 ];
 
 describe('notasReportExport', () => {
-  it('genera Excel con hojas por área y Ranking', async () => {
-    const buf = await buildNotasRankingExcelBuffer('Semana demo', porArea, listado);
+  it('genera Excel profesional con Resumen, áreas, Ranking top y Listado', async () => {
+    const buf = await buildNotasRankingExcelBuffer('Semana demo', porArea, listado, {
+      escuela: 'Asis Academy',
+      semanaCodigo: '2026-01',
+    });
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(Buffer.from(buf) as unknown as ExcelJS.Buffer);
     const names = wb.worksheets.map((w) => w.name);
-    expect(names).toContain('Salud');
-    expect(names).toContain('Ingenierías');
-    expect(names).toContain('Letras');
-    expect(names).toContain('Ranking');
+    expect(names).toContain('Resumen');
+    expect(names.some((n) => /Salud/i.test(n))).toBe(true);
+    expect(names.some((n) => /Ingenier/i.test(n))).toBe(true);
+    expect(names.some((n) => /Letras/i.test(n))).toBe(true);
+    expect(names).toContain('Ranking top');
+    expect(names).toContain('Listado completo');
   });
 
-  it('genera HTML de PDF con mayor puntaje', () => {
-    const html = buildNotasRankingPdfHtml('Semana demo', porArea);
-    expect(html).toContain('Mayor puntaje');
+  it('genera HTML de PDF con branding', () => {
+    const html = buildNotasRankingPdfHtml('Semana demo', porArea, {
+      escuela: 'Asis Academy',
+    });
+    expect(html).toContain('Mayor:');
     expect(html).toContain('Ana');
-    expect(html).toContain('Salud');
+    expect(html).toContain('Asis Academy');
+    expect(html).toContain('Ranking de notas por área');
   });
 });

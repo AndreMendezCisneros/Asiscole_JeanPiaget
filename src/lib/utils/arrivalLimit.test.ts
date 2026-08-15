@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   compareArrivalStatus,
+  normalizeEducationalLevel,
   resolveArrivalLimitForLevel,
   resolveArrivalStatusForStudent,
 } from './arrivalLimit';
@@ -9,12 +10,21 @@ const limits = {
   general: '08:00',
   primaria: '19:21',
   secundaria: '19:20',
+  preuniversitario: '08:10',
 };
 
 describe('arrivalLimit', () => {
-  it('usa límite de primaria y secundaria por nivel', () => {
+  it('normaliza Pre-universitario antes que Primaria', () => {
+    expect(normalizeEducationalLevel('Pre-universitario')).toBe('Pre-universitario');
+    expect(normalizeEducationalLevel('pre_universitario')).toBe('Pre-universitario');
+    expect(normalizeEducationalLevel('Primaria')).toBe('Primaria');
+    expect(normalizeEducationalLevel('Secundaria')).toBe('Secundaria');
+  });
+
+  it('usa límite de primaria, secundaria y pre-universitario por nivel', () => {
     expect(resolveArrivalLimitForLevel(limits, 'Primaria')).toBe('19:21');
     expect(resolveArrivalLimitForLevel(limits, 'Secundaria')).toBe('19:20');
+    expect(resolveArrivalLimitForLevel(limits, 'Pre-universitario')).toBe('08:10');
     expect(resolveArrivalLimitForLevel(limits, null)).toBe('08:00');
   });
 
@@ -23,6 +33,8 @@ describe('arrivalLimit', () => {
     expect(resolveArrivalStatusForStudent('19:19', limits, 'Secundaria')).toBe('A tiempo');
     expect(resolveArrivalStatusForStudent('19:22', limits, 'Primaria')).toBe('Tarde');
     expect(resolveArrivalStatusForStudent('07:55', limits, 'Primaria')).toBe('A tiempo');
+    expect(resolveArrivalStatusForStudent('08:11', limits, 'Pre-universitario')).toBe('Tarde');
+    expect(resolveArrivalStatusForStudent('08:10', limits, 'Pre-universitario')).toBe('A tiempo');
   });
 
   it('compara horas en formato HH:MM', () => {

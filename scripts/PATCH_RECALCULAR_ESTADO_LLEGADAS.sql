@@ -9,8 +9,11 @@ SET estado = CASE
         SELECT left(cs.valor::text, 5)::time
         FROM public.configuracion_sistema cs
         WHERE cs.clave = CASE
+          WHEN replace(lower(e.nivel_educativo::text), '-', '') LIKE '%preuniv%'
+            THEN 'hora_limite_llegada_preuniversitario'
           WHEN e.nivel_educativo::text ILIKE '%sec%' THEN 'hora_limite_llegada_secundaria'
-          ELSE 'hora_limite_llegada_primaria'
+          WHEN e.nivel_educativo::text ILIKE '%prim%' THEN 'hora_limite_llegada_primaria'
+          ELSE 'hora_limite_llegada'
         END
         LIMIT 1
       ),

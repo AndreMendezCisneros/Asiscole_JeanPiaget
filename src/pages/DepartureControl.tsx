@@ -58,9 +58,13 @@ import type { ArrivalRecord, EducationalLevel } from '@/types';
 import { toast } from 'sonner';
 import { staffNotify } from '@/lib/utils/staffNotify';
 import { cn } from '@/lib/utils';
-
-const GRADES = ['1ro', '2do', '3ro', '4to', '5to', '6to'];
-const SECTIONS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+import {
+  CLASSROOM_FIELD_LABELS,
+  CLASSROOM_GRADES,
+  CLASSROOM_LEVEL_ORDER,
+  CLASSROOM_LEVELS,
+  CLASSROOM_SECTIONS,
+} from '@/lib/constants/classrooms';
 
 function enqueueDepartureWhatsApp(
   records: ArrivalRecord[],
@@ -172,8 +176,8 @@ function buildDepartureGroups(records: ArrivalRecord[]): DepartureGroup[] {
     map.set(key, existing);
   }
 
-  const levelOrder: Record<EducationalLevel, number> = { Primaria: 0, Secundaria: 1 };
-  const gradeOrder = (g: string) => GRADES.indexOf(g);
+  const levelOrder = CLASSROOM_LEVEL_ORDER;
+  const gradeOrder = (g: string) => (CLASSROOM_GRADES as readonly string[]).indexOf(g);
 
   return [...map.values()].sort((a, b) => {
     const levelDiff = (levelOrder[a.level] ?? 9) - (levelOrder[b.level] ?? 9);
@@ -515,20 +519,23 @@ export const DepartureControl = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="Primaria">Primaria</SelectItem>
-                  <SelectItem value="Secundaria">Secundaria</SelectItem>
+                  {CLASSROOM_LEVELS.map((level) => (
+                    <SelectItem key={level} value={level}>
+                      {level}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Grado</Label>
+              <Label>{CLASSROOM_FIELD_LABELS.grade}</Label>
               <Select value={bulkGrade} onValueChange={setBulkGrade}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Grado" />
+                  <SelectValue placeholder={CLASSROOM_FIELD_LABELS.grade} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
-                  {GRADES.map((grade) => (
+                  {CLASSROOM_GRADES.map((grade) => (
                     <SelectItem key={grade} value={grade}>
                       {grade}
                     </SelectItem>
@@ -537,14 +544,14 @@ export const DepartureControl = () => {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Sección</Label>
+              <Label>{CLASSROOM_FIELD_LABELS.section}</Label>
               <Select value={bulkSection} onValueChange={setBulkSection}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Sección" />
+                  <SelectValue placeholder={CLASSROOM_FIELD_LABELS.section} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todas (grado completo)</SelectItem>
-                  {SECTIONS.map((section) => (
+                  <SelectItem value="all">Todos (piso completo)</SelectItem>
+                  {CLASSROOM_SECTIONS.map((section) => (
                     <SelectItem key={section} value={section}>
                       {section}
                     </SelectItem>
@@ -827,20 +834,23 @@ export const DepartureControl = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="Primaria">Primaria</SelectItem>
-                <SelectItem value="Secundaria">Secundaria</SelectItem>
+                {CLASSROOM_LEVELS.map((level) => (
+                  <SelectItem key={level} value={level}>
+                    {level}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Grado</Label>
+            <Label>{CLASSROOM_FIELD_LABELS.grade}</Label>
             <Select value={gradeFilter} onValueChange={setGradeFilter}>
               <SelectTrigger>
                 <SelectValue placeholder="Todos" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
-                {GRADES.map((grade) => (
+                {CLASSROOM_GRADES.map((grade) => (
                   <SelectItem key={grade} value={grade}>
                     {grade}
                   </SelectItem>
@@ -849,14 +859,14 @@ export const DepartureControl = () => {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Sección</Label>
+            <Label>{CLASSROOM_FIELD_LABELS.section}</Label>
             <Select value={sectionFilter} onValueChange={setSectionFilter}>
               <SelectTrigger>
                 <SelectValue placeholder="Todas" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas</SelectItem>
-                {SECTIONS.map((section) => (
+                {CLASSROOM_SECTIONS.map((section) => (
                   <SelectItem key={section} value={section}>
                     {section}
                   </SelectItem>
@@ -899,7 +909,7 @@ export const DepartureControl = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Estudiante</TableHead>
-                    <TableHead>Nivel / Grado</TableHead>
+                    <TableHead>{CLASSROOM_FIELD_LABELS.levelGrade}</TableHead>
                     <TableHead>Hora llegada</TableHead>
                     <TableHead>Hora salida</TableHead>
                     <TableHead>Estado llegada</TableHead>

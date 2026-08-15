@@ -3,10 +3,11 @@
  * Solo estas claves tienen efecto en la aplicación.
  */
 export const SYSTEM_SETTING_KEYS = {
-  /** @deprecated Usar primaria/secundaria; se mantiene como respaldo en BD */
+  /** @deprecated Usar primaria/secundaria/preuniversitario; se mantiene como respaldo en BD */
   arrivalLimit: 'hora_limite_llegada',
   arrivalLimitPrimary: 'hora_limite_llegada_primaria',
   arrivalLimitSecondary: 'hora_limite_llegada_secundaria',
+  arrivalLimitPreuniversitario: 'hora_limite_llegada_preuniversitario',
   departureLimit: 'hora_limite_salida',
   schoolClose: 'hora_cierre_colegio',
 } as const;
@@ -40,6 +41,15 @@ export const SYSTEM_SETTINGS: SystemSettingDefinition[] = [
     description:
       'A partir de esta hora el registro de asistencia de estudiantes de Secundaria se marca como «Tarde» en el escáner del tutor.',
     defaultValue: '08:00',
+    inputType: 'time',
+    usedIn: 'Control de llegadas · Escáner del tutor',
+  },
+  {
+    key: SYSTEM_SETTING_KEYS.arrivalLimitPreuniversitario,
+    label: 'Hora límite de llegada — Pre-universitario',
+    description:
+      'A partir de esta hora el registro de asistencia de estudiantes de Pre-universitario se marca como «Tarde» en el escáner del tutor.',
+    defaultValue: '08:10',
     inputType: 'time',
     usedIn: 'Control de llegadas · Escáner del tutor',
   },
