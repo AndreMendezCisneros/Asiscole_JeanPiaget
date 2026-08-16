@@ -60,7 +60,9 @@ import {
 } from 'lucide-react';
 import { ModernCalendar } from '@/components/calendar/ModernCalendar';
 import { parentMeetingsService } from '@/lib/services';
-import { ParentMeeting } from '@/types';
+import { studentsService } from '@/lib/services';
+import { whatsappService } from '@/lib/services';
+import { ParentMeeting, Student } from '@/types';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
@@ -82,6 +84,7 @@ import {
   parseMeetingDateTime,
 } from '@/lib/utils/limaDateTime';
 import { StudentSearchCombobox } from '@/components/students/StudentSearchCombobox';
+import { citaAlcanceFromMeetingTipo } from '@/lib/services/mobileIngest';
 import {
   CLASSROOM_FIELD_LABELS,
   CLASSROOM_GRADES,
@@ -181,6 +184,7 @@ export const ParentMeetings = () => {
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+  const [notifyOnCreate, setNotifyOnCreate] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [stats, setStats] = useState<{
     total: number;
@@ -300,6 +304,65 @@ export const ParentMeetings = () => {
     }
   };
 
+  const notifyCreatedCitas = async (params: {
+    tipo: MeetingFormValues['tipo'];
+    motivo: string;
+    fecha: string;
+    hora: string;
+    rows: Array<{ citaId: number; studentId: number; student?: Student }>;
+  }) => {
+    if (!notifyOnCreate) return;
+    if (!whatsappService.isAppNotificationsEnabled()) {
+      toast.message('Avisos por aplicación no habilitados en este entorno');
+      return;
+    }
+
+    const alcance = citaAlcanceFromMeetingTipo(params.tipo);
+    let sent = 0;
+    let failed = 0;
+    for (const row of params.rows) {
+      let student = row.student;
+      if (!student) {
+        const fetched = await studentsService.getById(row.studentId);
+        student = fetched.student ?? undefined;
+      }
+      const target =
+        student ||
+        ({
+          id: row.studentId,
+          fullName: 'Estudiante',
+          grade: '',
+          section: '',
+          level: 'Secundaria' as const,
+          barcode: '',
+          active: true,
+          contactPhone: null,
+          emergencyPhone: null,
+        } satisfies Student);
+      const app = await whatsappService.notifyParentCita(target, {
+        citaId: row.citaId,
+        motivo: params.motivo,
+        fecha: params.fecha,
+        hora: params.hora,
+        alcance,
+      });
+      if (app.ok && !app.skipped) sent += 1;
+      else if (!app.ok) failed += 1;
+    }
+
+    if (sent > 0) {
+      toast.success(
+        sent === 1
+          ? 'Aplicación: aviso de citación enviado'
+          : `Aplicación: ${sent} avisos de citación enviados`,
+      );
+    } else if (failed > 0) {
+      toast.error(`No se pudieron enviar ${failed} avisos por la aplicación`);
+    } else {
+      toast.message('Sin avisos nuevos por la aplicación (ya notificados o sin destino)');
+    }
+  };
+
   const onSubmit = async (data: MeetingFormValues) => {
     if (!isMountedRef.current) return;
     
@@ -315,7 +378,7 @@ export const ParentMeetings = () => {
       const isBulk = bulkDialogOpen || data.tipo !== 'individual';
 
       if (isBulk) {
-        const { success, count, error } = await parentMeetingsService.createBulk({
+        const { success, count, error, inserted } = await parentMeetingsService.createBulk({
           motivo: data.motivo,
           fecha: data.fecha,
           hora: data.hora,
@@ -341,6 +404,13 @@ export const ParentMeetings = () => {
           focusMeetingsOnDate(data.fecha);
           loadMeetings();
           loadStats();
+          void notifyCreatedCitas({
+            tipo: data.tipo,
+            motivo: data.motivo,
+            fecha: data.fecha,
+            hora: data.hora,
+            rows: inserted.map((row) => ({ citaId: row.id, studentId: row.studentId })),
+          });
         }
       } else {
         // Cita individual
@@ -369,6 +439,21 @@ export const ParentMeetings = () => {
           form.reset();
           loadMeetings();
           loadStats();
+          if (meeting) {
+            void notifyCreatedCitas({
+              tipo: 'individual',
+              motivo: data.motivo,
+              fecha: data.fecha,
+              hora: data.hora,
+              rows: [
+                {
+                  citaId: meeting.id,
+                  studentId: meeting.studentId,
+                  student: meeting.student,
+                },
+              ],
+            });
+          }
         }
       }
     } catch (error) {
@@ -1237,6 +1322,14 @@ export const ParentMeetings = () => {
                   </FormItem>
                 )}
               />
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={notifyOnCreate}
+                  onChange={(e) => setNotifyOnCreate(e.target.checked)}
+                />
+                Notificar por la aplicación a padres
+              </label>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                   Cancelar
@@ -1498,6 +1591,14 @@ export const ParentMeetings = () => {
                   </FormItem>
                 )}
               />
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={notifyOnCreate}
+                  onChange={(e) => setNotifyOnCreate(e.target.checked)}
+                />
+                Notificar por la aplicación a padres
+              </label>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setBulkDialogOpen(false)}>
                   Cancelar

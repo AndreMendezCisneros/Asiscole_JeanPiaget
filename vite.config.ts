@@ -44,6 +44,11 @@ export default defineConfig(({ mode }) => {
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/sc-proxy/, "/api"),
       },
+      "/canal-api": {
+        target: "https://demostracion.asisacademy.com",
+        changeOrigin: true,
+        secure: true,
+      },
     },
   },
   plugins: [react(), cspConnectSrcPlugin(), buildVersionPlugin(), mode === "development" && componentTagger()].filter(Boolean),

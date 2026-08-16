@@ -387,8 +387,11 @@ export const NotasAdmin = () => {
                   semanaId={semanaId}
                   semanaCodigo={semana.codigo}
                   semanaEtiqueta={semana.etiqueta}
+                  semanaFechaInicio={semana.fechaInicio}
+                  semanaFechaFin={semana.fechaFin}
                   semanaAbiertaCarga={semana.abiertaCargaNotas}
                   declaraciones={declaraciones}
+                  areas={areas}
                   onImported={() => void loadWeekData(semanaId, true)}
                 />
               </StaffDataPanelBody>

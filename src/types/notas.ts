@@ -65,6 +65,26 @@ export type NotasRankingArea = {
   }>;
 };
 
+/** Historial de notas de un alumno (padre/app vía sie_notas_por_estudiante). */
+export type NotasEstudianteHistorial = {
+  id: number;
+  idEstudiante: number;
+  semanaId: number;
+  semanaCodigo: string;
+  semanaEtiqueta: string;
+  fechaInicio: string;
+  fechaFin: string;
+  nota: number;
+  notaMaxima: number;
+  areaId: number;
+  areaCodigo: string;
+  areaNombre: string;
+  carreraId: number | null;
+  carreraNombre: string | null;
+  registradoEn: string;
+  puestoArea: number | null;
+};
+
 export type NotasImportLog = {
   id: number;
   semanaId: number;

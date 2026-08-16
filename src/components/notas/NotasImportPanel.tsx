@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import type { Student } from '@/types';
-import type { NotasDeclaracion, NotasImportPreviewRow } from '@/types/notas';
+import type { NotasArea, NotasDeclaracion, NotasImportPreviewRow } from '@/types/notas';
 import { notasService, studentsService, whatsappService } from '@/lib/services';
 import {
   isNotaValida,
@@ -27,8 +27,11 @@ type Props = {
   semanaId: number;
   semanaCodigo: string;
   semanaEtiqueta: string;
+  semanaFechaInicio?: string;
+  semanaFechaFin?: string;
   semanaAbiertaCarga: boolean;
   declaraciones?: NotasDeclaracion[];
+  areas?: NotasArea[];
   onImported: () => void;
 };
 
@@ -36,8 +39,11 @@ export function NotasImportPanel({
   semanaId,
   semanaCodigo,
   semanaEtiqueta,
+  semanaFechaInicio,
+  semanaFechaFin,
   semanaAbiertaCarga,
   declaraciones = [],
+  areas = [],
   onImported,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -235,6 +241,10 @@ export function NotasImportPanel({
             result.filasSinDeclaracion === 0
               ? okRows
               : okRows.filter((r) => r.carreraNombre?.trim() || r.areaCodigo?.trim());
+          const { notas: notasGuardadas } = await notasService.listNotas(semanaId);
+          const notaByStudent = new Map(
+            (notasGuardadas || []).map((n) => [n.idEstudiante, n]),
+          );
           let sent = 0;
           let failed = 0;
           for (const r of notifyRows.slice(0, result.filasOk)) {
@@ -252,12 +262,28 @@ export function NotasImportPanel({
                 contactPhone: null,
                 emergencyPhone: null,
               } satisfies Student);
+            const decl = declaraciones.find((d) => d.idEstudiante === r.idEstudiante);
+            const areaFromCatalog = areas.find((a) => {
+              const code = r.areaCodigo?.trim().toLowerCase();
+              if (!code) return false;
+              return a.codigo.toLowerCase() === code || a.nombre.toLowerCase() === code;
+            });
+            const saved = notaByStudent.get(r.idEstudiante!);
             const app = await whatsappService.notifyParentNota(target, {
               semanaCodigo,
               semanaEtiqueta,
               nota: r.nota!,
-              carreraNombre: r.carreraNombre,
-              areaNombre: r.areaCodigo,
+              carreraNombre: r.carreraNombre || saved?.carreraNombre || decl?.carreraNombre,
+              areaCodigo: r.areaCodigo,
+              areaNombre:
+                decl?.areaNombre ||
+                saved?.areaNombre ||
+                areaFromCatalog?.nombre ||
+                null,
+              fechaInicio: semanaFechaInicio,
+              fechaFin: semanaFechaFin,
+              registradoEn: saved?.registradoEn || null,
+              idRegistro: saved?.id,
             });
             if (app.ok && !app.skipped) sent += 1;
             else if (!app.ok) failed += 1;

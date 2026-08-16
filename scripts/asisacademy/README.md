@@ -11,6 +11,7 @@
 4. `04_PENSIONES_RPC.sql` — funciones `sie_pensiones_*` (sin esto, `/pensiones` da PGRST202)  
 5. `05_NOTAS_AREAS.sql` — áreas/carreras, semanas, declaraciones, notas y RPCs `sie_notas_*`  
    *(opcional: `scripts/TALLERES_JP.sql` si faltan políticas/índices de talleres)*
+6. `08_NOTAS_POR_ESTUDIANTE.sql` — RPC `sie_notas_por_estudiante` (historial para padre/app)
 
 No ejecutar esto sobre Jean Piaget en producción.
 
@@ -20,6 +21,8 @@ No ejecutar esto sobre Jean Piaget en producción.
 - Menú: **Estudiantes → Notas** (`/notas`). Semanas se crean en **Administración → Configuración**.
 - Fixture Excel demo: `fixtures/notas_SEMANA_DEMO.xlsx` (DNI, Nombre, Nota).
 - Flujo: crear semana abierta → declarar área → importar Excel → ranking/export.
+- Historial para padre/app: paso 6 `08_NOTAS_POR_ESTUDIANTE.sql` (`sie_notas_por_estudiante`).
+- Avisos a la app: `VITE_MOBILE_INGEST_ENABLED=true` + `/canal-api` + tenant `asis_academy`.
 
 ## Usuarios demo (password `123456`)
 

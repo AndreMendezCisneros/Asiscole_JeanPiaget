@@ -4,6 +4,7 @@ import type {
   NotasArea,
   NotasCarrera,
   NotasDeclaracion,
+  NotasEstudianteHistorial,
   NotasImportLog,
   NotasRankingArea,
   NotasRow,
@@ -12,6 +13,27 @@ import type {
 
 function requireApiToken(): string | null {
   return sessionService.getApiToken();
+}
+
+function mapHistorial(raw: Record<string, unknown>): NotasEstudianteHistorial {
+  return {
+    id: Number(raw.id),
+    idEstudiante: Number(raw.idEstudiante),
+    semanaId: Number(raw.semanaId),
+    semanaCodigo: String(raw.semanaCodigo ?? ''),
+    semanaEtiqueta: String(raw.semanaEtiqueta ?? ''),
+    fechaInicio: String(raw.fechaInicio ?? '').slice(0, 10),
+    fechaFin: String(raw.fechaFin ?? '').slice(0, 10),
+    nota: Number(raw.nota),
+    notaMaxima: Number(raw.notaMaxima ?? 20) || 20,
+    areaId: Number(raw.areaId),
+    areaCodigo: String(raw.areaCodigo ?? ''),
+    areaNombre: String(raw.areaNombre ?? ''),
+    carreraId: raw.carreraId == null ? null : Number(raw.carreraId),
+    carreraNombre: raw.carreraNombre == null ? null : String(raw.carreraNombre),
+    registradoEn: String(raw.registradoEn ?? ''),
+    puestoArea: raw.puestoArea == null ? null : Number(raw.puestoArea),
+  };
 }
 
 function mapSemana(raw: Record<string, unknown>): NotasSemana {
@@ -137,6 +159,29 @@ export const notasService = {
       };
     } catch (e) {
       return { okCount: 0, failCount: 0, error: e instanceof Error ? e.message : 'Error de red' };
+    }
+  },
+
+  async listNotasEstudiante(
+    idEstudiante: number,
+    limit = 52,
+  ): Promise<{ notas: NotasEstudianteHistorial[]; error: string | null }> {
+    if (!requireApiToken()) return { notas: [], error: 'Sin sesión' };
+    try {
+      const { data, error } = await supabase.rpc('sie_notas_por_estudiante', {
+        p_id_estudiante: idEstudiante,
+        p_limit: limit,
+      });
+      if (error) return { notas: [], error: error.message };
+      const payload = data as {
+        ok?: boolean;
+        notas?: Record<string, unknown>[];
+        error?: string;
+      };
+      if (!payload?.ok) return { notas: [], error: payload?.error || 'Error' };
+      return { notas: (payload.notas || []).map(mapHistorial), error: null };
+    } catch (e) {
+      return { notas: [], error: e instanceof Error ? e.message : 'Error de red' };
     }
   },
 

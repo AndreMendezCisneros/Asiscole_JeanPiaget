@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildArrivalIngestBody,
+  buildCitaIngestBody,
   buildDepartureIngestBody,
   buildIncidentIngestBody,
   buildNotaIngestBody,
+  citaAlcanceFromMeetingTipo,
 } from './mobileIngest';
 import type { ArrivalRecord, FaultType, Incident, Student } from '@/types';
 
@@ -85,18 +87,70 @@ describe('mobileIngest builders', () => {
     expect(body.id_registro).toBe(8);
   });
 
-  it('arma aviso de nota para el padre', () => {
+  it('arma registro de nota estructurado para la sección de la app', () => {
     const body = buildNotaIngestBody('asis_academy', student, {
       semanaCodigo: '2026-02',
       semanaEtiqueta: 'Semana 2',
       nota: 18.5,
       carreraNombre: 'Medicina Humana',
-      areaNombre: 'salud',
+      areaNombre: 'Ciencias de la Salud',
+      areaCodigo: 'salud',
+      fechaInicio: '2026-02-03',
+      fechaFin: '2026-02-09',
+      idRegistro: 991,
     });
-    expect(body.tipo).toBe('aviso');
-    expect(body.payload.contexto).toBe('nota');
+    expect(body.tipo).toBe('nota');
+    expect(body.id_registro).toBe(991);
     expect(body.payload.nota).toBe('18.5');
+    expect(body.payload.nota_maxima).toBe('20');
+    expect(body.payload.semana_codigo).toBe('2026-02');
+    expect(body.payload.area_codigo).toBe('salud');
+    expect(body.payload.area_nombre).toBe('Ciencias de la Salud');
+    expect(body.payload.carrera).toBe('Medicina Humana');
+    expect(body.payload.fecha_inicio).toBe('2026-02-03');
+    expect(body.payload.fecha_fin).toBe('2026-02-09');
+    expect(body.payload.semana_etiqueta).toBe('Semana 2');
     expect(body.payload.texto_libre).toContain('18.5/20');
     expect(body.payload.texto_libre).toContain('Medicina Humana');
+  });
+
+  it('arma aviso de citación individual como pensión', () => {
+    const body = buildCitaIngestBody('asis_academy', student, {
+      citaId: 44,
+      motivo: 'Revisión de incidencias',
+      fecha: '2026-08-20',
+      hora: '09:30',
+      alcance: 'individual',
+    });
+    expect(body.tipo).toBe('aviso');
+    expect(body.id_registro).toBe(44);
+    expect(body.payload.contexto).toBe('cita');
+    expect(body.payload.alcance).toBe('individual');
+    expect(body.payload.fecha).toBe('2026-08-20');
+    expect(body.payload.hora).toBe('09:30');
+    expect(body.payload.texto_libre).toContain('Se citó a los padres de Ana Pérez');
+    expect(body.payload.texto_libre).toContain('20/08/2026');
+  });
+
+  it('cambia el texto según APAFA, piso y salón', () => {
+    expect(citaAlcanceFromMeetingTipo('all')).toBe('apafa');
+    expect(citaAlcanceFromMeetingTipo('grade')).toBe('piso');
+    expect(citaAlcanceFromMeetingTipo('section')).toBe('salon');
+    const apafa = buildCitaIngestBody('asis_academy', student, {
+      citaId: 1,
+      motivo: 'Junta',
+      fecha: '2026-08-21',
+      hora: '10:00',
+      alcance: 'apafa',
+    });
+    expect(apafa.payload.texto_libre).toContain('junta de padres (APAFA)');
+    const piso = buildCitaIngestBody('asis_academy', student, {
+      citaId: 2,
+      motivo: 'Reunión de piso',
+      fecha: '2026-08-21',
+      hora: '10:00',
+      alcance: 'piso',
+    });
+    expect(piso.payload.texto_libre).toContain('piso 3');
   });
 });
