@@ -62,7 +62,7 @@ export const IncidentsList = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearch = useDebouncedValue(searchTerm, 350);
   const [currentPage, setCurrentPage] = useState(1);
-  const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('all');
+  const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('Pre-universitario');
   const [exporting, setExporting] = useState(false);
 
   const [detailOpen, setDetailOpen] = useState(false);

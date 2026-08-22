@@ -728,7 +728,7 @@ export const TutorScanner = () => {
 
         if (!todayRecord) {
           toast.error(
-            `${foundStudent.fullName} aún no tiene llegada. Cambie a Llegada y escanee primero.`,
+            `${foundStudent.fullName} aún no tiene ingreso. Cambie a Ingreso y escanee primero.`,
             { duration: 3200 },
           );
           releaseScanFocus();
@@ -754,7 +754,7 @@ export const TutorScanner = () => {
         }
 
         if (!todayRecord.id || todayRecord.id <= 0) {
-          toast.error('No se pudo registrar la salida. Vuelva a escanear la llegada.', {
+          toast.error('No se pudo registrar la salida. Vuelva a escanear el ingreso.', {
             duration: 3200,
           });
           releaseScanFocus();
@@ -818,7 +818,7 @@ export const TutorScanner = () => {
         }
         toast.info(
           cachedToday.departureTime
-            ? `${foundStudent.fullName} ya tiene llegada y salida hoy.`
+            ? `${foundStudent.fullName} ya tiene ingreso y salida hoy.`
             : `${foundStudent.fullName} ya fue registrado hoy a las ${cachedToday.arrivalTime ?? '—'}. Para salida, elija Salida.`,
           { duration: 2800 }
         );
@@ -1121,7 +1121,7 @@ export const TutorScanner = () => {
     }
 
     if (scanMode === 'taller') {
-      toast.error('En talleres no se registran faltas. Use el escáner para llegada y salida.');
+      toast.error('En tarde no se registran faltas. Use el escáner para ingreso y salida.');
       return false;
     }
 
@@ -1261,9 +1261,9 @@ export const TutorScanner = () => {
         : arrivalRecord?.arrivalTime ?? '—:—';
   const displayArrivalStatus = isTallerMode
     ? arrivalRecord?.departureTime
-      ? 'Salió del taller'
+      ? 'Salió de tarde'
       : arrivalRecord
-        ? 'Llegó a taller'
+        ? 'Ingresó a tarde'
         : undefined
     : arrivalRecord?.departureTime
       ? 'Salida'
@@ -1401,10 +1401,10 @@ export const TutorScanner = () => {
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-primary">
                         {isTallerMode
-                          ? 'Registro de talleres'
+                          ? 'Registro de tarde'
                           : isClaseSalida
                             ? 'Registro de salida'
-                            : 'Registro de llegada'}
+                            : 'Registro de ingreso'}
                       </p>
                       <Badge variant={limitTone} className="text-[10px]">
                         Límite {limitsLabel}
@@ -1413,29 +1413,29 @@ export const TutorScanner = () => {
                     <h2 className="text-lg font-semibold tracking-[-0.02em] text-foreground sm:text-2xl">
                       {isTallerMode
                         ? tallerPhase === 'salida'
-                          ? 'Escanear salida de taller'
-                          : 'Escanear llegada a taller'
+                          ? 'Escanear salida de tarde'
+                          : 'Escanear ingreso de tarde'
                         : isClaseSalida
-                          ? 'Escanear salida de clase'
+                          ? 'Escanear salida de mañana'
                           : 'Escanear o buscar estudiante'}
                     </h2>
                     <p className="text-sm text-muted-foreground leading-relaxed hidden sm:block">
                       {isTallerMode
                         ? tallerPhase === 'salida'
                           ? 'Elija Salida y escanee el carnet. Se avisa a los padres con la hora de salida.'
-                          : 'Elija Llegada y escanee el carnet. Se avisa a los padres con la hora de llegada.'
+                          : 'Elija Ingreso y escanee el carnet. Se avisa a los padres con la hora de ingreso.'
                         : isClaseSalida
-                          ? 'Elija Salida y escanee el carnet. Debe existir llegada del día.'
-                          : 'Elija Llegada o Salida, luego carnet con lector o búsqueda por nombre.'}
+                          ? 'Elija Salida y escanee el carnet. Debe existir ingreso del día.'
+                          : 'Elija Ingreso o Salida, luego carnet con lector o búsqueda por nombre.'}
                     </p>
                     <p className="text-sm text-muted-foreground leading-relaxed sm:hidden">
                       {isTallerMode
                         ? tallerPhase === 'salida'
                           ? 'Modo Salida: escanee para registrar la hora de salida.'
-                          : 'Modo Llegada: escanee para registrar la hora de llegada.'
+                          : 'Modo Ingreso: escanee para registrar la hora de ingreso.'
                         : isClaseSalida
                           ? 'Modo Salida: escanee para registrar la hora de salida.'
-                          : 'Modo Llegada: escanee el carnet o busque por nombre.'}
+                          : 'Modo Ingreso: escanee el carnet o busque por nombre.'}
                     </p>
                   </div>
                 </div>
@@ -1448,10 +1448,10 @@ export const TutorScanner = () => {
                   aria-busy={lookupPending}
                   aria-label={
                     isTallerMode
-                      ? 'Registro de talleres por código de barras o nombre'
+                      ? 'Registro de tarde por código de barras o nombre'
                       : isClaseSalida
                         ? 'Registro de salida por código de barras o nombre'
-                        : 'Registro de llegada por código de barras o nombre'
+                        : 'Registro de ingreso por código de barras o nombre'
                   }
                 >
                   {talleresEnabled && (
@@ -1464,7 +1464,7 @@ export const TutorScanner = () => {
                           onClick={() => setScanMode('clase')}
                           className="w-full"
                         >
-                          Clase
+                          Mañana
                         </Button>
                         <Button
                           type="button"
@@ -1472,7 +1472,7 @@ export const TutorScanner = () => {
                           onClick={() => setScanMode('taller')}
                           className="w-full"
                         >
-                          Talleres
+                          Tarde
                         </Button>
                       </div>
                     </div>
@@ -1480,7 +1480,7 @@ export const TutorScanner = () => {
                   {scanMode === 'taller' && talleresEnabled ? (
                     <div className="space-y-2">
                       <Label className="text-sm font-medium text-foreground">
-                        Registro de taller
+                        Registro de tarde
                       </Label>
                       <div className="grid max-w-sm grid-cols-2 gap-2 rounded-xl border border-border bg-muted/20 p-1">
                         <Button
@@ -1489,7 +1489,7 @@ export const TutorScanner = () => {
                           onClick={() => setTallerPhase('llegada')}
                           className="w-full"
                         >
-                          Llegada
+                          Ingreso
                         </Button>
                         <Button
                           type="button"
@@ -1502,14 +1502,14 @@ export const TutorScanner = () => {
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {tallerPhase === 'llegada'
-                          ? 'Escanee para registrar la hora de llegada al taller.'
-                          : 'Escanee para registrar la hora de salida del taller (debe haber llegada primero).'}
+                          ? 'Escanee para registrar la hora de ingreso de tarde.'
+                          : 'Escanee para registrar la hora de salida de tarde (debe haber ingreso primero).'}
                       </p>
                     </div>
                   ) : (
                     <div className="space-y-2">
                       <Label className="text-sm font-medium text-foreground">
-                        Registro de clase
+                        Registro de mañana
                       </Label>
                       <div className="grid max-w-sm grid-cols-2 gap-2 rounded-xl border border-border bg-muted/20 p-1">
                         <Button
@@ -1518,7 +1518,7 @@ export const TutorScanner = () => {
                           onClick={() => setClasePhase('llegada')}
                           className="w-full"
                         >
-                          Llegada
+                          Ingreso
                         </Button>
                         <Button
                           type="button"
@@ -1531,8 +1531,8 @@ export const TutorScanner = () => {
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {clasePhase === 'llegada'
-                          ? 'Escanee para registrar la hora de llegada a clase.'
-                          : 'Escanee para registrar la hora de salida (debe haber llegada primero).'}
+                          ? 'Escanee para registrar la hora de ingreso de mañana.'
+                          : 'Escanee para registrar la hora de salida (debe haber ingreso primero).'}
                       </p>
                     </div>
                   )}
@@ -1729,10 +1729,10 @@ export const TutorScanner = () => {
                           {isTallerMode
                             ? tallerPhase === 'salida'
                               ? 'Registrar salida'
-                              : 'Registrar llegada'
+                              : 'Registrar ingreso'
                             : isClaseSalida
                               ? 'Registrar salida'
-                              : 'Registrar llegada'}
+                              : 'Registrar ingreso'}
                         </>
                       )}
                     </Button>
@@ -1915,7 +1915,7 @@ export const TutorScanner = () => {
                   <>
                     <div className="tutor-kpi">
                       <p className="tutor-kpi__value">{sessionCount.onTime}</p>
-                      <p className="tutor-kpi__label">Llegadas</p>
+                      <p className="tutor-kpi__label">Ingresos</p>
                     </div>
                     <div className="tutor-kpi">
                       <p className="tutor-kpi__value">{sessionCount.late}</p>
@@ -1974,8 +1974,8 @@ export const TutorScanner = () => {
                       <li>
                         <span className="tutor-instructions__step">1</span>
                         <span>
-                          Elija <strong className="text-foreground font-medium">Llegada</strong> o{' '}
-                          <strong className="text-foreground font-medium">Salida</strong> del taller.
+                          Elija <strong className="text-foreground font-medium">Ingreso</strong> o{' '}
+                          <strong className="text-foreground font-medium">Salida</strong> de tarde.
                         </span>
                       </li>
                       <li>
@@ -1986,7 +1986,7 @@ export const TutorScanner = () => {
                         <span className="tutor-instructions__step">3</span>
                         <span>
                           Para la salida, cambie a <strong className="text-foreground font-medium">Salida</strong> y
-                          vuelva a escanear (debe existir llegada del día).
+                          vuelva a escanear (debe existir ingreso del día).
                         </span>
                       </li>
                     </>
@@ -1995,8 +1995,8 @@ export const TutorScanner = () => {
                       <li>
                         <span className="tutor-instructions__step">1</span>
                         <span>
-                          Elija <strong className="text-foreground font-medium">Llegada</strong> o{' '}
-                          <strong className="text-foreground font-medium">Salida</strong> de clase.
+                          Elija <strong className="text-foreground font-medium">Ingreso</strong> o{' '}
+                          <strong className="text-foreground font-medium">Salida</strong> de mañana.
                         </span>
                       </li>
                       <li>
@@ -2009,7 +2009,7 @@ export const TutorScanner = () => {
                         <span className="tutor-instructions__step">3</span>
                         <span>
                           Para la salida, cambie a <strong className="text-foreground font-medium">Salida</strong> y
-                          vuelva a escanear (debe existir llegada del día).
+                          vuelva a escanear (debe existir ingreso del día).
                         </span>
                       </li>
                       <li>

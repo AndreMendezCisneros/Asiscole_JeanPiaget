@@ -20,6 +20,7 @@ import { RegisterIncident } from "./pages/RegisterIncident";
 import { IncidentsList } from "./pages/IncidentsList";
 import { StudentsList } from "./pages/StudentsList";
 import { AttendanceReport } from "./pages/AttendanceReport";
+import { IntegralStudentReport } from "./pages/IntegralStudentReport";
 import { ArrivalControl } from "./pages/ArrivalControl";
 import { DepartureControl } from "./pages/DepartureControl";
 import { ParentMeetings } from "./pages/ParentMeetings";
@@ -115,6 +116,7 @@ const AppContent = () => {
         <Route path="/incidents" element={<IncidentsList />} />
         <Route path="/students" element={<StudentsList />} />
         <Route path="/attendance-report" element={<AttendanceReport />} />
+        <Route path="/integral-report" element={<IntegralStudentReport />} />
         <Route path="/arrival-control" element={<ArrivalControl />} />
         <Route path="/departure-control" element={<DepartureControl />} />
         <Route path="/parent-meetings" element={<ParentMeetings />} />

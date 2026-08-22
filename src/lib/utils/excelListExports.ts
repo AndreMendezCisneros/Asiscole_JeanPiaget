@@ -249,15 +249,19 @@ export async function buildAttendanceDetailSheet(
   subtitle: string,
   daysArray: number[],
   rows: MonthlyAttendanceRow[],
-  totalsGlobal: { onTime: number; late: number; justified: number; unjustified: number }
+  totalsGlobal: { onTime: number; late: number; justified: number; unjustified: number },
+  options?: { showPeriodo?: boolean }
 ): Promise<import('exceljs').Worksheet> {
   const sheet = workbook.addWorksheet(sheetName);
-  const mergeCols = daysArray.length + 8;
+  const showPeriodo = Boolean(options?.showPeriodo);
+  const extraCols = showPeriodo ? 1 : 0;
+  const mergeCols = daysArray.length + 8 + extraCols;
 
   const startRow = await addBrandedExcelHeader(workbook, sheet, title, subtitle, mergeCols);
 
   const headers = [
     'Estudiante',
+    ...(showPeriodo ? ['Periodo'] : []),
     'Nivel',
     'Piso',
     'Salón',
@@ -271,9 +275,11 @@ export async function buildAttendanceDetailSheet(
   styleHeaderRow(headerRow);
 
   const dataStart = startRow + 1;
+  const dayCellOffset = 5 + extraCols;
   rows.forEach((row) => {
     const values = [
       row.student.fullName,
+      ...(showPeriodo ? [row.periodo === 'tarde' ? 'Tarde' : 'Mañana'] : []),
       row.student.level,
       row.student.grade,
       row.student.section,
@@ -285,7 +291,7 @@ export async function buildAttendanceDetailSheet(
     ];
     const dataRow = sheet.addRow(values);
     row.days.forEach((day, index) => {
-      const cell = dataRow.getCell(index + 5);
+      const cell = dataRow.getCell(index + dayCellOffset);
       const colors: Record<string, { bg: string; fg: string }> = {
         A_tiempo: { bg: 'FFD1FAE5', fg: 'FF065F46' },
         Tarde: { bg: 'FFFEF3C7', fg: 'FF92400E' },
@@ -307,6 +313,7 @@ export async function buildAttendanceDetailSheet(
   sheet.addRow([]);
   const summaryRow = sheet.addRow([
     'TOTAL GENERAL',
+    ...(showPeriodo ? [''] : []),
     '',
     '',
     '',
@@ -322,7 +329,18 @@ export async function buildAttendanceDetailSheet(
   });
 
   freezePane(sheet, startRow);
-  const widths = [30, 12, 10, 8, ...daysArray.map(() => 6), 10, 10, 12, 12];
+  const widths = [
+    30,
+    ...(showPeriodo ? [12] : []),
+    12,
+    10,
+    8,
+    ...daysArray.map(() => 6),
+    10,
+    10,
+    12,
+    12,
+  ];
   setColumnWidths(sheet, widths);
   autoFitColumns(sheet, 6, 32);
 

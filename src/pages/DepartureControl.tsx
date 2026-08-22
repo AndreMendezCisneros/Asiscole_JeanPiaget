@@ -197,10 +197,10 @@ export const DepartureControl = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [departureFilter, setDepartureFilter] = useState<DepartureFilter>('pending');
   const [departureType, setDepartureType] = useState<DepartureType>('Normal');
-  const [bulkLevel, setBulkLevel] = useState<'all' | EducationalLevel>('all');
+  const [bulkLevel, setBulkLevel] = useState<'all' | EducationalLevel>('Pre-universitario');
   const [bulkGrade, setBulkGrade] = useState<'all' | string>('all');
   const [bulkSection, setBulkSection] = useState<'all' | string>('all');
-  const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('all');
+  const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('Pre-universitario');
   const [gradeFilter, setGradeFilter] = useState<'all' | string>('all');
   const [sectionFilter, setSectionFilter] = useState<'all' | string>('all');
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDate());

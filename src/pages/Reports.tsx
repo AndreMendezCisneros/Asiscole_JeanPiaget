@@ -47,7 +47,7 @@ import {
 
 export const Reports = () => {
   const [selectedGrade, setSelectedGrade] = useState<string>('all');
-  const [selectedLevel, setSelectedLevel] = useState<'all' | EducationalLevel>('all');
+  const [selectedLevel, setSelectedLevel] = useState<'all' | EducationalLevel>('Pre-universitario');
   const [severityFilter, setSeverityFilter] = useState<'all' | 'moderate' | 'critical'>('all');
   const [bimestre, setBimestre] = useState<Bimestre | 'all'>('all');
   const [añoEscolar, setAñoEscolar] = useState<number>(getCurrentSchoolYear());

@@ -107,7 +107,7 @@ type StudentFormValues = z.infer<typeof studentFormSchema>;
 export const StudentsList = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('all');
+  const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('Pre-universitario');
   const [gradeFilter, setGradeFilter] = useState<'all' | string>('all');
   const [sectionFilter, setSectionFilter] = useState<'all' | string>('all');
   const [currentPage, setCurrentPage] = useState(1);

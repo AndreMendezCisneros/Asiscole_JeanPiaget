@@ -187,9 +187,28 @@ export const faultsService = {
     }
   },
 
-  /**
-   * Eliminar (desactivar) falta
-   */
+  /** Soft-delete masivo: desactiva todas las faltas activas sin borrar filas. */
+  async deactivateAllActive(): Promise<{ count: number; error: string | null }> {
+    try {
+      const { data, error } = await supabase
+        .from('catalogo_faltas')
+        .update({ activo: false })
+        .eq('activo', true)
+        .select('id_falta');
+
+      if (error) {
+        return { count: 0, error: error.message };
+      }
+
+      invalidateCache(FAULTS_CACHE_KEY);
+      return { count: (data || []).length, error: null };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error al desactivar faltas';
+      console.error('Error en deactivateAllActive:', error);
+      return { count: 0, error: message };
+    }
+  },
+
   async delete(id: number): Promise<{ success: boolean; error: string | null }> {
     try {
       const { error } = await supabase

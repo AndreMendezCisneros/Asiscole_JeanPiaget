@@ -12,6 +12,16 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Form,
   FormControl,
   FormField,
@@ -27,7 +37,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Search, Plus, Edit, Loader2, BookOpen } from 'lucide-react';
+import { Search, Plus, Edit, Loader2, BookOpen, Ban } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
   StaffKpiStat,
@@ -82,9 +92,11 @@ export const FaultsCatalog = () => {
   const [activeCategory, setActiveCategory] = useState<FaultCategory | 'all'>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingFault, setEditingFault] = useState<FaultType | null>(null);
-  const { data: faults = [], isLoading, refetch } = useFaultsQuery(false);
+  const { data: faults = [], isLoading, refetch } = useFaultsQuery(true);
   const invalidateFaults = useInvalidateFaults();
   const [submitting, setSubmitting] = useState(false);
+  const [confirmDeactivateOpen, setConfirmDeactivateOpen] = useState(false);
+  const [deactivatingAll, setDeactivatingAll] = useState(false);
   // Estado temporal para Select dentro del Dialog
   const [tempCategoria, setTempCategoria] = useState<FaultCategory | undefined>(undefined);
 
@@ -181,6 +193,24 @@ export const FaultsCatalog = () => {
     setSubmitting(false);
   };
 
+  const deactivateAllActive = async () => {
+    setDeactivatingAll(true);
+    const { count, error } = await faultsService.deactivateAllActive();
+    setDeactivatingAll(false);
+    setConfirmDeactivateOpen(false);
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    toast.success(
+      count === 0
+        ? 'No había faltas activas'
+        : `Se desactivaron ${count} falta${count === 1 ? '' : 's'}`,
+    );
+    invalidateFaults();
+    void refetch();
+  };
+
   if (isLoading && faults.length === 0) {
     return (
       <div className="app-page">
@@ -202,6 +232,19 @@ export const FaultsCatalog = () => {
         description="Defina tipos de falta, severidad y puntos asignados para el cálculo de reincidencia"
         accent="secondary"
       >
+        <div className="flex flex-wrap gap-2">
+        <Button
+          variant="outline"
+          disabled={faults.length === 0 || deactivatingAll}
+          onClick={() => setConfirmDeactivateOpen(true)}
+        >
+          {deactivatingAll ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <Ban className="w-4 h-4 mr-2" />
+          )}
+          Desactivar todas las activas
+        </Button>
         <Dialog 
           open={dialogOpen} 
           onOpenChange={(open) => {
@@ -377,7 +420,31 @@ export const FaultsCatalog = () => {
             </Form>
           </DialogContent>
         </Dialog>
+        </div>
       </PageHeader>
+      <AlertDialog open={confirmDeactivateOpen} onOpenChange={setConfirmDeactivateOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Desactivar todas las faltas activas?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Las faltas dejarán de aparecer en el catálogo y en el escáner de incidencias.
+              Las incidencias históricas se conservan; no se borra ninguna fila.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deactivatingAll}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deactivatingAll}
+              onClick={(e) => {
+                e.preventDefault();
+                void deactivateAllActive();
+              }}
+            >
+              {deactivatingAll ? 'Desactivando…' : 'Desactivar todas'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="app-kpi-grid !grid-cols-1 sm:!grid-cols-3">
         <StaffKpiStat label="Total faltas" value={faults.length} icon={BookOpen} tone="primary" />

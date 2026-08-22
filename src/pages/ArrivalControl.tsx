@@ -74,7 +74,7 @@ export const ArrivalControl = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<ArrivalStatusFilter>('all');
-  const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('all');
+  const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('Pre-universitario');
   const [gradeFilter, setGradeFilter] = useState<'all' | string>('all');
   const [sectionFilter, setSectionFilter] = useState<'all' | string>('all');
   const [currentPage, setCurrentPage] = useState(1);

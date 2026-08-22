@@ -77,7 +77,7 @@ export const JustifyFaults = () => {
   const invalidateStudents = useInvalidateStudents();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('all');
+  const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('Pre-universitario');
   const [statusFilter, setStatusFilter] = useState<'all' | 'Activa' | 'Justificada'>('Activa');
   const [dateFilter, setDateFilter] = useState<string>('');
 

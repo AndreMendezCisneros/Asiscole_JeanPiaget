@@ -409,10 +409,13 @@ export interface TallerAsistencia {
   registeredBy: number | null;
 }
 
+export type AttendancePeriodo = 'manana' | 'tarde';
+
 export interface MonthlyAttendanceDay {
   day: number;
   status: AttendanceStatus;
   arrivalTime?: string;
+  departureTime?: string;
 }
 
 export interface MonthlyAttendanceRow {
@@ -424,6 +427,7 @@ export interface MonthlyAttendanceRow {
     justified: number;
     unjustified: number;
   };
+  periodo?: AttendancePeriodo;
 }
 
 export interface AuditLog {

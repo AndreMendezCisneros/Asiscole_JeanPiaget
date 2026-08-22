@@ -39,7 +39,7 @@ export function useFilters<T extends Record<string, any>>(initialFilters: T) {
 export function useStudentFilters() {
   return useFilters({
     search: '',
-    level: 'all' as 'all' | EducationalLevel,
+    level: 'Pre-universitario' as 'all' | EducationalLevel,
     grade: 'all' as 'all' | string,
     section: 'all' as 'all' | string,
   });

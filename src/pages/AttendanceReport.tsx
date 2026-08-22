@@ -9,8 +9,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { arrivalService } from '@/lib/services';
+import { arrivalService, tallerAttendanceService } from '@/lib/services';
 import { EducationalLevel, MonthlyAttendanceRow, Student } from '@/types';
+import {
+  TURNO_LABELS,
+  type AttendanceTurnoFilter,
+  buildTardeAttendanceRows,
+  mergeTurnoRows,
+  monthDateKeys,
+  periodoLabel,
+  rangeDateKeys,
+  tagAttendancePeriodo,
+} from '@/lib/utils/attendanceTurno';
+import { getBimestreDates } from '@/lib/utils/bimestreUtils';
 import {
   Loader2,
   Printer,
@@ -101,14 +112,40 @@ function narrowAttendanceToStudent(
   return reportRows.filter((row) => row.student.id === studentId);
 }
 
+async function applyTurnoFilter(
+  morningRows: MonthlyAttendanceRow[],
+  dateKeys: string[],
+  turno: AttendanceTurnoFilter,
+): Promise<MonthlyAttendanceRow[]> {
+  const morning = tagAttendancePeriodo(morningRows, 'manana');
+  if (turno === 'manana') return morning;
+
+  const studentIds = morningRows.map((row) => row.student.id);
+  const students = morningRows.map((row) => row.student);
+  const start = dateKeys[0];
+  const end = dateKeys[dateKeys.length - 1];
+  let afternoon: MonthlyAttendanceRow[] = [];
+
+  if (start && end && studentIds.length > 0) {
+    const { records } = await tallerAttendanceService.fetchRangeForStudents(studentIds, start, end);
+    afternoon = buildTardeAttendanceRows(students, records, dateKeys);
+  } else {
+    afternoon = buildTardeAttendanceRows(students, [], dateKeys);
+  }
+
+  if (turno === 'tarde') return afternoon;
+  return mergeTurnoRows(morning, afternoon);
+}
+
 export const AttendanceReport = () => {
   const [reportType, setReportType] = useState<'monthly' | 'bimestral'>('monthly');
   const [monthValue, setMonthValue] = useState(getCurrentMonthValue());
   const [bimestre, setBimestre] = useState<Bimestre | 'all'>('all');
   const [añoEscolar, setAñoEscolar] = useState<number>(getCurrentSchoolYear());
-  const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('all');
+  const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('Pre-universitario');
   const [gradeFilter, setGradeFilter] = useState<'all' | string>('all');
   const [sectionFilter, setSectionFilter] = useState<'all' | string>('all');
+  const [turnoFilter, setTurnoFilter] = useState<AttendanceTurnoFilter>('ambos');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [rows, setRows] = useState<MonthlyAttendanceRow[]>([]);
   const [daysInMonth, setDaysInMonth] = useState<number>(new Date().getDate());
@@ -162,7 +199,14 @@ export const AttendanceReport = () => {
           setDaysInMonth(0);
           setHasQueried(false);
         } else {
-          setRows(narrowAttendanceToStudent(reportRows, selectedStudent?.id ?? null));
+          const { inicio, fin } = getBimestreDates(bimestre, añoEscolar);
+          const dateKeys = rangeDateKeys(inicio, fin);
+          const merged = await applyTurnoFilter(
+            narrowAttendanceToStudent(reportRows, selectedStudent?.id ?? null),
+            dateKeys,
+            turnoFilter,
+          );
+          setRows(merged);
           setDaysInMonth(totalDays);
           setHasQueried(true);
           setCurrentPage(1);
@@ -193,7 +237,13 @@ export const AttendanceReport = () => {
           setDaysInMonth(0);
           setHasQueried(false);
         } else {
-          setRows(narrowAttendanceToStudent(reportRows, selectedStudent?.id ?? null));
+          const dateKeys = monthDateKeys(Number(yearStr), Number(monthStr), totalDays);
+          const merged = await applyTurnoFilter(
+            narrowAttendanceToStudent(reportRows, selectedStudent?.id ?? null),
+            dateKeys,
+            turnoFilter,
+          );
+          setRows(merged);
           setDaysInMonth(totalDays);
           setHasQueried(true);
           setCurrentPage(1);
@@ -223,7 +273,7 @@ export const AttendanceReport = () => {
     setHasQueried(false);
     setRows([]);
     setCurrentPage(1);
-  }, [reportType, monthValue, bimestre, añoEscolar, levelFilter, gradeFilter, sectionFilter, selectedStudent?.id]);
+  }, [reportType, monthValue, bimestre, añoEscolar, levelFilter, gradeFilter, sectionFilter, selectedStudent?.id, turnoFilter]);
 
   const daysArray = useMemo(() => Array.from({ length: daysInMonth }, (_, idx) => idx + 1), [daysInMonth]);
 
@@ -276,6 +326,7 @@ export const AttendanceReport = () => {
 
       const subtitle = buildFilterSubtitle([
         `Período: ${monthLabel}`,
+        `Turno: ${TURNO_LABELS[turnoFilter]}`,
         `Generado ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm", { locale: es })}`,
         levelFilter !== 'all' && `Nivel: ${levelFilter}`,
         gradeFilter !== 'all' && `${CLASSROOM_FIELD_LABELS.grade}: ${gradeFilter}`,
@@ -303,10 +354,14 @@ export const AttendanceReport = () => {
         'Leyenda de estados: A = A tiempo · T = Tardanza · J = Justificada · I = Injustificada · — = Sin registro'
       );
 
+      const showPeriodo = turnoFilter === 'ambos';
       doc.drawSectionTitle('Resumen por estudiante');
       doc.drawTable(
         [
-          { header: 'Estudiante', dataKey: 'student', width: 52 },
+          { header: 'Estudiante', dataKey: 'student', width: showPeriodo ? 44 : 52 },
+          ...(showPeriodo
+            ? [{ header: 'Periodo', dataKey: 'periodo', width: 16 }]
+            : []),
           { header: 'Nivel', dataKey: 'level', width: 22 },
           { header: CLASSROOM_FIELD_LABELS.grade, dataKey: 'grade', width: 16 },
           { header: 'Sec.', dataKey: 'section', width: 12, align: 'center' },
@@ -328,6 +383,7 @@ export const AttendanceReport = () => {
             totalMarked > 0 ? Math.round((row.totals.onTime / totalMarked) * 100) : 0;
           return {
             student: row.student.fullName,
+            periodo: periodoLabel(row.periodo),
             level: row.student.level,
             grade: row.student.grade,
             section: row.student.section,
@@ -409,7 +465,7 @@ export const AttendanceReport = () => {
       return;
     }
 
-    const filterParts = [`Mes: ${monthValue}`];
+    const filterParts = [`Mes: ${monthValue}`, `Turno: ${TURNO_LABELS[turnoFilter]}`];
     if (levelFilter !== 'all') filterParts.push(`Nivel: ${levelFilter}`);
     if (gradeFilter !== 'all') filterParts.push(`${CLASSROOM_FIELD_LABELS.grade}: ${gradeFilter}`);
     if (sectionFilter !== 'all') filterParts.push(`${CLASSROOM_FIELD_LABELS.section}: ${sectionFilter}`);
@@ -424,7 +480,8 @@ export const AttendanceReport = () => {
         filterParts.join(' · '),
         daysArray,
         rows,
-        totalsGlobal
+        totalsGlobal,
+        { showPeriodo: turnoFilter === 'ambos' }
       );
 
       const summarySheet = workbook.addWorksheet('Resumen');
@@ -679,6 +736,22 @@ export const AttendanceReport = () => {
             </>
           )}
           <div className="space-y-2">
+            <Label>Turno</Label>
+            <Select
+              value={turnoFilter}
+              onValueChange={(value) => setTurnoFilter(value as AttendanceTurnoFilter)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ambos">Ambos</SelectItem>
+                <SelectItem value="manana">Mañana</SelectItem>
+                <SelectItem value="tarde">Tarde</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
             <Label>Nivel</Label>
             <Select
               value={levelFilter}
@@ -781,6 +854,9 @@ export const AttendanceReport = () => {
                       <th className="sticky left-0 bg-muted/50 px-3 py-2 text-left align-middle">
                         Estudiante
                       </th>
+                      {turnoFilter === 'ambos' && (
+                        <th className="min-w-[72px] px-2 py-2">Periodo</th>
+                      )}
                       {daysArray.map((day) => (
                         <th key={day} className="min-w-[32px] px-2 py-2">
                           {day}
@@ -794,13 +870,18 @@ export const AttendanceReport = () => {
                   </thead>
                   <tbody>
                     {paginatedRows.map((row) => (
-                      <tr key={row.student.id} className="border-t">
+                      <tr key={`${row.student.id}-${row.periodo ?? 'manana'}`} className="border-t">
                         <td className="sticky left-0 bg-background px-3 py-2 text-sm font-medium">
                           <div>{row.student.fullName}</div>
                           <div className="text-[10px] text-muted-foreground">
                             {row.student.level} • {row.student.grade} {row.student.section}
                           </div>
                         </td>
+                        {turnoFilter === 'ambos' && (
+                          <td className="px-2 py-2 text-center text-xs font-medium">
+                            {periodoLabel(row.periodo)}
+                          </td>
+                        )}
                         {row.days.map((day) => {
                           const info = statusMap[day.status] || statusMap.Sin_registro;
                           return (

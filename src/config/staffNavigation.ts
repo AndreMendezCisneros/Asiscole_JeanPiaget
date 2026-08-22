@@ -80,6 +80,7 @@ const ALL_STAFF_NAV_ITEMS: StaffNavItem[] = [
     subItems: [
       { path: '/reports', label: 'Reportes de Incidencias' },
       { path: '/attendance-report', label: 'Reporte de Asistencias' },
+      { path: '/integral-report', label: 'Reporte Integral' },
     ],
   },
   {
