@@ -60,6 +60,11 @@ npm run test     # Vitest
 npm run build
 ```
 
+## Documentación y SQL
+
+- Guías: `docs/README.md`
+- Scripts SQL: `database/README.md` (`database/sql/…`)
+
 ## Idioma UI
 
 Interfaz y mensajes en **español** (`lang="es"`).

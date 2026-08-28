@@ -378,6 +378,7 @@ export interface MonthlyAttendanceDay {
   day: number;
   status: AttendanceStatus;
   arrivalTime?: string;
+  departureTime?: string;
 }
 
 export interface MonthlyAttendanceRow {
@@ -389,6 +390,19 @@ export interface MonthlyAttendanceRow {
     justified: number;
     unjustified: number;
   };
+}
+
+export interface TallerAsistencia {
+  id: number;
+  tallerId: string;
+  tallerNombre: string;
+  studentId: number;
+  date: string;
+  arrivalTime: string | null;
+  departureTime: string | null;
+  arrivalStatus: string | null;
+  departureType: 'Normal' | 'Autorizada' | 'Sin registro' | null;
+  registeredBy: number | null;
 }
 
 export interface AuditLog {

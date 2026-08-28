@@ -182,16 +182,26 @@ export const parentMeetingsService = {
     section?: string;
     level?: string;
     studentIds?: number[];
-  }): Promise<{ success: boolean; count: number; error: string | null }> {
+  }): Promise<{
+    success: boolean;
+    count: number;
+    error: string | null;
+    inserted: { id: number; studentId: number }[];
+  }> {
     try {
       const studentIdsResult = await fetchActiveStudentIdsForBulk(meetings);
       if (studentIdsResult.error) {
-        return { success: false, count: 0, error: studentIdsResult.error };
+        return { success: false, count: 0, error: studentIdsResult.error, inserted: [] };
       }
 
       const studentIds = studentIdsResult.ids;
       if (studentIds.length === 0) {
-        return { success: false, count: 0, error: 'No se encontraron estudiantes para crear las citas' };
+        return {
+          success: false,
+          count: 0,
+          error: 'No se encontraron estudiantes para crear las citas',
+          inserted: [],
+        };
       }
 
       const citas = studentIds.map((id_estudiante) => ({
@@ -205,28 +215,39 @@ export const parentMeetingsService = {
         asistencia: null,
       }));
 
-      let inserted = 0;
+      const inserted: { id: number; studentId: number }[] = [];
       for (let i = 0; i < citas.length; i += INSERT_BATCH_SIZE) {
         const batch = citas.slice(i, i + INSERT_BATCH_SIZE);
-        const { error } = await supabase.from('citas_padres').insert(batch);
+        const { data, error } = await supabase
+          .from('citas_padres')
+          .insert(batch)
+          .select('id_cita, id_estudiante');
         if (error) {
           const partial =
-            inserted > 0
-              ? ` Se crearon ${inserted} citas antes del error.`
+            inserted.length > 0
+              ? ` Se crearon ${inserted.length} citas antes del error.`
               : '';
           return {
             success: false,
-            count: inserted,
+            count: inserted.length,
             error: `${error.message}${partial}`,
+            inserted,
           };
         }
-        inserted += batch.length;
+        for (const row of data ?? []) {
+          inserted.push({ id: row.id_cita, studentId: row.id_estudiante });
+        }
       }
 
-      return { success: true, count: inserted, error: null };
+      return { success: true, count: inserted.length, error: null, inserted };
     } catch (error: any) {
       console.error('Error en createBulk:', error);
-      return { success: false, count: 0, error: error.message || 'Error al crear citas masivas' };
+      return {
+        success: false,
+        count: 0,
+        error: error.message || 'Error al crear citas masivas',
+        inserted: [],
+      };
     }
   },
 

@@ -59,8 +59,10 @@ import {
   PhoneCall,
 } from 'lucide-react';
 import { ModernCalendar } from '@/components/calendar/ModernCalendar';
-import { parentMeetingsService, studentsService } from '@/lib/services';
-import { ParentMeeting, Student, EducationalLevel } from '@/types';
+import { parentMeetingsService } from '@/lib/services';
+import { studentsService } from '@/lib/services';
+import { whatsappService } from '@/lib/services';
+import { ParentMeeting, Student } from '@/types';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
@@ -75,13 +77,14 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { authService } from '@/lib/services';
 import { format, addMonths, subMonths } from 'date-fns';
-import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { es } from 'date-fns/locale';
 import {
   formatDateKeyLima,
   getLimaTodayDate,
   parseMeetingDateTime,
 } from '@/lib/utils/limaDateTime';
+import { StudentSearchCombobox } from '@/components/students/StudentSearchCombobox';
+import { citaAlcanceFromMeetingTipo } from '@/lib/services/mobileIngest';
 
 const meetingFormSchema = z
   .object({
@@ -164,10 +167,6 @@ const bulkMeetingDefaults: MeetingFormValues = {
 
 export const ParentMeetings = () => {
   const [meetings, setMeetings] = useState<ParentMeeting[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
-  const [studentPickerSearch, setStudentPickerSearch] = useState('');
-  const debouncedStudentSearch = useDebouncedValue(studentPickerSearch, 350);
-  const [studentsLoading, setStudentsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
@@ -179,6 +178,7 @@ export const ParentMeetings = () => {
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+  const [notifyOnCreate, setNotifyOnCreate] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [stats, setStats] = useState<{
     total: number;
@@ -253,33 +253,6 @@ export const ParentMeetings = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, meetingsDateRange.fechaDesde, meetingsDateRange.fechaHasta]);
 
-  useEffect(() => {
-    if (!dialogOpen) {
-      setStudentPickerSearch('');
-      setStudents([]);
-      return;
-    }
-
-    if (debouncedStudentSearch.trim().length < 2) {
-      setStudents([]);
-      return;
-    }
-
-    let cancelled = false;
-    setStudentsLoading(true);
-
-    void studentsService.searchByName(debouncedStudentSearch, 25).then(({ students: list, error }) => {
-      if (cancelled) return;
-      if (error) toast.error(error);
-      setStudents(list);
-      setStudentsLoading(false);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dialogOpen, debouncedStudentSearch]);
-
   const loadMeetings = async () => {
     if (!isMountedRef.current) return;
     
@@ -325,6 +298,65 @@ export const ParentMeetings = () => {
     }
   };
 
+  const notifyCreatedCitas = async (params: {
+    tipo: MeetingFormValues['tipo'];
+    motivo: string;
+    fecha: string;
+    hora: string;
+    rows: Array<{ citaId: number; studentId: number; student?: Student }>;
+  }) => {
+    if (!notifyOnCreate) return;
+    if (!whatsappService.isAppNotificationsEnabled()) {
+      toast.message('Avisos por aplicación no habilitados en este entorno');
+      return;
+    }
+
+    const alcance = citaAlcanceFromMeetingTipo(params.tipo);
+    let sent = 0;
+    let failed = 0;
+    for (const row of params.rows) {
+      let student = row.student;
+      if (!student) {
+        const fetched = await studentsService.getById(row.studentId);
+        student = fetched.student ?? undefined;
+      }
+      const target =
+        student ||
+        ({
+          id: row.studentId,
+          fullName: 'Estudiante',
+          grade: '',
+          section: '',
+          level: 'Secundaria' as const,
+          barcode: '',
+          active: true,
+          contactPhone: null,
+          emergencyPhone: null,
+        } satisfies Student);
+      const app = await whatsappService.notifyParentCita(target, {
+        citaId: row.citaId,
+        motivo: params.motivo,
+        fecha: params.fecha,
+        hora: params.hora,
+        alcance,
+      });
+      if (app.ok && !app.skipped) sent += 1;
+      else if (!app.ok) failed += 1;
+    }
+
+    if (sent > 0) {
+      toast.success(
+        sent === 1
+          ? 'Aplicación: aviso de citación enviado'
+          : `Aplicación: ${sent} avisos de citación enviados`,
+      );
+    } else if (failed > 0) {
+      toast.error(`No se pudieron enviar ${failed} avisos por la aplicación`);
+    } else {
+      toast.message('Sin avisos nuevos por la aplicación (ya notificados o sin destino)');
+    }
+  };
+
   const onSubmit = async (data: MeetingFormValues) => {
     if (!isMountedRef.current) return;
     
@@ -340,13 +372,14 @@ export const ParentMeetings = () => {
       const isBulk = bulkDialogOpen || data.tipo !== 'individual';
 
       if (isBulk) {
-        const { success, count, error } = await parentMeetingsService.createBulk({
+        const bulkTipo = data.tipo === 'individual' ? 'all' : data.tipo;
+        const { success, count, error, inserted } = await parentMeetingsService.createBulk({
           motivo: data.motivo,
           fecha: data.fecha,
           hora: data.hora,
           id_usuario_creador: currentUser.id,
           notas: data.notas,
-          tipo: data.tipo,
+          tipo: bulkTipo,
           grade: data.grade,
           section: data.section,
           level: data.level,
@@ -366,6 +399,13 @@ export const ParentMeetings = () => {
           focusMeetingsOnDate(data.fecha);
           loadMeetings();
           loadStats();
+          void notifyCreatedCitas({
+            tipo: data.tipo,
+            motivo: data.motivo,
+            fecha: data.fecha,
+            hora: data.hora,
+            rows: inserted.map((row) => ({ citaId: row.id, studentId: row.studentId })),
+          });
         }
       } else {
         // Cita individual
@@ -394,6 +434,21 @@ export const ParentMeetings = () => {
           form.reset();
           loadMeetings();
           loadStats();
+          if (meeting) {
+            void notifyCreatedCitas({
+              tipo: 'individual',
+              motivo: data.motivo,
+              fecha: data.fecha,
+              hora: data.hora,
+              rows: [
+                {
+                  citaId: meeting.id,
+                  studentId: meeting.studentId,
+                  student: meeting.student,
+                },
+              ],
+            });
+          }
         }
       }
     } catch (error) {
@@ -1200,43 +1255,12 @@ export const ParentMeetings = () => {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Estudiante</FormLabel>
-                    <div className="space-y-2">
-                      <Input
-                        placeholder="Buscar por nombre (mín. 2 letras)…"
-                        value={studentPickerSearch}
-                        onChange={(e) => setStudentPickerSearch(e.target.value)}
+                    <FormControl>
+                      <StudentSearchCombobox
+                        value={field.value || null}
+                        onChange={(id) => field.onChange(id)}
                       />
-                      {studentsLoading ? (
-                        <p className="text-sm text-muted-foreground flex items-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Buscando…
-                        </p>
-                      ) : students.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                          {studentPickerSearch.trim().length < 2
-                            ? 'Escriba al menos 2 letras para buscar'
-                            : 'Sin coincidencias'}
-                        </p>
-                      ) : (
-                        <Select
-                          value={field.value ? String(field.value) : ''}
-                          onValueChange={(value) => field.onChange(Number(value))}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Seleccionar estudiante" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {students.map((student) => (
-                              <SelectItem key={student.id} value={String(student.id)}>
-                                {student.fullName} - {student.level} {student.grade} {student.section}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                    </div>
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -1295,6 +1319,15 @@ export const ParentMeetings = () => {
                   </FormItem>
                 )}
               />
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-primary"
+                  checked={notifyOnCreate}
+                  onChange={(e) => setNotifyOnCreate(e.target.checked)}
+                />
+                Notificar por la aplicación a padres
+              </label>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                   Cancelar
@@ -1551,6 +1584,15 @@ export const ParentMeetings = () => {
                   </FormItem>
                 )}
               />
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-primary"
+                  checked={notifyOnCreate}
+                  onChange={(e) => setNotifyOnCreate(e.target.checked)}
+                />
+                Notificar por la aplicación a padres
+              </label>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setBulkDialogOpen(false)}>
                   Cancelar

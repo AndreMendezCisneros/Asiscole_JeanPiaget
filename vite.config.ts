@@ -44,6 +44,12 @@ export default defineConfig(({ mode }) => {
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/sc-proxy/, "/api"),
       },
+      // App móvil (citaciones, pensiones, etc.) — mismo backend que jeanpiaget.asiscole.com
+      "/canal-api": {
+        target: "https://jeanpiaget.asiscole.com",
+        changeOrigin: true,
+        secure: true,
+      },
     },
   },
   plugins: [react(), cspConnectSrcPlugin(), buildVersionPlugin(), mode === "development" && componentTagger()].filter(Boolean),

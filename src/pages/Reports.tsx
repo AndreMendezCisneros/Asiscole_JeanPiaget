@@ -28,11 +28,14 @@ import {
   Legend
 } from 'recharts';
 import { dashboardService, incidentsService } from '@/lib/services';
-import { DashboardStats, EducationalLevel } from '@/types';
+import { DashboardStats, EducationalLevel, Incident, Student } from '@/types';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getCurrentSchoolYear, getAllBimestres, formatBimestreLabel, type Bimestre } from '@/lib/utils/bimestreUtils';
+import { StudentSearchCombobox } from '@/components/students/StudentSearchCombobox';
+import { CLASSROOM_FIELD_LABELS, CLASSROOM_GRADES, CLASSROOM_LEVELS } from '@/lib/constants/classrooms';
+import { buildDashboardStatsFromIncidents } from '@/lib/utils/incidentReportStats';
 
 export const Reports = () => {
   const [selectedGrade, setSelectedGrade] = useState<string>('all');
@@ -40,6 +43,8 @@ export const Reports = () => {
   const [severityFilter, setSeverityFilter] = useState<'all' | 'moderate' | 'critical'>('all');
   const [bimestre, setBimestre] = useState<Bimestre | 'all'>('all');
   const [añoEscolar, setAñoEscolar] = useState<number>(getCurrentSchoolYear());
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const studentFilterActive = selectedStudent != null;
 
   // Filtros derivados memoizados — la clave de caché cambia solo cuando cambian los filtros
   const reportFilters = useMemo(() => ({
@@ -89,15 +94,52 @@ export const Reports = () => {
     placeholderData: keepPreviousData,
   });
 
+  const { data: studentIncidents = [] } = useQuery({
+    queryKey: ['reports', 'student-incidents', selectedStudent?.id, reportFilters.bimestre, reportFilters.añoEscolar],
+    enabled: studentFilterActive,
+    queryFn: async () => {
+      const { incidents, error } = await incidentsService.getAll({
+        estudianteId: selectedStudent!.id,
+        bimestre: reportFilters.bimestre,
+        añoEscolar: reportFilters.bimestre ? reportFilters.añoEscolar : undefined,
+        fetchAll: true,
+      });
+      if (error) {
+        toast.error(error);
+        return [] as Incident[];
+      }
+      return incidents;
+    },
+    staleTime: 60 * 1000,
+  });
+
   const stats: DashboardStats | null = reportsData?.stats ?? null;
   const monthlyTrend = reportsData?.monthlyTrend ?? [];
   const weeklyData = reportsData?.weeklyData ?? [];
   const comparisonByGrade = reportsData?.comparisonByGrade ?? [];
   const comparisonBySection = reportsData?.comparisonBySection ?? [];
   const loading = isLoading && !reportsData;
+  const studentReportStats = useMemo(
+    () => (studentFilterActive ? buildDashboardStatsFromIncidents(studentIncidents) : null),
+    [studentFilterActive, studentIncidents],
+  );
+  const viewStats = studentReportStats ?? stats;
+
+  const loadExportIncidents = async () => {
+    const { incidents: incidentsList, error } = await incidentsService.getAll({
+      nivelEducativo: selectedStudent ? undefined : selectedLevel === 'all' ? undefined : selectedLevel,
+      grado: selectedStudent ? undefined : selectedGrade === 'all' ? undefined : selectedGrade,
+      bimestre: bimestre !== 'all' ? bimestre : undefined,
+      añoEscolar: bimestre !== 'all' ? añoEscolar : undefined,
+      estudianteId: selectedStudent?.id,
+      fetchAll: true,
+    });
+    if (error) return { error, incidents: [] as Incident[] };
+    return { error: null, incidents: incidentsList };
+  };
 
   const exportToPDF = async () => {
-    if (!stats) {
+    if (!viewStats) {
       toast.error('No hay datos para exportar');
       return;
     }
@@ -105,18 +147,21 @@ export const Reports = () => {
     try {
       toast.loading('Generando PDF...', { id: 'pdf-export' });
 
-      const { incidents: incidentsList, error } = await incidentsService.getAll({
-        nivelEducativo: selectedLevel === 'all' ? undefined : selectedLevel,
-        grado: selectedGrade === 'all' ? undefined : selectedGrade,
-        bimestre: bimestre !== 'all' ? bimestre : undefined,
-        añoEscolar: bimestre !== 'all' ? añoEscolar : undefined,
-        fetchAll: true,
-      });
+      const { incidents: incidentsList, error } = await loadExportIncidents();
 
       if (error) {
         toast.error('Error al cargar incidencias para el PDF', { id: 'pdf-export' });
         return;
       }
+
+      if (selectedStudent && incidentsList.length === 0) {
+        toast.error('No hay incidencias de ese estudiante para exportar', { id: 'pdf-export' });
+        return;
+      }
+
+      const exportStats = selectedStudent
+        ? buildDashboardStatsFromIncidents(incidentsList)
+        : viewStats;
 
       const { PdfReportDocument, buildFilterSubtitle } = await import('@/lib/utils/pdfReportBuilder');
 
@@ -127,29 +172,40 @@ export const Reports = () => {
 
       const subtitle = buildFilterSubtitle([
         `Generado ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm", { locale: es })}`,
-        selectedLevel !== 'all' && `Nivel: ${selectedLevel}`,
-        selectedGrade !== 'all' && `Grado: ${selectedGrade}`,
+        selectedStudent ? `Estudiante: ${selectedStudent.fullName}` : selectedLevel !== 'all' && `Nivel: ${selectedLevel}`,
+        selectedStudent ? undefined : selectedGrade !== 'all' && `${CLASSROOM_FIELD_LABELS.grade}: ${selectedGrade}`,
         bimestreInfo && `Período: ${formatBimestreLabel(bimestreInfo)}`,
       ]);
 
-      const doc = new PdfReportDocument('portrait', 'REPORTE DE INCIDENCIAS', subtitle);
+      const doc = new PdfReportDocument(
+        'portrait',
+        selectedStudent ? 'REPORTE DE INCIDENCIAS DEL ESTUDIANTE' : 'REPORTE DE INCIDENCIAS',
+        subtitle,
+      );
       await doc.drawCoverHeader();
 
-      const criticalCount = stats.levelDistribution.level3 + stats.levelDistribution.level4;
+      const criticalCount = exportStats.levelDistribution.level3 + exportStats.levelDistribution.level4;
+      const exportLevelItems = [
+        { level: 'Nivel 0 - Sin reincidencias', count: exportStats.levelDistribution.level0 },
+        { level: 'Nivel 1 - Primera reincidencia', count: exportStats.levelDistribution.level1 },
+        { level: 'Nivel 2 - Reincidencia moderada', count: exportStats.levelDistribution.level2 },
+        { level: 'Nivel 3 - Reincidencia alta', count: exportStats.levelDistribution.level3 },
+        { level: 'Nivel 4 - Reincidencia crítica', count: exportStats.levelDistribution.level4 },
+      ];
 
       doc.drawKpiCards([
-        { label: 'Total incidencias', value: stats.totalIncidents, tone: 'primary' },
-        { label: 'Estudiantes involucrados', value: stats.studentsWithIncidents, tone: 'info' },
-        { label: 'Nivel promedio', value: stats.averageReincidenceLevel.toFixed(1), tone: 'warning' },
+        { label: 'Total incidencias', value: exportStats.totalIncidents, tone: 'primary' },
+        { label: 'Estudiantes involucrados', value: exportStats.studentsWithIncidents, tone: 'info' },
+        { label: 'Nivel promedio', value: exportStats.averageReincidenceLevel.toFixed(1), tone: 'warning' },
         { label: 'Casos críticos', value: criticalCount, tone: criticalCount > 0 ? 'error' : 'success' },
       ]);
 
       doc.drawSectionTitle('Distribución por nivel de reincidencia');
       doc.drawKeyValueList(
-        levelItems.map((item) => {
+        exportLevelItems.map((item) => {
           const pct =
-            stats.totalIncidents > 0
-              ? ((item.count / stats.totalIncidents) * 100).toFixed(1)
+            exportStats.totalIncidents > 0
+              ? ((item.count / exportStats.totalIncidents) * 100).toFixed(1)
               : '0';
           return { label: item.level, value: `${item.count} registros (${pct}%)` };
         })
@@ -163,10 +219,10 @@ export const Reports = () => {
           { header: 'Cantidad', dataKey: 'count', width: 22, align: 'center' },
           { header: '% del total', dataKey: 'pct', width: 22, align: 'right' },
         ],
-        stats.topFaults.slice(0, 15).map((fault, index) => {
+        exportStats.topFaults.slice(0, 15).map((fault, index) => {
           const pct =
-            stats.totalIncidents > 0
-              ? `${((fault.count / stats.totalIncidents) * 100).toFixed(1)}%`
+            exportStats.totalIncidents > 0
+              ? `${((fault.count / exportStats.totalIncidents) * 100).toFixed(1)}%`
               : '0%';
           return {
             rank: String(index + 1),
@@ -215,45 +271,49 @@ export const Reports = () => {
   };
 
   const exportToExcel = async () => {
-    if (!stats) {
+    if (!viewStats) {
       toast.error('No hay datos para exportar');
       return;
     }
 
     try {
-      const { incidents: incidentsList, error } = await incidentsService.getAll({
-        nivelEducativo: selectedLevel === 'all' ? undefined : selectedLevel,
-        grado: selectedGrade === 'all' ? undefined : selectedGrade,
-        bimestre: bimestre !== 'all' ? bimestre : undefined,
-        añoEscolar: bimestre !== 'all' ? añoEscolar : undefined,
-        fetchAll: true,
-      });
+      const { incidents: incidentsList, error } = await loadExportIncidents();
 
       if (error) {
         toast.error('Error al cargar incidencias para exportar');
         return;
       }
 
+      if (selectedStudent && incidentsList.length === 0) {
+        toast.error('No hay incidencias de ese estudiante para exportar');
+        return;
+      }
+
+      const exportStats = selectedStudent
+        ? buildDashboardStatsFromIncidents(incidentsList)
+        : viewStats;
+
       let filterText = `Generado: ${format(new Date(), 'dd/MM/yyyy HH:mm', { locale: es })}`;
-      if (selectedLevel !== 'all') filterText += ` · Nivel: ${selectedLevel}`;
-      if (selectedGrade !== 'all') filterText += ` · Grado: ${selectedGrade}`;
+      if (selectedStudent) filterText += ` · Estudiante: ${selectedStudent.fullName}`;
+      else {
+        if (selectedLevel !== 'all') filterText += ` · Nivel: ${selectedLevel}`;
+        if (selectedGrade !== 'all') filterText += ` · ${CLASSROOM_FIELD_LABELS.grade}: ${selectedGrade}`;
+      }
       if (bimestre !== 'all') {
         const b = getAllBimestres(añoEscolar).find((x) => x.numero === bimestre);
         if (b) filterText += ` · ${formatBimestreLabel(b)}`;
       }
 
-      const levelItemsForExport = stats
-        ? [
-            { level: 'Nivel 0 - Sin reincidencias', count: stats.levelDistribution.level0 },
-            { level: 'Nivel 1 - Primera reincidencia', count: stats.levelDistribution.level1 },
-            { level: 'Nivel 2 - Reincidencia moderada', count: stats.levelDistribution.level2 },
-            { level: 'Nivel 3 - Reincidencia alta', count: stats.levelDistribution.level3 },
-            { level: 'Nivel 4 - Reincidencia crítica', count: stats.levelDistribution.level4 },
-          ]
-        : [];
+      const levelItemsForExport = [
+        { level: 'Nivel 0 - Sin reincidencias', count: exportStats.levelDistribution.level0 },
+        { level: 'Nivel 1 - Primera reincidencia', count: exportStats.levelDistribution.level1 },
+        { level: 'Nivel 2 - Reincidencia moderada', count: exportStats.levelDistribution.level2 },
+        { level: 'Nivel 3 - Reincidencia alta', count: exportStats.levelDistribution.level3 },
+        { level: 'Nivel 4 - Reincidencia crítica', count: exportStats.levelDistribution.level4 },
+      ];
 
       const { exportIncidentsReportExcel } = await import('@/lib/utils/excelReportExports');
-      await exportIncidentsReportExcel(stats, incidentsList, {
+      await exportIncidentsReportExcel(exportStats, incidentsList, {
         filterText,
         levelItems: levelItemsForExport,
       });
@@ -268,20 +328,21 @@ export const Reports = () => {
   // monthlyTrend y weeklyData ahora vienen del estado, cargados desde la base de datos
 
   // Filter data by grade
-  const filteredIncidentsByGrade = (stats?.incidentsByGrade || []).filter((item) => {
+  const filteredIncidentsByGrade = (viewStats?.incidentsByGrade || []).filter((item) => {
+    if (studentFilterActive) return true;
     const matchesGrade = selectedGrade === 'all' || item.grade === selectedGrade;
     const matchesLevel = selectedLevel === 'all' || item.level === selectedLevel;
     return matchesGrade && matchesLevel;
   });
 
   // Filter level distribution by severity focus
-  const levelItems = stats
+  const levelItems = viewStats
     ? [
-        { level: 'Nivel 0 - Sin reincidencias', key: 'level0' as const, count: stats.levelDistribution.level0, severity: 'low' },
-        { level: 'Nivel 1 - Primera reincidencia', key: 'level1' as const, count: stats.levelDistribution.level1, severity: 'moderate' },
-        { level: 'Nivel 2 - Reincidencia moderada', key: 'level2' as const, count: stats.levelDistribution.level2, severity: 'moderate' },
-        { level: 'Nivel 3 - Reincidencia alta', key: 'level3' as const, count: stats.levelDistribution.level3, severity: 'critical' },
-        { level: 'Nivel 4 - Reincidencia crítica', key: 'level4' as const, count: stats.levelDistribution.level4, severity: 'critical' },
+        { level: 'Nivel 0 - Sin reincidencias', key: 'level0' as const, count: viewStats.levelDistribution.level0, severity: 'low' },
+        { level: 'Nivel 1 - Primera reincidencia', key: 'level1' as const, count: viewStats.levelDistribution.level1, severity: 'moderate' },
+        { level: 'Nivel 2 - Reincidencia moderada', key: 'level2' as const, count: viewStats.levelDistribution.level2, severity: 'moderate' },
+        { level: 'Nivel 3 - Reincidencia alta', key: 'level3' as const, count: viewStats.levelDistribution.level3, severity: 'critical' },
+        { level: 'Nivel 4 - Reincidencia crítica', key: 'level4' as const, count: viewStats.levelDistribution.level4, severity: 'critical' },
       ]
     : [];
 
@@ -323,51 +384,69 @@ export const Reports = () => {
       />
       <StaffToolbar
         title="Período y filtros"
-        description="Ajuste el alcance del análisis y exporte"
+        description="Busque un estudiante o ajuste el alcance del análisis y exporte"
         footer={
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => refetch()} variant="outline" size="sm" disabled={isFetching}>
               <Calendar className="mr-2 h-4 w-4" />
               {isFetching ? 'Cargando…' : 'Actualizar'}
             </Button>
-            <Button onClick={exportToPDF} disabled={!stats} variant="outline" size="sm">
+            <Button onClick={exportToPDF} disabled={!viewStats} variant="outline" size="sm">
               <FileDown className="mr-2 h-4 w-4" />
               PDF
             </Button>
-            <Button onClick={exportToExcel} disabled={!stats} variant="outline" size="sm">
+            <Button onClick={exportToExcel} disabled={!viewStats} variant="outline" size="sm">
               <FileSpreadsheet className="mr-2 h-4 w-4" />
               Excel
             </Button>
           </div>
         }
       >
+        <div className="space-y-2 md:col-span-2">
+          <Label htmlFor="reports-student-search">Buscar estudiante</Label>
+          <StudentSearchCombobox
+            id="reports-student-search"
+            variant="search"
+            allowClear
+            value={selectedStudent?.id ?? null}
+            placeholder="Nombre completo del estudiante..."
+            onChange={(_id, student) => setSelectedStudent(student)}
+            onClear={() => setSelectedStudent(null)}
+          />
+        </div>
         <div className="space-y-2">
           <Label>Nivel</Label>
-        <Select value={selectedLevel} onValueChange={(value) => setSelectedLevel(value as 'all' | EducationalLevel)}>
+        <Select
+          value={selectedLevel}
+          disabled={studentFilterActive}
+          onValueChange={(value) => setSelectedLevel(value as 'all' | EducationalLevel)}
+        >
           <SelectTrigger>
-            <SelectValue placeholder="Todos los niveles" />
+            <SelectValue placeholder={CLASSROOM_FIELD_LABELS.allLevels} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todos los niveles</SelectItem>
-            <SelectItem value="Primaria">Primaria</SelectItem>
-            <SelectItem value="Secundaria">Secundaria</SelectItem>
+            <SelectItem value="all">{CLASSROOM_FIELD_LABELS.allLevels}</SelectItem>
+            {CLASSROOM_LEVELS.map((level) => (
+              <SelectItem key={level} value={level}>
+                {level}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         </div>
         <div className="space-y-2">
-          <Label>Grado</Label>
-        <Select value={selectedGrade} onValueChange={setSelectedGrade}>
+          <Label>{CLASSROOM_FIELD_LABELS.grade}</Label>
+        <Select value={selectedGrade} disabled={studentFilterActive} onValueChange={setSelectedGrade}>
           <SelectTrigger>
-            <SelectValue placeholder="Todos los grados" />
+            <SelectValue placeholder={CLASSROOM_FIELD_LABELS.allGrades} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todos los grados</SelectItem>
-            <SelectItem value="1ro">1ro</SelectItem>
-            <SelectItem value="2do">2do</SelectItem>
-            <SelectItem value="3ro">3ro</SelectItem>
-            <SelectItem value="4to">4to</SelectItem>
-            <SelectItem value="5to">5to</SelectItem>
-            <SelectItem value="6to">6to</SelectItem>
+            <SelectItem value="all">{CLASSROOM_FIELD_LABELS.allGrades}</SelectItem>
+            {CLASSROOM_GRADES.map((grade) => (
+              <SelectItem key={grade} value={grade}>
+                {grade}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         </div>
@@ -420,25 +499,26 @@ export const Reports = () => {
       <div className="app-kpi-grid">
         <StaffKpiStat
           label="Total incidencias"
-          value={stats.totalIncidents}
+          value={viewStats?.totalIncidents ?? 0}
           icon={TrendingUp}
           tone="primary"
         />
         <StaffKpiStat
           label="Estudiantes"
-          value={stats.studentsWithIncidents}
+          value={viewStats?.studentsWithIncidents ?? 0}
+          hint={selectedStudent?.fullName}
           icon={Users}
           tone="accent"
         />
         <StaffKpiStat
           label="Nivel promedio"
-          value={stats.averageReincidenceLevel.toFixed(1)}
+          value={(viewStats?.averageReincidenceLevel ?? 0).toFixed(1)}
           icon={AlertTriangle}
           tone="warning"
         />
         <StaffKpiStat
           label="Casos críticos"
-          value={stats.levelDistribution.level3 + stats.levelDistribution.level4}
+          value={(viewStats?.levelDistribution.level3 ?? 0) + (viewStats?.levelDistribution.level4 ?? 0)}
           icon={AlertTriangle}
           tone="secondary"
         />
@@ -561,7 +641,7 @@ export const Reports = () => {
                     <div
                       className="h-3 rounded-full transition-all duration-500 group-hover:shadow-lg"
                       style={{
-                        width: `${stats.totalIncidents > 0 ? (item.count / stats.totalIncidents) * 100 : 0}%`,
+                        width: `${(viewStats?.totalIncidents ?? 0) > 0 ? (item.count / (viewStats?.totalIncidents ?? 1)) * 100 : 0}%`,
                         background:
                           item.severity === 'low'
                             ? 'linear-gradient(90deg, #10b981, #059669)'
@@ -582,13 +662,13 @@ export const Reports = () => {
             <CardTitle className="app-section-title">Faltas Más Frecuentes</CardTitle>
           </CardHeader>
             <CardContent className="pt-6">
-            {stats.topFaults.length === 0 ? (
+            {(viewStats?.topFaults.length ?? 0) === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 No hay datos disponibles
               </div>
             ) : (
                 <div className="space-y-5">
-                  {stats.topFaults.map((fault, index) => {
+                  {(viewStats?.topFaults ?? []).map((fault, index) => {
                     const colors = [
                       'bg-blue-500',
                       'bg-purple-500',
@@ -610,15 +690,15 @@ export const Reports = () => {
                             <div
                               className={`${colors[index % colors.length]} h-3 rounded-full transition-all duration-500 group-hover:shadow-lg`}
                               style={{ 
-                                width: `${stats.topFaults.length > 0 && stats.topFaults[0].count > 0 
-                                  ? (fault.count / stats.topFaults[0].count) * 100 
+                                width: `${(viewStats?.topFaults.length ?? 0) > 0 && (viewStats?.topFaults[0].count ?? 0) > 0 
+                                  ? (fault.count / (viewStats?.topFaults[0].count ?? 1)) * 100 
                                   : 0}%` 
                               }}
                             />
                           </div>
                         </div>
                         <div className="text-sm font-semibold text-gray-500 min-w-[45px] text-right">
-                          {stats.totalIncidents > 0 ? ((fault.count / stats.totalIncidents) * 100).toFixed(1) : 0}%
+                          {(viewStats?.totalIncidents ?? 0) > 0 ? ((fault.count / (viewStats?.totalIncidents ?? 1)) * 100).toFixed(1) : 0}%
                         </div>
                       </div>
                     );

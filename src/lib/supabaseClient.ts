@@ -12,6 +12,11 @@ if (!import.meta.env.VITE_SUPABASE_URL && import.meta.env.PROD) {
   console.warn('[SIE] VITE_SUPABASE_URL no definida; usando valor por defecto del proyecto.');
 }
 
+if (import.meta.env.DEV) {
+  const host = supabaseUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  console.info(`[SIE] Supabase: ${host}`);
+}
+
 /**
  * Timeout universal por petición: si una petición a Supabase se queda colgada
  * (red lenta, cold-start de Postgres), se cancela para que React Query pueda

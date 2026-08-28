@@ -68,6 +68,7 @@ export const NOINDEX_PREFIXES = [
   '/faults',
   '/reports',
   '/attendance-report',
+  '/integral-report',
   '/audit',
   '/system-config',
   '/arrival-control',

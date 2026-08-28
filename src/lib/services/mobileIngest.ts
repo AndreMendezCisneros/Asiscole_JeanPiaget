@@ -151,3 +151,84 @@ export function buildPensionIngestBody(
     },
   });
 }
+
+export type CitaIngestAlcance = 'individual' | 'apafa' | 'piso' | 'salon';
+
+export function citaAlcanceFromMeetingTipo(
+  tipo: 'individual' | 'all' | 'grade' | 'section' | 'students',
+): CitaIngestAlcance {
+  if (tipo === 'all') return 'apafa';
+  if (tipo === 'grade') return 'piso';
+  if (tipo === 'section') return 'salon';
+  return 'individual';
+}
+
+function formatCitaFecha(fecha: string): string {
+  const [y, m, d] = fecha.slice(0, 10).split('-');
+  if (!d || !m || !y) return fecha;
+  return `${d}/${m}/${y}`;
+}
+
+export function buildCitaTextoLibre(
+  student: Student,
+  input: {
+    motivo: string;
+    fecha: string;
+    hora: string;
+    alcance: CitaIngestAlcance;
+  },
+): string {
+  const fechaTxt = formatCitaFecha(input.fecha);
+  const horaTxt = input.hora.slice(0, 5);
+  const motivo = input.motivo.trim();
+  const cierre = ' Revise el detalle en la aplicación Asiscole.';
+  if (input.alcance === 'apafa') {
+    return (
+      `Se convoca a junta de padres (APAFA) el ${fechaTxt} a las ${horaTxt}. ` +
+      `Motivo: ${motivo}. Estudiante: ${student.fullName}.${cierre}`
+    );
+  }
+  if (input.alcance === 'piso') {
+    return (
+      `Se convoca a los padres del grado ${student.grade} (${student.level}) el ${fechaTxt} a las ${horaTxt}. ` +
+      `Motivo: ${motivo}. Estudiante: ${student.fullName}.${cierre}`
+    );
+  }
+  if (input.alcance === 'salon') {
+    return (
+      `Se convoca a los padres de la sección ${student.section}, grado ${student.grade}, el ${fechaTxt} a las ${horaTxt}. ` +
+      `Motivo: ${motivo}. Estudiante: ${student.fullName}.${cierre}`
+    );
+  }
+  return (
+    `Se citó a los padres de ${student.fullName} el ${fechaTxt} a las ${horaTxt}. ` +
+    `Motivo: ${motivo}.${cierre}`
+  );
+}
+
+export function buildCitaIngestBody(
+  tenantId: string,
+  student: Student,
+  input: {
+    citaId: number;
+    motivo: string;
+    fecha: string;
+    hora: string;
+    alcance: CitaIngestAlcance;
+  },
+): MobileIngestEventBody {
+  return buildMobileIngestBody({
+    tenantId,
+    tipo: 'aviso',
+    student,
+    idRegistro: input.citaId,
+    payloadExtra: {
+      contexto: 'cita',
+      fecha: input.fecha.slice(0, 10),
+      hora: input.hora.slice(0, 5),
+      motivo: input.motivo.trim(),
+      alcance: input.alcance,
+      texto_libre: buildCitaTextoLibre(student, input),
+    },
+  });
+}

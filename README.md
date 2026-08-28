@@ -1,73 +1,105 @@
-# Welcome to your Lovable project
+# SIE Asiscole — Colegio Jean Piaget
 
-## Project info
+Sistema de Incidencias y Asistencia Escolar (SIE) para el **Colegio Jean Piaget**. Frontend React + Vite; backend **Supabase** (Postgres, Storage, RPC) y canal móvil vía `/canal-api` en el VPS.
 
-**URL**: https://lovable.dev/projects/f5c03d69-21c3-4982-968f-ef7adeaf7fc4
+**Producción:** [jeanpiaget.asiscole.com](https://jeanpiaget.asiscole.com/)
 
-## How can I edit this code?
+## Stack
 
-There are several ways of editing your application.
+- Vite 5, React 18, TypeScript
+- Tailwind CSS, shadcn/ui, Radix
+- TanStack Query, React Router
+- Supabase JS client
+- Vitest (tests unitarios)
 
-**Use Lovable**
+## Estructura del repositorio
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/f5c03d69-21c3-4982-968f-ef7adeaf7fc4) and start prompting.
+```
+Asiscole_JeanPiaget/
+├── src/                 # Código de la aplicación (páginas, componentes, servicios)
+├── public/              # Assets estáticos y favicons
+├── database/sql/        # Scripts SQL por categoría (crear, actualizar, funciones, …)
+├── docs/                # Documentación (manual, configuración, integraciones)
+├── scripts/             # Herramientas Node/PowerShell (import, mantenimiento)
+├── canal/               # Backend canal móvil (referencia)
+├── worker/              # Worker Cloudflare (si aplica)
+├── .github/workflows/   # CI/CD (deploy VPS Jean Piaget)
+├── AGENTS.md            # Guía para agentes de Cursor
+└── .agents/skills/      # Skills del proyecto
+```
 
-Changes made via Lovable will be committed automatically to this repo.
+## Desarrollo local
 
-**Use your preferred IDE**
+### Requisitos
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+- Node.js 20+ (ver `.node-version`)
+- npm
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### Instalación
 
-Follow these steps:
+```bash
+git clone https://github.com/AndreMendezCisneros/Asiscole_JeanPiaget.git
+cd Asiscole_JeanPiaget
+npm install
+```
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### Variables de entorno
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+Copia `.env.example` a `.env.local` y completa los valores. En Jean Piaget el VPS guarda el build en `/opt/sie-jp/.env.build`.
 
-# Step 3: Install the necessary dependencies.
-npm i
+```env
+VITE_SUPABASE_URL=https://tu-proyecto.supabase.co
+VITE_SUPABASE_ANON_KEY=tu_anon_key
+VITE_APP_URL=http://localhost:8080
+VITE_SCHOOL_NAME=Colegio Jean Piaget
+VITE_TALLERES_ENABLED=true
+VITE_PENSIONES_ENABLED=true
+VITE_MOBILE_INGEST_ENABLED=true
+VITE_MOBILE_INGEST_URL=/canal-api
+VITE_MOBILE_INGEST_KEY=tu_clave_ingesta
+VITE_MOBILE_INGEST_TENANT=jean_piaget
+```
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+Para notificaciones al aplicativo en local, Vite proxifica `/canal-api` al VPS (ver `vite.config.ts`).
+
+### Arrancar
+
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Abre [http://localhost:8080](http://localhost:8080). En consola del navegador verás el host Supabase activo (`[SIE] Supabase: …`).
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Scripts npm útiles
 
-**Use GitHub Codespaces**
+| Comando | Descripción |
+|---------|-------------|
+| `npm run dev` | Servidor de desarrollo (puerto 8080) |
+| `npm run build` | Build de producción → `dist/` |
+| `npm run preview` | Previsualizar `dist/` |
+| `npm run test` | Vitest |
+| `npm run lint` | ESLint |
+| `npm run import:nomina` | Importar nómina de estudiantes |
+| `npm run upload:fotos` | Subir fotos de estudiantes a Storage |
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Base de datos
 
-## What technologies are used for this project?
+Los scripts SQL están en `database/sql/` (ver `database/README.md`). Las funciones RPC del frontend suelen requerir `database/sql/funciones/FUNCIONES_SQL_REQUERIDAS.sql` en Supabase.
 
-This project is built with:
+Documentación de configuración: `docs/configuracion/CONFIGURACION_BD.md`.
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Despliegue (VPS Hetzner)
 
-## How can I deploy this project?
+Rama `main` → workflow `.github/workflows/deploy-jeanpiaget.yml` sincroniza a `/opt/sie-jp/app` y publica en `/opt/sie-jp/dist`. Variables en `/opt/sie-jp/.env.build`. Caddy sirve `jeanpiaget.asiscole.com`.
 
-Simply open [Lovable](https://lovable.dev/projects/f5c03d69-21c3-4982-968f-ef7adeaf7fc4) and click on Share -> Publish.
+Despliegue alternativo en Cloudflare Workers: ver `AGENTS.md` y `wrangler.toml`.
 
-## Can I connect a custom domain to my Lovable project?
+## Documentación
 
-Yes, you can!
+- Índice general: [docs/README.md](docs/README.md)
+- Manual de usuario: [docs/manual/MANUAL_DE_USUARIO.md](docs/manual/MANUAL_DE_USUARIO.md)
+- Agentes Cursor: [AGENTS.md](AGENTS.md)
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## Licencia
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Proyecto privado — Colegio Jean Piaget / Asiscole.

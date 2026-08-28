@@ -27,6 +27,8 @@ interface ImportMetaEnv {
   readonly VITE_TALLERES_ENABLED?: string;
   /** Módulo pensiones (JP: true) */
   readonly VITE_PENSIONES_ENABLED?: string;
+  /** Módulo notas (academia). En colegio permanece apagado. */
+  readonly VITE_NOTAS_ENABLED?: string;
   readonly VITE_LOGIN_CARNET_SRC?: string;
 }
 

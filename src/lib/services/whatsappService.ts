@@ -2,6 +2,7 @@ import type { ArrivalRecord, FaultType, Incident, Student } from '@/types';
 import { toWhatsAppChatId, toWhatsAppPhone } from '@/lib/utils/phoneUtils';
 import {
   buildArrivalIngestBody,
+  buildCitaIngestBody,
   buildDepartureIngestBody,
   buildIncidentIngestBody,
   buildPensionIngestBody,
@@ -117,13 +118,16 @@ function randomBetween(min: number, max: number): number {
 }
 
 export function buildNotifyDedupKey(
-  kind: 'arrival' | 'departure' | 'incident' | 'pension',
+  kind: 'arrival' | 'departure' | 'incident' | 'pension' | 'cita',
   studentId: number,
   date: string,
   opts?: { tallerId?: string; incidentId?: number },
 ): string {
   if (kind === 'incident' && opts?.incidentId != null) {
     return `incident:${studentId}:${opts.incidentId}`;
+  }
+  if (kind === 'cita') {
+    return `cita:${studentId}:${date}`;
   }
   if (kind === 'pension') {
     return `pension:${studentId}:${date.slice(0, 7)}`;
@@ -936,6 +940,41 @@ export async function notifyParentPensionPending(
   return { ...result, chatId: toWhatsAppChatId(apoderadoPhone) || undefined };
 }
 
+/**
+ * Aviso de citación vía app móvil (canal / mobile ingest). Mismo patrón que pensión.
+ */
+export async function notifyParentCita(
+  student: Student,
+  input: {
+    citaId: number;
+    motivo: string;
+    fecha: string;
+    hora: string;
+    alcance: 'individual' | 'apafa' | 'piso' | 'salon';
+  },
+): Promise<{ ok: boolean; error: string | null; chatId?: string; skipped?: boolean }> {
+  if (!MOBILE_INGEST_ENABLED) {
+    return { ok: false, error: 'Notificaciones por aplicación no habilitadas' };
+  }
+
+  const apoderadoPhone = student.contactPhone?.trim() || student.emergencyPhone?.trim() || '';
+  const dedupKey = buildNotifyDedupKey('cita', student.id, String(input.citaId));
+
+  if (shouldSkipDuplicateNotify(dedupKey)) {
+    return {
+      ok: true,
+      error: null,
+      skipped: true,
+      chatId: toWhatsAppChatId(apoderadoPhone) || undefined,
+    };
+  }
+
+  const result = await sendViaMobileIngest(
+    buildCitaIngestBody(MOBILE_INGEST_TENANT, student, input),
+  );
+  return { ...result, chatId: toWhatsAppChatId(apoderadoPhone) || undefined };
+}
+
 async function notifyParentEvent(
   student: Student,
   record: ArrivalRecord,
@@ -1018,5 +1057,6 @@ export const whatsappService = {
   notifyParentDeparture,
   notifyParentIncident,
   notifyParentPensionPending,
+  notifyParentCita,
   buildPensionPendingMessage,
 };

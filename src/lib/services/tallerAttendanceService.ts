@@ -178,9 +178,53 @@ export async function fetchMonthForStudent(
   }
 }
 
+export async function fetchRangeForStudents(
+  studentIds: number[],
+  start: string,
+  end: string,
+): Promise<{ records: TallerAsistencia[]; error: string | null }> {
+  const uniqueIds = [...new Set(studentIds)].filter((id) => id > 0);
+  if (uniqueIds.length === 0) {
+    return { records: [], error: null };
+  }
+
+  try {
+    const allRows: TallerLlegadaRow[] = [];
+    const batchSize = 150;
+    for (let i = 0; i < uniqueIds.length; i += batchSize) {
+      const batch = uniqueIds.slice(i, i + batchSize);
+      const { data, error } = await supabase
+        .from('taller_llegadas')
+        .select(SELECT_COLS)
+        .in('id_estudiante', batch)
+        .gte('fecha', start)
+        .lte('fecha', end)
+        .order('fecha', { ascending: true });
+
+      if (error) {
+        console.warn('fetchRangeForStudents:', error.message);
+        return { records: [], error: error.message };
+      }
+      if (data?.length) {
+        allRows.push(...(data as TallerLlegadaRow[]));
+      }
+    }
+
+    return {
+      records: allRows.map((row) => mapTallerAsistenciaRow(row)),
+      error: null,
+    };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Error al cargar asistencias de tarde';
+    console.warn('fetchRangeForStudents:', message);
+    return { records: [], error: message };
+  }
+}
+
 export const tallerAttendanceService = {
   recordArrival,
   recordDeparture,
   fetchMonthForStudent,
+  fetchRangeForStudents,
   mapTallerAsistenciaRow,
 };
