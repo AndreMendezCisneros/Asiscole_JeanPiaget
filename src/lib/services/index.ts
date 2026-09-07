@@ -4,7 +4,7 @@
 export { authService } from './authService';
 export { studentsService } from './studentsService';
 export { faultsService } from './faultsService';
-export { incidentsService } from './incidentsService';
+export { incidentsService, fetchMonthIncidentsForStudent } from './incidentsService';
 export { evidenceService } from './evidenceService';
 export { commentsService } from './commentsService';
 export { dashboardService } from './dashboardService';

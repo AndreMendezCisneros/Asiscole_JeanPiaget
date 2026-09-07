@@ -3,6 +3,7 @@ import { Incident, EducationalLevel, EstadoIncidencia } from '@/types';
 import { fetchAllPages } from '@/lib/utils/supabasePagination';
 import { ensureSupabaseReady } from '@/lib/supabaseWarmup';
 import { isTalleresEnabled } from '@/config/features';
+import { getLimaMonthBounds, getMonthBounds } from '@/lib/utils/limaDateTime';
 import {
   buildIncidentSelect,
   isMissingTallerSchemaError,
@@ -607,4 +608,71 @@ export const incidentsService = {
       confirmadaAppAt: data.confirmada_app_en ?? null,
     };
   },
+
+  /**
+   * Incidencias de un mes para el calendario público de padres (RPC SECURITY DEFINER).
+   */
+  async fetchMonthIncidentsForStudent(
+    studentId: number,
+    year?: number,
+    month?: number,
+  ): Promise<Incident[]> {
+    return fetchMonthIncidentsForStudent(studentId, year, month);
+  },
 };
+
+type RpcPublicIncidentRow = {
+  id: number;
+  studentId: number;
+  date: string;
+  registeredAt: string;
+  faultName: string;
+  status: string;
+};
+
+export async function fetchMonthIncidentsForStudent(
+  studentId: number,
+  year?: number,
+  month?: number,
+): Promise<Incident[]> {
+  const bounds =
+    year != null && month != null ? getMonthBounds(year, month) : getLimaMonthBounds();
+  const y = year ?? bounds.year;
+  const m = month ?? bounds.month;
+
+  const { data, error } = await supabase.rpc('incidencias_mes_por_estudiante', {
+    p_student_id: studentId,
+    p_year: y,
+    p_month: m,
+  });
+
+  if (error) {
+    if (error.code !== 'PGRST202' && !error.message?.includes('does not exist')) {
+      console.warn('fetchMonthIncidentsForStudent:', error.message);
+    }
+    return [];
+  }
+
+  const rows = (Array.isArray(data) ? data : []) as RpcPublicIncidentRow[];
+  return rows.map((row) => ({
+    id: Number(row.id),
+    studentId: Number(row.studentId),
+    faultTypeId: 0,
+    faultType: {
+      id: 0,
+      name: row.faultName || 'Incidencia registrada',
+      description: null,
+      category: 'Conducta',
+      severity: 'Leve',
+      points: 0,
+      active: true,
+    },
+    registeredBy: 0,
+    registeredAt: row.registeredAt || `${row.date}T00:00:00`,
+    observations: null,
+    reincidenceLevel: 0,
+    hasEvidence: false,
+    evidenceCount: 0,
+    status: (row.status as EstadoIncidencia) || 'Activa',
+  }));
+}

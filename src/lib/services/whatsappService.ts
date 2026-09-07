@@ -2,9 +2,9 @@ import type { ArrivalRecord, FaultType, Incident, Student } from '@/types';
 import { toWhatsAppChatId, toWhatsAppPhone } from '@/lib/utils/phoneUtils';
 import {
   buildArrivalIngestBody,
-  buildCitaIngestBody,
   buildDepartureIngestBody,
   buildIncidentIngestBody,
+  buildNotaIngestBody,
   buildPensionIngestBody,
   type MobileIngestEventBody,
 } from '@/lib/services/mobileIngest';
@@ -35,11 +35,30 @@ function resolveMobileIngestEndpoint(): string {
   return `${base}/v0.1/ingesta/eventos`;
 }
 
+/**
+ * WPPConnect puede coexistir con la app (mobile-ingest):
+ * - DNIs en VITE_WPPCONNECT_STUDENT_DNIS → WhatsApp WPPConnect
+ * - resto → app Asiscole
+ * Si la lista está vacía y la app está activa → todo por app.
+ */
+const WPPCONNECT_FLAG = import.meta.env.VITE_WPPCONNECT_ENABLED === 'true';
+
+const WPPCONNECT_STUDENT_DNIS = new Set(
+  String(
+    import.meta.env.VITE_WPPCONNECT_STUDENT_DNIS ||
+      import.meta.env.VITE_OPENWA_STUDENT_DNIS ||
+      '',
+  )
+    .split(/[,;\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean),
+);
+
 /** WPPConnect Server — sesiones persistentes en VPS */
 const WPPCONNECT_ENABLED =
   !META_WA_ENABLED &&
-  !MOBILE_INGEST_ENABLED &&
-  import.meta.env.VITE_WPPCONNECT_ENABLED === 'true';
+  WPPCONNECT_FLAG &&
+  (!MOBILE_INGEST_ENABLED || WPPCONNECT_STUDENT_DNIS.size > 0);
 
 const WPPCONNECT_API_URL = (
   import.meta.env.VITE_WPPCONNECT_API_URL || '/wpp-api'
@@ -47,7 +66,8 @@ const WPPCONNECT_API_URL = (
 
 const WPPCONNECT_SESSION = import.meta.env.VITE_WPPCONNECT_SESSION || 'sie-chip-01';
 const WPPCONNECT_TOKEN = import.meta.env.VITE_WPPCONNECT_TOKEN || '';
-const WPPCONNECT_ROTATION = import.meta.env.VITE_WPPCONNECT_ROTATION === 'true';
+const WPPCONNECT_ROTATION =
+  import.meta.env.VITE_WPPCONNECT_ROTATION === 'true' && !MOBILE_INGEST_ENABLED;
 const WPPCONNECT_NOTIFY_URL = (
   import.meta.env.VITE_WPPCONNECT_NOTIFY_URL || '/wpp-notify'
 ).replace(/\/$/, '');
@@ -75,14 +95,34 @@ function closingVariants(): readonly string[] {
   ];
 }
 
-/** OpenWA — legacy */
+/** OpenWA — legacy (solo si WPPConnect no está activo). */
+const OPENWA_FLAG =
+  import.meta.env.VITE_OPENWA_ENABLED === 'true' ||
+  import.meta.env.VITE_WHATSAPP_ENABLED === 'true' ||
+  import.meta.env.VITE_WAHA_ENABLED === 'true';
+
 const OPENWA_ENABLED =
-  !META_WA_ENABLED &&
-  !MOBILE_INGEST_ENABLED &&
-  !WPPCONNECT_ENABLED &&
-  (import.meta.env.VITE_OPENWA_ENABLED === 'true' ||
-    import.meta.env.VITE_WHATSAPP_ENABLED === 'true' ||
-    import.meta.env.VITE_WAHA_ENABLED === 'true');
+  !META_WA_ENABLED && !WPPCONNECT_FLAG && !MOBILE_INGEST_ENABLED && OPENWA_FLAG;
+
+function studentInWaWhitelist(student: Student): boolean {
+  if (WPPCONNECT_STUDENT_DNIS.size === 0) return false;
+  const barcode = String(student.barcode || '').trim();
+  const id = String(student.id || '').trim();
+  return (
+    (barcode.length > 0 && WPPCONNECT_STUDENT_DNIS.has(barcode)) ||
+    (id.length > 0 && WPPCONNECT_STUDENT_DNIS.has(id))
+  );
+}
+
+/** true = avisar por WPPConnect (lista corta); false = app u otro proveedor */
+function shouldNotifyViaWppConnect(student: Student): boolean {
+  return Boolean(WPPCONNECT_FLAG && studentInWaWhitelist(student));
+}
+
+/** @deprecated alias — la lista corta ahora usa WPPConnect */
+function shouldNotifyViaOpenwa(student: Student): boolean {
+  return shouldNotifyViaWppConnect(student);
+}
 
 const WHATSAPP_ENABLED =
   META_WA_ENABLED || MOBILE_INGEST_ENABLED || WPPCONNECT_ENABLED || OPENWA_ENABLED;
@@ -118,7 +158,7 @@ function randomBetween(min: number, max: number): number {
 }
 
 export function buildNotifyDedupKey(
-  kind: 'arrival' | 'departure' | 'incident' | 'pension' | 'cita',
+  kind: 'arrival' | 'departure' | 'incident' | 'pension' | 'nota',
   studentId: number,
   date: string,
   opts?: { tallerId?: string; incidentId?: number },
@@ -126,11 +166,11 @@ export function buildNotifyDedupKey(
   if (kind === 'incident' && opts?.incidentId != null) {
     return `incident:${studentId}:${opts.incidentId}`;
   }
-  if (kind === 'cita') {
-    return `cita:${studentId}:${date}`;
-  }
   if (kind === 'pension') {
     return `pension:${studentId}:${date.slice(0, 7)}`;
+  }
+  if (kind === 'nota') {
+    return `nota:${studentId}:${date}`;
   }
   if (opts?.tallerId) {
     return `taller:${opts.tallerId}:${kind}:${studentId}:${date.slice(0, 10)}`;
@@ -160,15 +200,6 @@ function getParentPortalLink(): string {
   return base ? `${base}/portal-padres` : '/portal-padres';
 }
 
-function getStudentAttendanceLink(student: Student, record: ArrivalRecord): string | null {
-  const base = getAppBaseUrl();
-  if (!base) return null;
-  const dni = student.barcode?.trim();
-  if (dni) return `${base}/llegada/dni/${encodeURIComponent(dni)}`;
-  if (record.id) return `${base}/llegada/${record.id}`;
-  return null;
-}
-
 function formatStudentAcademicLines(student: Student): string[] {
   const lines: string[] = [];
   if (student.level) lines.push(`*Nivel:* ${student.level}`);
@@ -193,26 +224,6 @@ function formatHoraWithSeconds(arrivalTime: string | undefined): string {
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
 }
 
-function formatApoderadoPhoneDisplay(phone: string): string {
-  const digits = toWhatsAppPhone(phone);
-  if (!digits) return phone.trim();
-  if (digits.startsWith('51') && digits.length === 11) {
-    const local = digits.slice(2);
-    return `+51 ${local.slice(0, 3)} ${local.slice(3, 6)} ${local.slice(6)}`;
-  }
-  return `+${digits}`;
-}
-
-/** Primer mensaje: el número del apoderado (para que te llegue a tu WhatsApp). */
-function buildApoderadoPhoneMessage(apoderadoPhone: string, student: Student): string {
-  return [
-    '*Teléfono del apoderado*',
-    formatApoderadoPhoneDisplay(apoderadoPhone),
-    '',
-    `Estudiante: ${student.fullName}`,
-  ].join('\n');
-}
-
 export function buildArrivalMessage(
   student: Student,
   record: ArrivalRecord,
@@ -228,9 +239,8 @@ export function buildArrivalMessage(
   const greeting = GREETING_VARIANTS[randomBetween(0, GREETING_VARIANTS.length - 1)];
   const closings = closingVariants();
   const closing = closings[randomBetween(0, closings.length - 1)];
-  const attendanceLink = getStudentAttendanceLink(student, record);
-  const portalLink = getParentPortalLink();
   const isTaller = Boolean(opts?.tallerId || opts?.tallerNombre);
+  const tallerLine = formatTallerLine(opts);
 
   if (isTaller) {
     return [
@@ -240,33 +250,30 @@ export function buildArrivalMessage(
       '',
       `*Estudiante:* ${student.fullName}`,
       ...formatStudentAcademicLines(student),
+      tallerLine,
       `*Fecha:* ${fecha}`,
       `*Hora:* ${hora}`,
       '',
       `${student.fullName} llegó a su taller a las ${hora}.`,
       '',
-      portalLink ? `👨‍👩‍👧 *Portal de padres:*\n${portalLink}` : '',
-      '',
       closing,
     ]
       .filter((line) => line !== '')
-      .join('\n');
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   }
 
   return [
     greeting,
     '',
-    `🏫 *Registro de llegada — ${SCHOOL_NAME}*`,
+    `🏫 *Llegada — ${SCHOOL_NAME}*`,
     '',
     `*Estudiante:* ${student.fullName}`,
     ...formatStudentAcademicLines(student),
-    formatTallerLine(opts),
     `*Fecha:* ${fecha}`,
     `*Hora:* ${hora}`,
     `*Estado:* ${record.status || 'Registrado'}`,
-    '',
-    attendanceLink ? `📋 *Ver asistencia de hoy:*\n${attendanceLink}` : '',
-    portalLink ? `👨‍👩‍👧 *Portal de padres:*\n${portalLink}` : '',
     '',
     closing,
   ]
@@ -276,13 +283,14 @@ export function buildArrivalMessage(
     .trim();
 }
 
+/** Solo el mensaje al apoderado (sin prefijo del número). */
 function buildNotifyMessages(
   student: Student,
   record: ArrivalRecord,
-  apoderadoPhone: string,
+  _apoderadoPhone: string,
   opts?: NotifyOpts,
 ): string[] {
-  return [buildApoderadoPhoneMessage(apoderadoPhone, student), buildArrivalMessage(student, record, opts)];
+  return [buildArrivalMessage(student, record, opts)];
 }
 
 export function buildDepartureMessage(
@@ -300,10 +308,9 @@ export function buildDepartureMessage(
   const greeting = GREETING_VARIANTS[randomBetween(0, GREETING_VARIANTS.length - 1)];
   const closings = closingVariants();
   const closing = closings[randomBetween(0, closings.length - 1)];
-  const attendanceLink = getStudentAttendanceLink(student, record);
-  const portalLink = getParentPortalLink();
   const tipo = record.departureType || 'Normal';
   const isTaller = Boolean(opts?.tallerId || opts?.tallerNombre);
+  const tallerLine = formatTallerLine(opts);
 
   if (isTaller) {
     return [
@@ -313,33 +320,30 @@ export function buildDepartureMessage(
       '',
       `*Estudiante:* ${student.fullName}`,
       ...formatStudentAcademicLines(student),
+      tallerLine,
       `*Fecha:* ${fecha}`,
       `*Hora de salida:* ${hora}`,
       '',
       `${student.fullName} salió de su taller a las ${hora}.`,
       '',
-      portalLink ? `👨‍👩‍👧 *Portal de padres:*\n${portalLink}` : '',
-      '',
       closing,
     ]
       .filter((line) => line !== '')
-      .join('\n');
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   }
 
   return [
     greeting,
     '',
-    `🚪 *Registro de salida — ${SCHOOL_NAME}*`,
+    `🚪 *Salida — ${SCHOOL_NAME}*`,
     '',
     `*Estudiante:* ${student.fullName}`,
     ...formatStudentAcademicLines(student),
-    formatTallerLine(opts),
     `*Fecha:* ${fecha}`,
     `*Hora de salida:* ${hora}`,
     `*Tipo:* ${tipo}`,
-    '',
-    attendanceLink ? `📋 *Ver asistencia de hoy:*\n${attendanceLink}` : '',
-    portalLink ? `👨‍👩‍👧 *Portal de padres:*\n${portalLink}` : '',
     '',
     closing,
   ]
@@ -352,13 +356,10 @@ export function buildDepartureMessage(
 function buildDepartureNotifyMessages(
   student: Student,
   record: ArrivalRecord,
-  apoderadoPhone: string,
+  _apoderadoPhone: string,
   opts?: NotifyOpts,
 ): string[] {
-  return [
-    buildApoderadoPhoneMessage(apoderadoPhone, student),
-    buildDepartureMessage(student, record, opts),
-  ];
+  return [buildDepartureMessage(student, record, opts)];
 }
 
 /** Respaldo si la falta no tiene recomendacion ni descripcion. */
@@ -434,29 +435,27 @@ export function buildIncidentMessage(
   const closings = closingVariants();
   const closing = closings[randomBetween(0, closings.length - 1)];
   const { fecha, hora } = formatIncidentDateTime(incident.registeredAt);
-  const portalLink = getParentPortalLink();
   const recommendation = resolveFaultRecommendation(fault);
   const obs = incident.observations?.trim();
+  const reincidencia = incident.reincidenceLevel ?? 0;
 
   return [
     greeting,
     '',
-    `⚠️ *Registro de incidencia — ${SCHOOL_NAME}*`,
+    `⚠️ *Incidencia — ${SCHOOL_NAME}*`,
     '',
     `*Estudiante:* ${student.fullName}`,
     ...formatStudentAcademicLines(student),
     formatTallerLine(opts),
     `*Fecha:* ${fecha}`,
     `*Hora:* ${hora}`,
-    `*Falta:* ${fault.name}`,
+    `*Motivo:* ${fault.name}`,
     `*Categoría:* ${fault.category}`,
     `*Gravedad:* ${fault.severity}`,
-    `*Nivel de reincidencia:* ${incident.reincidenceLevel ?? 0}`,
+    reincidencia > 0 ? `*Reincidencia:* nivel ${reincidencia}` : '',
     obs ? `*Observaciones:* ${obs}` : '',
     '',
     `*Recomendación:*\n${recommendation}`,
-    '',
-    portalLink ? `👨‍👩‍👧 *Portal de padres:*\n${portalLink}` : '',
     '',
     closing,
   ]
@@ -470,13 +469,10 @@ function buildIncidentNotifyMessages(
   student: Student,
   incident: Incident,
   fault: FaultType,
-  apoderadoPhone: string,
+  _apoderadoPhone: string,
   opts?: NotifyOpts,
 ): string[] {
-  return [
-    buildApoderadoPhoneMessage(apoderadoPhone, student),
-    buildIncidentMessage(student, incident, fault, opts),
-  ];
+  return [buildIncidentMessage(student, incident, fault, opts)];
 }
 
 function looksLikeHtmlResponse(raw: string): boolean {
@@ -779,11 +775,8 @@ async function sendViaOpenwa(chatId: string, text: string): Promise<{ ok: boolea
 }
 
 /**
- * Tras registrar llegada: el chip se autoenvía (a su propio WhatsApp)
- * 1) el número del apoderado (BD),
- * 2) el mensaje personalizado de llegada.
- * Con cola WPPConnect, el mapa de 6 números/chip elige qué sesión; el destino es el SIM del chip.
- * No lanza excepción: el escaneo no debe fallar si el proveedor no responde.
+ * Tras registrar llegada: un solo mensaje al apoderado (sin prefijo del número).
+ * Con cola WPPConnect, el mapa de chips elige sesión; destino = SIM del chip.
  */
 export async function notifyParentArrival(
   student: Student,
@@ -794,8 +787,7 @@ export async function notifyParentArrival(
 }
 
 /**
- * Tras registrar salida: mismo flujo que llegada (autoenvío del chip).
- * 1) número del apoderado, 2) mensaje personalizado de salida.
+ * Tras registrar salida: un solo mensaje al apoderado.
  */
 export async function notifyParentDeparture(
   student: Student,
@@ -806,8 +798,7 @@ export async function notifyParentDeparture(
 }
 
 /**
- * Tras registrar incidencia: el chip se autoenvía
- * 1) número del apoderado, 2) mensaje personalizado con falta + recomendación.
+ * Tras registrar incidencia: un solo mensaje (motivo + recomendación).
  */
 export async function notifyParentIncident(
   student: Student,
@@ -836,6 +827,25 @@ export async function notifyParentIncident(
       skipped: true,
       chatId: toWhatsAppChatId(apoderadoPhone) || undefined,
     };
+  }
+
+  if (shouldNotifyViaWppConnect(student)) {
+    const wppPhone = toWhatsAppPhone(apoderadoPhone);
+    const chatId = toWhatsAppChatId(apoderadoPhone);
+    if (!wppPhone || !chatId) {
+      return { ok: false, error: 'Teléfono de contacto no válido para WhatsApp' };
+    }
+    const messages = buildIncidentNotifyMessages(student, incident, fault, apoderadoPhone, opts);
+    const stubRecord: Partial<ArrivalRecord> = {
+      id: incident.id,
+      date: (incident.registeredAt || '').slice(0, 10),
+      status: fault.name,
+    };
+    const result =
+      WPPCONNECT_ROTATION
+        ? await sendViaNotifyQueue(wppPhone, student, stubRecord, messages, 'incident')
+        : await sendTextsViaWppConnect(wppPhone, messages);
+    return { ...result, chatId };
   }
 
   if (MOBILE_INGEST_ENABLED) {
@@ -941,16 +951,16 @@ export async function notifyParentPensionPending(
 }
 
 /**
- * Aviso de citación vía app móvil (canal / mobile ingest). Mismo patrón que pensión.
+ * Aviso de nota semanal vía app móvil (canal / mobile ingest). No usa WhatsApp.
  */
-export async function notifyParentCita(
+export async function notifyParentNota(
   student: Student,
   input: {
-    citaId: number;
-    motivo: string;
-    fecha: string;
-    hora: string;
-    alcance: 'individual' | 'apafa' | 'piso' | 'salon';
+    semanaCodigo: string;
+    semanaEtiqueta: string;
+    nota: number;
+    carreraNombre?: string | null;
+    areaNombre?: string | null;
   },
 ): Promise<{ ok: boolean; error: string | null; chatId?: string; skipped?: boolean }> {
   if (!MOBILE_INGEST_ENABLED) {
@@ -958,7 +968,11 @@ export async function notifyParentCita(
   }
 
   const apoderadoPhone = student.contactPhone?.trim() || student.emergencyPhone?.trim() || '';
-  const dedupKey = buildNotifyDedupKey('cita', student.id, String(input.citaId));
+  const dedupKey = buildNotifyDedupKey(
+    'nota',
+    student.id,
+    `${input.semanaCodigo}:${input.nota}`,
+  );
 
   if (shouldSkipDuplicateNotify(dedupKey)) {
     return {
@@ -970,7 +984,7 @@ export async function notifyParentCita(
   }
 
   const result = await sendViaMobileIngest(
-    buildCitaIngestBody(MOBILE_INGEST_TENANT, student, input),
+    buildNotaIngestBody(MOBILE_INGEST_TENANT, student, input),
   );
   return { ...result, chatId: toWhatsAppChatId(apoderadoPhone) || undefined };
 }
@@ -1001,6 +1015,23 @@ async function notifyParentEvent(
       skipped: true,
       chatId: toWhatsAppChatId(apoderadoPhone) || undefined,
     };
+  }
+
+  if (shouldNotifyViaWppConnect(student)) {
+    const wppPhone = toWhatsAppPhone(apoderadoPhone);
+    const chatId = toWhatsAppChatId(apoderadoPhone);
+    if (!wppPhone || !chatId) {
+      return { ok: false, error: 'Teléfono de contacto no válido para WhatsApp' };
+    }
+    const messages =
+      kind === 'departure'
+        ? buildDepartureNotifyMessages(student, record, apoderadoPhone, opts)
+        : buildNotifyMessages(student, record, apoderadoPhone, opts);
+    const result =
+      WPPCONNECT_ROTATION
+        ? await sendViaNotifyQueue(wppPhone, student, record, messages, kind)
+        : await sendTextsViaWppConnect(wppPhone, messages);
+    return { ...result, chatId };
   }
 
   if (MOBILE_INGEST_ENABLED) {
@@ -1041,22 +1072,30 @@ export const whatsappService = {
   isEnabled: () => WHATSAPP_ENABLED,
   /** Push/aviso por backend de la app móvil (canal), no WhatsApp. */
   isAppNotificationsEnabled: () => MOBILE_INGEST_ENABLED,
+  /** Lista corta de DNIs → WPPConnect; el resto → app. */
+  isWppWhitelistEnabled: () => WPPCONNECT_FLAG && WPPCONNECT_STUDENT_DNIS.size > 0,
+  usesWppForStudent: (student: Student) => shouldNotifyViaWppConnect(student),
+  /** @deprecated usar usesWppForStudent */
+  usesOpenwaForStudent: (student: Student) => shouldNotifyViaWppConnect(student),
+  isOpenwaWhitelistEnabled: () => WPPCONNECT_FLAG && WPPCONNECT_STUDENT_DNIS.size > 0,
   provider: () =>
-    MOBILE_INGEST_ENABLED
-      ? 'mobile-ingest'
-      : META_WA_ENABLED
-        ? 'meta'
-        : WPPCONNECT_ENABLED && WPPCONNECT_ROTATION
-          ? 'wppconnect-queue'
-          : WPPCONNECT_ENABLED
-            ? 'wppconnect'
-            : OPENWA_ENABLED
-              ? 'openwa'
-              : 'none',
+    WPPCONNECT_FLAG && WPPCONNECT_STUDENT_DNIS.size > 0 && MOBILE_INGEST_ENABLED
+      ? 'wppconnect+mobile-ingest'
+      : MOBILE_INGEST_ENABLED
+        ? 'mobile-ingest'
+        : META_WA_ENABLED
+          ? 'meta'
+          : WPPCONNECT_ENABLED && WPPCONNECT_ROTATION
+            ? 'wppconnect-queue'
+            : WPPCONNECT_FLAG
+              ? 'wppconnect'
+              : OPENWA_ENABLED
+                ? 'openwa'
+                : 'none',
   notifyParentArrival,
   notifyParentDeparture,
   notifyParentIncident,
   notifyParentPensionPending,
-  notifyParentCita,
+  notifyParentNota,
   buildPensionPendingMessage,
 };

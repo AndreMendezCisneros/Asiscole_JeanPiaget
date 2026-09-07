@@ -11,7 +11,19 @@ export type TallerPhase = 'llegada' | 'salida';
 export type ClasePhase = TallerPhase;
 export type TallerScanAction = 'arrival' | 'departure' | 'complete';
 
-const TALLER_NOTIFY = { tallerId: 'taller', tallerNombre: 'Taller' } as const;
+const TALLER_NOTIFY_FALLBACK = { tallerId: 'taller', tallerNombre: 'Taller' } as const;
+
+function tallerNotifyOpts(record: TallerAsistencia | null | undefined) {
+  const nombre = record?.tallerNombre?.trim();
+  const id = record?.tallerId?.trim();
+  if (nombre || id) {
+    return {
+      tallerId: id || 'taller',
+      tallerNombre: nombre || 'Taller',
+    };
+  }
+  return TALLER_NOTIFY_FALLBACK;
+}
 
 type TallerScanSuccess = {
   ok: true;
@@ -127,7 +139,7 @@ export function useTallerScan() {
         const record = mapTallerRecordToArrivalRecord(updated);
 
         if (whatsappService.isEnabled()) {
-          void whatsappService.notifyParentDeparture(student, record, TALLER_NOTIFY);
+          void whatsappService.notifyParentDeparture(student, record, tallerNotifyOpts(updated));
         }
 
         return {
@@ -164,7 +176,7 @@ export function useTallerScan() {
       const displayTime = arrivalRecord.arrivalTime ?? '—:—';
 
       if (whatsappService.isEnabled()) {
-        void whatsappService.notifyParentArrival(student, record, TALLER_NOTIFY);
+        void whatsappService.notifyParentArrival(student, record, tallerNotifyOpts(arrivalRecord));
       }
 
       return {

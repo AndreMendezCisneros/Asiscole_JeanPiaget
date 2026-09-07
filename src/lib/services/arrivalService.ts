@@ -215,24 +215,28 @@ export type CreateArrivalResult = {
 };
 
 const ARRIVAL_ROW_SELECT =
-  'id_registro, id_estudiante, fecha, hora_llegada, estado, fecha_creacion, registrado_por';
+  'id_registro, id_estudiante, fecha, hora_llegada, hora_salida, tipo_salida, estado, fecha_creacion, registrado_por';
 
 /** Evita carrera solo para el mismo estudiante; distintos escanean en paralelo. */
 const arrivalCreateLocks = new Map<number, Promise<CreateArrivalResult>>();
+
+function trimTime(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return value.length > 5 ? value.substring(0, 5) : value;
+}
 
 function mapArrivalRow(data: {
   id_registro: number;
   id_estudiante: number;
   fecha: string;
   hora_llegada: string;
+  hora_salida?: string | null;
+  tipo_salida?: string | null;
   estado: string;
   fecha_creacion: string;
   registrado_por: number | null;
 }): ArrivalRecord {
-  let arrivalTime = data.hora_llegada;
-  if (arrivalTime.length > 5) {
-    arrivalTime = arrivalTime.substring(0, 5);
-  }
+  const arrivalTime = trimTime(data.hora_llegada) || data.hora_llegada;
 
   return {
     id: data.id_registro,
@@ -242,6 +246,8 @@ function mapArrivalRow(data: {
     status: data.estado as ArrivalRecord['status'],
     registeredBy: data.registrado_por ?? 0,
     createdAt: data.fecha_creacion,
+    departureTime: trimTime(data.hora_salida),
+    departureType: (data.tipo_salida as ArrivalRecord['departureType']) ?? null,
   };
 }
 
@@ -1208,6 +1214,7 @@ export async function fetchMonthArrivalsForStudent(
   if (!rpcError && rpcData != null) {
     const rows = Array.isArray(rpcData) ? rpcData : [];
     rawRecords = rows.map((row) => mapRpcArrival(row as RpcArrivalRow));
+    rawRecords = await mergePublicDepartureTimes(rawRecords, studentId, y, m, bounds);
   } else {
     if (rpcError && rpcError.code !== 'PGRST202' && !rpcError.message?.includes('does not exist')) {
       console.warn('fetchMonthArrivalsForStudent rpc:', rpcError.message);
@@ -1216,7 +1223,7 @@ export async function fetchMonthArrivalsForStudent(
     const { start, end } = bounds;
     const { data, error } = await supabase
       .from('registros_llegada')
-      .select('id_registro, id_estudiante, fecha, hora_llegada, estado, fecha_creacion, registrado_por')
+      .select('id_registro, id_estudiante, fecha, hora_llegada, hora_salida, tipo_salida, estado, fecha_creacion, registrado_por')
       .eq('id_estudiante', studentId)
       .gte('fecha', start)
       .lte('fecha', end)
@@ -1246,6 +1253,10 @@ type RpcArrivalRow = {
   date: string;
   arrivalTime: string;
   status: string;
+  departureTime?: string | null;
+  hora_salida?: string | null;
+  departureType?: ArrivalRecord['departureType'];
+  tipo_salida?: ArrivalRecord['departureType'];
 };
 
 type RpcParentLookup = {
@@ -1264,15 +1275,86 @@ type RpcParentLookup = {
   recentArrivals?: RpcArrivalRow[];
 };
 
+type RpcDepartureRow = {
+  id?: number;
+  date?: string;
+  departureTime?: string | null;
+  departureType?: ArrivalRecord['departureType'];
+  hora_salida?: string | null;
+  tipo_salida?: ArrivalRecord['departureType'];
+};
+
+async function mergePublicDepartureTimes(
+  records: ArrivalRecord[],
+  studentId: number,
+  year: number,
+  month: number,
+  bounds: { start: string; end: string },
+): Promise<ArrivalRecord[]> {
+  if (records.length === 0 || records.every((record) => record.departureTime)) {
+    return records;
+  }
+
+  const { data: rpcSalidas } = await supabase.rpc('asistencia_salida_mes_por_estudiante', {
+    p_student_id: studentId,
+    p_year: year,
+    p_month: month,
+  });
+  const salidaRows = Array.isArray(rpcSalidas) ? (rpcSalidas as RpcDepartureRow[]) : [];
+
+  if (salidaRows.length === 0) {
+    const { data: extra } = await supabase
+      .from('registros_llegada')
+      .select('id_registro, fecha, hora_salida, tipo_salida')
+      .eq('id_estudiante', studentId)
+      .gte('fecha', bounds.start)
+      .lte('fecha', bounds.end);
+    if (extra?.length) {
+      const byId = new Map(extra.map((row) => [row.id_registro, row]));
+      const byDate = new Map(extra.map((row) => [String(row.fecha).slice(0, 10), row]));
+      return records.map((record) => {
+        const match = byId.get(record.id) ?? byDate.get(String(record.date).slice(0, 10));
+        if (!match) return record;
+        return {
+          ...record,
+          departureTime: record.departureTime ?? trimTime(match.hora_salida),
+          departureType:
+            record.departureType ?? (match.tipo_salida as ArrivalRecord['departureType']) ?? null,
+        };
+      });
+    }
+    return records;
+  }
+
+  const byId = new Map(salidaRows.filter((row) => row.id != null).map((row) => [row.id, row]));
+  const byDate = new Map(
+    salidaRows
+      .filter((row) => row.date)
+      .map((row) => [String(row.date).slice(0, 10), row] as const),
+  );
+
+  return records.map((record) => {
+    const match = byId.get(record.id) ?? byDate.get(String(record.date).slice(0, 10));
+    if (!match) return record;
+    return {
+      ...record,
+      departureTime: record.departureTime ?? trimTime(match.departureTime ?? match.hora_salida),
+      departureType: record.departureType ?? match.departureType ?? match.tipo_salida ?? null,
+    };
+  });
+}
+
 function mapRpcArrival(row: RpcArrivalRow): ArrivalRecord {
   return {
     id: row.id,
     studentId: row.studentId,
     date: row.date,
-    arrivalTime: row.arrivalTime,
+    arrivalTime: trimTime(row.arrivalTime) || row.arrivalTime,
     status: row.status as ArrivalRecord['status'],
     registeredBy: 0,
     createdAt: row.date,
+    departureTime: trimTime(row.departureTime ?? row.hora_salida),
+    departureType: row.departureType ?? row.tipo_salida ?? null,
   };
 }
 
@@ -1315,26 +1397,35 @@ async function getPublicInfoByDniRpc(dni: string): Promise<{
   };
 
   const limits = await fetchPublicArrivalLimits();
+  const recentArrivals = await fetchMonthArrivalsForStudent(
+    student.id,
+    undefined,
+    undefined,
+    student.level,
+  );
   const arrival = payload.arrivalToday
     ? (() => {
         const mapped = mapRpcArrival(payload.arrivalToday!);
+        const fromMonth = recentArrivals.find(
+          (row) => row.id === mapped.id || String(row.date).slice(0, 10) === String(mapped.date).slice(0, 10),
+        );
+        const withExit = {
+          ...mapped,
+          departureTime: mapped.departureTime ?? fromMonth?.departureTime ?? null,
+          departureType: mapped.departureType ?? fromMonth?.departureType ?? null,
+        };
         const status = resolveArrivalStatusForStudent(
-          mapped.arrivalTime,
+          withExit.arrivalTime,
           limits,
           student.level,
         );
-        return status === mapped.status ? mapped : { ...mapped, status };
+        return status === withExit.status ? withExit : { ...withExit, status };
       })()
     : null;
 
   return {
     arrival,
-    recentArrivals: await fetchMonthArrivalsForStudent(
-      student.id,
-      undefined,
-      undefined,
-      student.level,
-    ),
+    recentArrivals,
     student,
     error: null,
   };
@@ -1386,7 +1477,7 @@ export async function getPublicArrivalInfo(recordId: number): Promise<{
     const { data, error } = await supabase
       .from('registros_llegada')
       .select(`
-        id_registro, id_estudiante, fecha, hora_llegada, estado, fecha_creacion, registrado_por,
+        id_registro, id_estudiante, fecha, hora_llegada, hora_salida, tipo_salida, estado, fecha_creacion, registrado_por,
         estudiante:estudiantes!registros_llegada_id_estudiante_fkey(
           id_estudiante, nombre_completo, grado, seccion, nivel_educativo,
           foto_perfil, activo, codigo_barras, nombre_responsable, parentesco_responsable,

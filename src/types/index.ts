@@ -242,6 +242,8 @@ export interface Incident {
   /** El apoderado confirmó la incidencia en la página Incidencias de la app. */
   confirmadaApp?: boolean;
   confirmadaAppAt?: string | null;
+  tallerId?: string | null;
+  tallerNombre?: string | null;
 }
 
 export interface IncidentEvidence {
