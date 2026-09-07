@@ -11,13 +11,18 @@ export { dashboardService } from './dashboardService';
 export { arrivalService } from './arrivalService';
 export { auditService } from './auditService';
 export { configService } from './configService';
+export { holidaysService, FERIADOS_NACIONALES_PE_2026 } from './holidaysService';
+export type {
+  CalendarioNoLectivo,
+  CalendarioNoLectivoTipo,
+  CalendarioNoLectivoOrigen,
+} from './holidaysService';
 export { reincidenceConfigService } from './reincidenceConfigService';
 export { parentMeetingsService } from './parentMeetingsService';
 export { sessionService } from './sessionService';
 export { whatsappService } from './whatsappService';
 export { parentPortalService } from './parentPortalService';
 export { scheduleService } from './scheduleService';
-export { teachersService } from './teachersService';
+export { talleresService, mapTallerRow } from './talleresService';
 export { tallerAttendanceService, mapTallerAsistenciaRow } from './tallerAttendanceService';
 export { pensionesService } from './pensionesService';
-export { assembleIntegralBlocks } from './integralReportService';

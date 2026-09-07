@@ -2,10 +2,11 @@ import { Settings, Clock, CalendarRange } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { StaffKpiStat } from '@/components/staff';
 import { AttendanceSettingsCard } from '@/components/system-config/AttendanceSettingsCard';
+import { HolidaysSettingsCard } from '@/components/system-config/HolidaysSettingsCard';
 import { ReincidenceSettingsCard } from '@/components/system-config/ReincidenceSettingsCard';
 import { PensionesSettingsCard } from '@/components/system-config/PensionesSettingsCard';
-import { isPensionesEnabled } from '@/config/features';
 import { SYSTEM_SETTINGS } from '@/config/systemSettings';
+import { isPensionesEnabled } from '@/config/features';
 
 export const SystemConfig = () => {
   return (
@@ -14,7 +15,7 @@ export const SystemConfig = () => {
         icon={Settings}
         eyebrow="Administración"
         title="Configuración del Sistema"
-        description="Horarios de asistencia, reincidencia y pensiones que aplican a todo el colegio"
+        description="Horarios de asistencia, feriados, reincidencia y pensiones que aplican a todo el colegio"
         accent="secondary"
       />
 
@@ -36,6 +37,7 @@ export const SystemConfig = () => {
       </div>
 
       <AttendanceSettingsCard />
+      <HolidaysSettingsCard />
       <ReincidenceSettingsCard />
       {isPensionesEnabled() && <PensionesSettingsCard />}
     </div>

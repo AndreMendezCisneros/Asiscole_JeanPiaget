@@ -236,12 +236,8 @@ export interface Incident {
   annulledBy?: number | null;
   annulledAt?: string | null;
   annulmentReason?: string | null;
-  /** El apoderado abrió el aviso en la app (check azul / mensaje leído). */
-  revisadoApp?: boolean;
-  revisadoAppAt?: string | null;
-  /** El apoderado confirmó la incidencia en la página Incidencias de la app. */
-  confirmadaApp?: boolean;
-  confirmadaAppAt?: string | null;
+  tallerId?: string | null;
+  tallerNombre?: string | null;
 }
 
 export interface IncidentEvidence {
@@ -333,7 +329,7 @@ export interface RegistroLlegadaDB {
   id_estudiante: number;
   fecha: string;
   hora_llegada: string;
-  estado: 'A tiempo' | 'Tarde';
+  estado: 'A tiempo' | 'Tarde' | 'Falta';
   registrado_por: number | null;
   fecha_creacion: string;
   // Campos para control de salidas (nuevos)
@@ -364,7 +360,7 @@ export interface ArrivalRecord {
   student?: Student;
   date: string;
   arrivalTime: string;
-  status: 'A tiempo' | 'Tarde';
+  status: 'A tiempo' | 'Tarde' | 'Falta';
   registeredBy: number | null;
   registeredByUser?: User;
   createdAt: string;
@@ -374,11 +370,43 @@ export interface ArrivalRecord {
   departureType?: 'Normal' | 'Autorizada' | 'Sin registro' | null;
 }
 
+export interface Taller {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+  diaSemana: number[] | null; // 1=Lun … 7=Dom
+  horaInicio: string | null; // HH:mm
+  horaFin: string | null;
+  activo: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TallerInscrito {
+  id: string;
+  tallerId: string;
+  studentId: number;
+  activo: boolean;
+  student?: Student;
+}
+
+export interface TallerAsistencia {
+  id: number;
+  tallerId: string;
+  tallerNombre?: string;
+  studentId: number;
+  date: string;
+  arrivalTime: string | null;
+  departureTime: string | null;
+  arrivalStatus: 'A tiempo' | 'Tarde' | null;
+  departureType: 'Normal' | 'Autorizada' | 'Sin registro' | null;
+  registeredBy: number | null;
+}
+
 export interface MonthlyAttendanceDay {
   day: number;
   status: AttendanceStatus;
   arrivalTime?: string;
-  departureTime?: string;
 }
 
 export interface MonthlyAttendanceRow {
@@ -390,19 +418,6 @@ export interface MonthlyAttendanceRow {
     justified: number;
     unjustified: number;
   };
-}
-
-export interface TallerAsistencia {
-  id: number;
-  tallerId: string;
-  tallerNombre: string;
-  studentId: number;
-  date: string;
-  arrivalTime: string | null;
-  departureTime: string | null;
-  arrivalStatus: string | null;
-  departureType: 'Normal' | 'Autorizada' | 'Sin registro' | null;
-  registeredBy: number | null;
 }
 
 export interface AuditLog {

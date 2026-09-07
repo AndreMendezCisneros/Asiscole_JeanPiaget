@@ -1,18 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { arrivalService } from '@/lib/services';
-import type { ArrivalRecord, Student } from '@/types';
-import type { ArrivalLimitsByLevel } from '@/lib/utils/arrivalLimit';
-import { resolveArrivalLimitForLevel } from '@/lib/utils/arrivalLimit';
+import { arrivalService, holidaysService, incidentsService, tallerAttendanceService } from '@/lib/services';
+import { isTalleresEnabled } from '@/config/features';
+import type { ArrivalRecord, Incident, Student, TallerAsistencia } from '@/types';
 import { StudentPhoto } from '@/components/shared/StudentPhoto';
-import { getLimaMonthBounds, getLimaTodayDate } from '@/lib/utils/limaDateTime';
+import { getLimaMonthBounds, getLimaTodayDate, getMonthBounds } from '@/lib/utils/limaDateTime';
 import {
   buildMonthGrid,
   computeMonthMetrics,
   DAY_STYLES,
+  dayHasIncident,
+  dayHasTaller,
   dayDetailCopy,
+  formatClassAttendanceLines,
+  formatClassIncidentDayDetail,
+  formatTallerIncidentDayDetail,
   firstName,
+  formatTallerDayDetail,
   parseArrivalTime12h,
   resolveDayStatus,
   topStripGradient,
@@ -44,44 +49,51 @@ export function ParentAttendanceDashboard({
 }: ParentAttendanceDashboardProps) {
   const todayKey = getLimaTodayDate();
   const current = getLimaMonthBounds();
+  const talleresEnabled = isTalleresEnabled();
 
   const [viewYear, setViewYear] = useState(current.year);
   const [viewMonth, setViewMonth] = useState(current.month);
   const [monthArrivals, setMonthArrivals] = useState<ArrivalRecord[]>(initialMonthArrivals);
+  const [monthTallerAttendance, setMonthTallerAttendance] = useState<TallerAsistencia[]>([]);
+  const [monthClassIncidents, setMonthClassIncidents] = useState<Incident[]>([]);
+  const [monthTallerIncidents, setMonthTallerIncidents] = useState<Incident[]>([]);
+  const [holidayNames, setHolidayNames] = useState<Map<string, string>>(new Map());
   const [loadingMonth, setLoadingMonth] = useState(false);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [arrivalLimits, setArrivalLimits] = useState<ArrivalLimitsByLevel>({
-    general: '08:00',
-    primaria: '08:00',
-    secundaria: '08:00',
-  });
-
-  useEffect(() => {
-    void arrivalService.fetchPublicArrivalLimits().then(setArrivalLimits);
-  }, []);
-
-  const calendarCtx = useMemo(
-    () => ({ limits: arrivalLimits, level: student.level }),
-    [arrivalLimits, student.level],
-  );
-  const studentArrivalLimit = useMemo(
-    () => resolveArrivalLimitForLevel(arrivalLimits, student.level),
-    [arrivalLimits, student.level],
-  );
 
   const loadMonth = useCallback(
     async (year: number, month: number) => {
       setLoadingMonth(true);
-      const data = await arrivalService.fetchMonthArrivalsForStudent(
-        student.id,
-        year,
-        month,
-        student.level,
-      );
-      setMonthArrivals(data);
-      setLoadingMonth(false);
+      try {
+        const { start, end } = getMonthBounds(year, month);
+        const [arrivals, tallerResponse, incidentsResponse, holidaysResponse] = await Promise.all([
+          arrivalService.fetchMonthArrivalsForStudent(student.id, year, month),
+          talleresEnabled
+            ? tallerAttendanceService.fetchMonthForStudent(student.id, year, month)
+            : Promise.resolve<{ records: TallerAsistencia[]; error: string | null }>({
+                records: [],
+                error: null,
+              }),
+          incidentsService.getAll({
+            estudianteId: student.id,
+            fechaDesde: `${start}T00:00:00.000-05:00`,
+            fechaHasta: `${end}T23:59:59.999-05:00`,
+            fetchAll: true,
+          }),
+          holidaysService.listActiveInRange(start, end),
+        ]);
+
+        setMonthArrivals(arrivals);
+        setMonthTallerAttendance(tallerResponse.records);
+        const incidents = incidentsResponse.incidents;
+        setMonthClassIncidents(incidents.filter((incident) => !incident.tallerId));
+        setMonthTallerIncidents(incidents.filter((incident) => Boolean(incident.tallerId)));
+        setHolidayNames(new Map(holidaysResponse.items.map((h) => [h.fecha, h.nombre])));
+      } finally {
+        setLoadingMonth(false);
+      }
     },
-    [student.id]
+    [student.id, talleresEnabled]
   );
 
   useEffect(() => {
@@ -91,10 +103,44 @@ export function ParentAttendanceDashboard({
       initialMonthArrivals.length > 0;
     if (isInitial) {
       setMonthArrivals(initialMonthArrivals);
+      const { start, end } = getMonthBounds(viewYear, viewMonth);
+      setLoadingMonth(true);
+      void Promise.all([
+        talleresEnabled
+          ? tallerAttendanceService.fetchMonthForStudent(student.id, viewYear, viewMonth)
+          : Promise.resolve<{ records: TallerAsistencia[]; error: string | null }>({
+              records: [],
+              error: null,
+            }),
+        incidentsService.getAll({
+          estudianteId: student.id,
+          fechaDesde: `${start}T00:00:00.000-05:00`,
+          fechaHasta: `${end}T23:59:59.999-05:00`,
+          fetchAll: true,
+        }),
+        holidaysService.listActiveInRange(start, end),
+      ])
+        .then(([attendanceResponse, incidentsResponse, holidaysResponse]) => {
+          setMonthTallerAttendance(attendanceResponse.records);
+          const incidents = incidentsResponse.incidents;
+          setMonthClassIncidents(incidents.filter((incident) => !incident.tallerId));
+          setMonthTallerIncidents(incidents.filter((incident) => Boolean(incident.tallerId)));
+          setHolidayNames(new Map(holidaysResponse.items.map((h) => [h.fecha, h.nombre])));
+        })
+        .finally(() => setLoadingMonth(false));
       return;
     }
     void loadMonth(viewYear, viewMonth);
-  }, [viewYear, viewMonth, current.year, current.month, initialMonthArrivals, loadMonth]);
+  }, [
+    viewYear,
+    viewMonth,
+    current.year,
+    current.month,
+    initialMonthArrivals,
+    loadMonth,
+    student.id,
+    talleresEnabled,
+  ]);
 
   const byDate = useMemo(() => {
     const map = new Map(monthArrivals.map((a) => [a.date, a]));
@@ -104,9 +150,43 @@ export function ParentAttendanceDashboard({
     return map;
   }, [monthArrivals, todayArrival, viewYear, viewMonth]);
 
+  const tallerByDate = useMemo(() => {
+    const map = new Map<string, TallerAsistencia[]>();
+    monthTallerAttendance.forEach((record) => {
+      const rows = map.get(record.date) ?? [];
+      rows.push(record);
+      map.set(record.date, rows);
+    });
+    return map;
+  }, [monthTallerAttendance]);
+
+  const classIncidentsByDate = useMemo(() => {
+    const map = new Map<string, Incident[]>();
+    monthClassIncidents.forEach((incident) => {
+      const dateKey = incident.registeredAt?.slice(0, 10);
+      if (!dateKey) return;
+      const rows = map.get(dateKey) ?? [];
+      rows.push(incident);
+      map.set(dateKey, rows);
+    });
+    return map;
+  }, [monthClassIncidents]);
+
+  const tallerIncidentsByDate = useMemo(() => {
+    const map = new Map<string, Incident[]>();
+    monthTallerIncidents.forEach((incident) => {
+      const dateKey = incident.registeredAt?.slice(0, 10);
+      if (!dateKey) return;
+      const rows = map.get(dateKey) ?? [];
+      rows.push(incident);
+      map.set(dateKey, rows);
+    });
+    return map;
+  }, [monthTallerIncidents]);
+
   const metrics = useMemo(
-    () => computeMonthMetrics(viewYear, viewMonth, byDate, todayKey, calendarCtx),
-    [viewYear, viewMonth, byDate, todayKey, calendarCtx]
+    () => computeMonthMetrics(viewYear, viewMonth, byDate, todayKey, holidayNames),
+    [viewYear, viewMonth, byDate, todayKey, holidayNames]
   );
 
   const stripGradient = topStripGradient(metrics.present, metrics.late, metrics.absent);
@@ -124,22 +204,49 @@ export function ParentAttendanceDashboard({
   };
 
   const selectedStatus = selectedDay
-    ? resolveDayStatus(selectedDay, byDate.get(selectedDay), todayKey, calendarCtx)
+    ? resolveDayStatus(selectedDay, byDate.get(selectedDay), todayKey, holidayNames)
     : null;
   const selectedRecord = selectedDay ? byDate.get(selectedDay) : undefined;
+  const selectedHolidayName = selectedDay ? holidayNames.get(selectedDay) : undefined;
+  const selectedTallerRows = selectedDay ? tallerByDate.get(selectedDay) ?? [] : [];
+  const selectedClassIncidentRows = selectedDay ? classIncidentsByDate.get(selectedDay) ?? [] : [];
+  const selectedTallerIncidentRows = selectedDay ? tallerIncidentsByDate.get(selectedDay) ?? [] : [];
+  const selectedClassLines = useMemo(
+    () => formatClassAttendanceLines(selectedRecord),
+    [selectedRecord]
+  );
+  const selectedClassIncidentLines = useMemo(
+    () => formatClassIncidentDayDetail(selectedClassIncidentRows),
+    [selectedClassIncidentRows]
+  );
+  const selectedTallerLines = useMemo(
+    () => formatTallerDayDetail(selectedTallerRows),
+    [selectedTallerRows]
+  );
+  const selectedTallerIncidentLines = useMemo(
+    () => formatTallerIncidentDayDetail(selectedTallerIncidentRows),
+    [selectedTallerIncidentRows]
+  );
   const detail =
     selectedDay && selectedStatus
       ? dayDetailCopy(
           selectedStatus,
           studentFirst,
-          selectedRecord ? parseArrivalTime12h(selectedRecord.arrivalTime) : undefined
+          selectedRecord ? parseArrivalTime12h(selectedRecord.arrivalTime) : undefined,
+          selectedRecord?.departureTime,
+          selectedHolidayName,
         )
       : null;
+
+  const hideAbsent = import.meta.env.VITE_ATTENDANCE_BLANK_IF_NO_RECORD === 'true';
 
   const metricCards = [
     { key: 'present' as const, label: 'Días presentes', value: metrics.present },
     { key: 'late' as const, label: 'Tardanzas', value: metrics.late },
-    { key: 'absent' as const, label: 'Faltas', value: metrics.absent },
+    // Con flag blank: ocultar KPI solo si no hay faltas reales (estado Falta en BD)
+    ...(hideAbsent && metrics.absent === 0
+      ? []
+      : [{ key: 'absent' as const, label: 'Faltas', value: metrics.absent }]),
   ];
 
   return (
@@ -162,16 +269,12 @@ export function ParentAttendanceDashboard({
           />
           <h1 className="mt-3 text-xl font-semibold text-[#1A1D23] leading-snug">{student.fullName}</h1>
           {nivel && <p className="mt-1 text-[13px] text-[#6B7280]">{nivel}</p>}
-          <p className="mt-2 text-[11px] font-medium text-[#9095A3]">
-            Hora límite de llegada ({student.level || 'nivel'}):{' '}
-            <span className="font-mono text-[#1A1D23]">{studentArrivalLimit}</span>
-          </p>
         </div>
 
         <div className="my-5 h-px w-full bg-[#E8EAF0]" />
 
         {/* Métricas */}
-        <div className="grid grid-cols-3 gap-2.5">
+        <div className={`grid gap-2.5 ${hideAbsent ? 'grid-cols-2' : 'grid-cols-3'}`}>
           {metricCards.map(({ key, label, value }) => {
             const s = DAY_STYLES[key === 'present' ? 'present' : key === 'late' ? 'late' : 'absent'];
             return (
@@ -241,7 +344,7 @@ export function ParentAttendanceDashboard({
                     );
                   }
 
-                  const status = resolveDayStatus(dayKey, byDate.get(dayKey), todayKey, calendarCtx);
+                  const status = resolveDayStatus(dayKey, byDate.get(dayKey), todayKey, holidayNames);
                   const style = DAY_STYLES[status];
                   const isToday = dayKey === todayKey;
                   const isSelected = selectedDay === dayKey;
@@ -253,8 +356,8 @@ export function ParentAttendanceDashboard({
                       type="button"
                       onClick={() => setSelectedDay(isSelected ? null : dayKey)}
                       className={cn(
-                        'flex min-h-[44px] flex-col items-center justify-center rounded-[10px] border px-0.5 py-1 sm:min-h-[52px]',
-                        isToday && 'outline outline-2 outline-[#1A305E] outline-offset-2 bg-white'
+                        'relative flex min-h-[44px] flex-col items-center justify-center rounded-[10px] border px-0.5 py-1 sm:min-h-[52px]',
+                        isToday && 'outline outline-2 outline-[#3B82F6] outline-offset-2 bg-white'
                       )}
                       style={{
                         background: isToday ? '#FFFFFF' : style.bg,
@@ -264,6 +367,33 @@ export function ParentAttendanceDashboard({
                       aria-label={format(parseISO(dayKey), "d 'de' MMMM", { locale: es })}
                       aria-pressed={isSelected}
                     >
+                      {dayHasTaller(tallerByDate, dayKey) && (
+                        <span
+                          className="absolute right-1 top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full border px-1 text-[9px] font-semibold leading-none"
+                          style={{
+                            background: '#EFF6FF',
+                            color: '#1D4ED8',
+                            borderColor: '#BFDBFE',
+                          }}
+                          aria-label="Tiene taller"
+                        >
+                          T
+                        </span>
+                      )}
+                      {(dayHasIncident(classIncidentsByDate, dayKey) ||
+                        dayHasIncident(tallerIncidentsByDate, dayKey)) && (
+                        <span
+                          className="absolute left-1 top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full border px-1 text-[9px] font-semibold leading-none"
+                          style={{
+                            background: '#FEF3C7',
+                            color: '#92400E',
+                            borderColor: '#FCD34D',
+                          }}
+                          aria-label="Tiene incidencia"
+                        >
+                          i
+                        </span>
+                      )}
                       <span
                         className="text-[13px] font-medium leading-none"
                         style={{ color: isToday ? '#1D4ED8' : style.text }}
@@ -311,7 +441,63 @@ export function ParentAttendanceDashboard({
                   {detail.badge}
                 </span>
               </div>
-              <p className="mt-2 text-[13px] leading-[1.65] text-[#6B7280]">{detail.description}</p>
+              <div className="mt-3 rounded-[12px] border border-[#E8EAF0] bg-[#F8FAFC] px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#475569]">Clase</p>
+                <p className="mt-1.5 text-[13px] leading-[1.65] text-[#6B7280]">{detail.description}</p>
+                {selectedClassLines.length > 0 && (
+                  <div className="mt-2 space-y-1 border-t border-[#E8EAF0] pt-2">
+                    {selectedClassLines.map((line, index) => (
+                      <p key={`${selectedDay}-clase-${index}`} className="text-[13px] leading-[1.65] text-[#475569]">
+                        {line}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {selectedClassIncidentLines.length > 0 && (
+                <div className="mt-3 rounded-[12px] border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#92400E]">
+                    Incidencias
+                  </p>
+                  <div className="mt-2 space-y-1.5">
+                    {selectedClassIncidentLines.map((line, index) => (
+                      <p
+                        key={`${selectedDay}-inc-${index}`}
+                        className="text-[13px] leading-[1.65] text-[#78350F]"
+                      >
+                        {line}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {(selectedTallerLines.length > 0 || selectedTallerIncidentLines.length > 0) && (
+                <div className="mt-3 rounded-[12px] border border-[#DBEAFE] bg-[#F8FBFF] px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#DBEAFE] px-1.5 text-[10px] font-semibold text-[#1D4ED8]">
+                      T
+                    </span>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#1D4ED8]">
+                      Talleres
+                    </p>
+                  </div>
+                  <div className="mt-2 space-y-1.5">
+                    {selectedTallerLines.map((line, index) => (
+                      <p key={`${selectedDay}-taller-${index}`} className="text-[13px] leading-[1.65] text-[#475569]">
+                        {line}
+                      </p>
+                    ))}
+                    {selectedTallerIncidentLines.map((line, index) => (
+                      <p
+                        key={`${selectedDay}-taller-inc-${index}`}
+                        className="text-[13px] leading-[1.65] text-[#475569]"
+                      >
+                        {line}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -321,8 +507,9 @@ export function ParentAttendanceDashboard({
               [
                 ['present', 'A tiempo'],
                 ['late', 'Tardanza'],
-                ['absent', 'Falta'],
+                ...(hideAbsent ? [] : ([['absent', 'Falta']] as const)),
                 ['noclass', 'Sin clase'],
+                ['norecord', 'Sin registro'],
               ] as const
             ).map(([key, label]) => {
               const s = DAY_STYLES[key];
@@ -337,6 +524,16 @@ export function ParentAttendanceDashboard({
                 </span>
               );
             })}
+            <span className="inline-flex items-center gap-1.5 text-[11px] text-[#6B7280]">
+              <span
+                className="inline-flex h-4 min-w-4 items-center justify-center rounded-full border px-1 text-[9px] font-semibold"
+                style={{ background: '#FEF3C7', color: '#92400E', borderColor: '#FCD34D' }}
+                aria-hidden
+              >
+                i
+              </span>
+              Incidencia
+            </span>
           </div>
         </div>
       </div>

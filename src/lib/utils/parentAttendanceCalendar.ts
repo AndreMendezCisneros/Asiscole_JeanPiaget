@@ -62,20 +62,27 @@ export function isWeekend(dayKey: string): boolean {
   return dow === 0 || dow === 6;
 }
 
-function arrivalKind(record: ArrivalRecord): 'present' | 'late' {
+function arrivalKind(record: ArrivalRecord): 'present' | 'late' | 'absent' {
+  if (record.status === 'Falta') return 'absent';
   return record.status === 'A tiempo' ? 'present' : 'late';
 }
 
 export function resolveDayStatus(
   dayKey: string,
   record: ArrivalRecord | undefined,
-  todayKey: string
+  todayKey: string,
+  holidayNames?: ReadonlyMap<string, string> | null
 ): DayStatus {
-  if (isWeekend(dayKey) || dayKey > todayKey) return 'noclass';
+  const isHoliday = Boolean(holidayNames?.has(dayKey));
+  if (isWeekend(dayKey) || dayKey > todayKey || (isHoliday && !record)) return 'noclass';
   if (record) {
     return arrivalKind(record);
   }
   if (dayKey === todayKey) return 'norecord';
+  // JP / colegios nuevos: no marcar "Falta" si aún no hay historial de asistencia.
+  if (import.meta.env.VITE_ATTENDANCE_BLANK_IF_NO_RECORD === 'true') {
+    return 'norecord';
+  }
   return 'absent';
 }
 
@@ -148,7 +155,8 @@ export function computeMonthMetrics(
   year: number,
   month: number,
   byDate: Map<string, ArrivalRecord>,
-  todayKey: string
+  todayKey: string,
+  holidayNames?: ReadonlyMap<string, string> | null
 ): { present: number; late: number; absent: number } {
   const lastDay = new Date(year, month, 0).getDate();
   let present = 0;
@@ -157,7 +165,7 @@ export function computeMonthMetrics(
 
   for (let d = 1; d <= lastDay; d++) {
     const key = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    const status = resolveDayStatus(key, byDate.get(key), todayKey);
+    const status = resolveDayStatus(key, byDate.get(key), todayKey, holidayNames);
     if (status === 'present') present++;
     else if (status === 'late') late++;
     else if (status === 'absent') absent++;
@@ -178,6 +186,7 @@ export function dayDetailCopy(
   studentFirstName: string,
   time?: string,
   departureTime?: string | null,
+  holidayName?: string | null,
 ): { badge: string; description: string } {
   const hora = time || '—:—';
   const salida =
@@ -202,11 +211,17 @@ export function dayDetailCopy(
       };
     case 'norecord':
       return {
-        badge: 'Sin registro hoy',
+        badge: 'Sin registro',
         description:
-          'Aún no hay entrada registrada hoy. Si su hijo/a ya llegó al colegio, puede demorar unos minutos en aparecer.',
+          'Aún no hay asistencia registrada este día. Cuando el colegio registre la entrada, aparecerá aquí.',
       };
     default:
+      if (holidayName?.trim()) {
+        return {
+          badge: 'Feriado',
+          description: `Sin clases: ${holidayName.trim()}. No se registra asistencia ni se marca falta.`,
+        };
+      }
       return {
         badge: 'Sin clase',
         description: 'Este día no hubo clases (fin de semana, feriado o día futuro). No se registra asistencia.',
