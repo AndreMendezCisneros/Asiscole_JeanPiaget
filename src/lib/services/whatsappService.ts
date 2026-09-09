@@ -145,9 +145,19 @@ export type NotifyOpts = {
   tallerNombre?: string;
 };
 
-/** Simular escritura humana (~10 s) antes de enviar (anti-baneo). */
+/** Cola: un aviso de la plantilla a la vez, para que la espera de 10 s no se pise ni se pierda. */
+let wppSendChain: Promise<void> = Promise.resolve();
 const WPPCONNECT_TYPING_MIN_MS = 10_000;
 const WPPCONNECT_TYPING_MAX_MS = 12_000;
+
+function enqueueWppSend<T>(task: () => Promise<T>): Promise<T> {
+  const run = wppSendChain.then(task, task);
+  wppSendChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -195,8 +205,14 @@ function getAppBaseUrl(): string {
   return APP_URL || (typeof window !== 'undefined' ? window.location.origin : '');
 }
 
-function getParentPortalLink(): string {
+/** Link directo a la asistencia del estudiante (DNI/carnet), o portal genérico. */
+function getParentPortalLink(student?: Pick<Student, 'barcode' | 'id'>): string {
   const base = getAppBaseUrl();
+  const dni = String(student?.barcode || student?.id || '').trim();
+  if (dni) {
+    const path = `/llegada/dni/${encodeURIComponent(dni)}`;
+    return base ? `${base}${path}` : path;
+  }
   return base ? `${base}/portal-padres` : '/portal-padres';
 }
 
@@ -242,6 +258,11 @@ export function buildArrivalMessage(
   const isTaller = Boolean(opts?.tallerId || opts?.tallerNombre);
   const tallerLine = formatTallerLine(opts);
 
+  const portalLink = getParentPortalLink(student);
+  const portalBlock = portalLink
+    ? [`👩‍👧‍👦 *Ver asistencia de su hijo/a:*`, portalLink, '']
+    : [];
+
   if (isTaller) {
     return [
       greeting,
@@ -256,6 +277,7 @@ export function buildArrivalMessage(
       '',
       `${student.fullName} llegó a su taller a las ${hora}.`,
       '',
+      ...portalBlock,
       closing,
     ]
       .filter((line) => line !== '')
@@ -275,6 +297,7 @@ export function buildArrivalMessage(
     `*Hora:* ${hora}`,
     `*Estado:* ${record.status || 'Registrado'}`,
     '',
+    ...portalBlock,
     closing,
   ]
     .filter((l) => l !== null && l !== undefined && l !== '')
@@ -311,6 +334,10 @@ export function buildDepartureMessage(
   const tipo = record.departureType || 'Normal';
   const isTaller = Boolean(opts?.tallerId || opts?.tallerNombre);
   const tallerLine = formatTallerLine(opts);
+  const portalLink = getParentPortalLink(student);
+  const portalBlock = portalLink
+    ? [`👩‍👧‍👦 *Ver asistencia de su hijo/a:*`, portalLink, '']
+    : [];
 
   if (isTaller) {
     return [
@@ -326,6 +353,7 @@ export function buildDepartureMessage(
       '',
       `${student.fullName} salió de su taller a las ${hora}.`,
       '',
+      ...portalBlock,
       closing,
     ]
       .filter((line) => line !== '')
@@ -345,6 +373,7 @@ export function buildDepartureMessage(
     `*Hora de salida:* ${hora}`,
     `*Tipo:* ${tipo}`,
     '',
+    ...portalBlock,
     closing,
   ]
     .filter((l) => l !== null && l !== undefined && l !== '')
@@ -690,15 +719,13 @@ async function sendViaWppConnect(phone: string, text: string): Promise<{ ok: boo
     return { ok: false, error: 'Falta VITE_WPPCONNECT_TOKEN (genérelo en el VPS)' };
   }
 
-  // Simular escritura humana antes del mensaje (~10 s)
-  await wppconnectPost('/typing', { phone, isGroup: false, value: true });
-  await sleep(randomBetween(WPPCONNECT_TYPING_MIN_MS, WPPCONNECT_TYPING_MAX_MS));
-
-  const sent = await wppconnectPost('/send-message', { phone, message: text, isGroup: false });
-
-  await wppconnectPost('/typing', { phone, isGroup: false, value: false }).catch(() => {});
-
-  return sent;
+  return enqueueWppSend(async () => {
+    await wppconnectPost('/typing', { phone, isGroup: false, value: true }).catch(() => {});
+    await sleep(randomBetween(WPPCONNECT_TYPING_MIN_MS, WPPCONNECT_TYPING_MAX_MS));
+    const sent = await wppconnectPost('/send-message', { phone, message: text, isGroup: false });
+    await wppconnectPost('/typing', { phone, isGroup: false, value: false }).catch(() => {});
+    return sent;
+  });
 }
 
 async function sendTextsViaWppConnect(
@@ -888,7 +915,7 @@ export function buildPensionPendingMessage(
   const greeting = GREETING_VARIANTS[randomBetween(0, GREETING_VARIANTS.length - 1)];
   const closings = closingVariants();
   const closing = closings[randomBetween(0, closings.length - 1)];
-  const portalLink = getParentPortalLink();
+  const portalLink = getParentPortalLink(student);
   const montoLine =
     input.monto != null && Number.isFinite(input.monto)
       ? `*Monto referencial:* S/ ${Number(input.monto).toFixed(2)}`
@@ -907,7 +934,7 @@ export function buildPensionPendingMessage(
     `Le informamos que la pensión del periodo ${periodoLabel} figura *sin pago*.`,
     'Por favor regularice el pago en el colegio o en la entidad bancaria indicada por la institución.',
     '',
-    portalLink ? `👩‍👧‍👦 *Portal de padres:*\n${portalLink}` : '',
+    portalLink ? `👩‍👧‍👦 *Ver asistencia de su hijo/a:*\n${portalLink}` : '',
     '',
     closing,
   ]
