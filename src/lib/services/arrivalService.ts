@@ -862,8 +862,21 @@ export async function getBimestralAttendance(filters: {
   }
 }
 
+/** YYYY-MM-DD + delta días (calendario, sin TZ del navegador). */
+function shiftDateKey(dateKey: string, deltaDays: number): string {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + deltaDays));
+  return dt.toISOString().slice(0, 10);
+}
+
+function weekdayFromDateKey(dateKey: string): number {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
 /**
- * Obtener tendencia de asistencia (últimos 5 días hábiles)
+ * Obtener tendencia de asistencia (últimos 5 días hábiles).
+ * Usa conteos `head` por día/estado para no truncar en el límite de 1000 filas de PostgREST.
  */
 export async function getWeeklyAttendanceTrend(): Promise<{
   weeklyData: Array<{
@@ -876,60 +889,59 @@ export async function getWeeklyAttendanceTrend(): Promise<{
   error: string | null;
 }> {
   try {
-    const now = new Date();
     const dayLabels = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const todayKey = getLimaTodayDate();
 
-    const weekDays: { date: Date; label: string; dateKey: string }[] = [];
+    const weekDays: { label: string; dateKey: string }[] = [];
     let daysBack = 0;
 
-    while (weekDays.length < 5) {
-      const date = new Date(now);
-      date.setDate(now.getDate() - daysBack);
-      const dayOfWeek = date.getDay();
-
+    while (weekDays.length < 5 && daysBack <= 14) {
+      const dateKey = shiftDateKey(todayKey, -daysBack);
+      const dayOfWeek = weekdayFromDateKey(dateKey);
       if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-        const y = date.getFullYear();
-        const m = String(date.getMonth() + 1).padStart(2, '0');
-        const d = String(date.getDate()).padStart(2, '0');
         weekDays.push({
-          date,
           label: dayLabels[dayOfWeek],
-          dateKey: `${y}-${m}-${d}`,
+          dateKey,
         });
       }
       daysBack++;
-      if (daysBack > 14) break;
     }
 
-    weekDays.sort((a, b) => a.date.getTime() - b.date.getTime());
+    weekDays.reverse();
 
     if (weekDays.length === 0) {
       return { weeklyData: [], error: null };
     }
 
-    const { data, error } = await supabase
-      .from('registros_llegada')
-      .select('fecha, estado')
-      .gte('fecha', weekDays[0].dateKey)
-      .lte('fecha', weekDays[weekDays.length - 1].dateKey);
+    const weeklyData = await Promise.all(
+      weekDays.map(async ({ label, dateKey }) => {
+        const [onTimeRes, lateRes] = await Promise.all([
+          supabase
+            .from('registros_llegada')
+            .select('id_registro', { count: 'exact', head: true })
+            .eq('fecha', dateKey)
+            .eq('estado', ARRIVAL_ESTADO.ON_TIME),
+          supabase
+            .from('registros_llegada')
+            .select('id_registro', { count: 'exact', head: true })
+            .eq('fecha', dateKey)
+            .eq('estado', ARRIVAL_ESTADO.LATE),
+        ]);
 
-    if (error) {
-      console.error('Error al obtener tendencia semanal de asistencia:', error);
-      return { weeklyData: [], error: error.message };
-    }
+        if (onTimeRes.error) throw onTimeRes.error;
+        if (lateRes.error) throw lateRes.error;
 
-    const weeklyData = weekDays.map(({ label, dateKey }) => {
-      const dayRecords = (data ?? []).filter((r) => r.fecha === dateKey);
-      const onTime = dayRecords.filter((r) => r.estado === 'A tiempo').length;
-      const late = dayRecords.filter((r) => r.estado === 'Tarde').length;
-      return {
-        day: label,
-        date: dateKey,
-        total: dayRecords.length,
-        onTime,
-        late,
-      };
-    });
+        const onTime = onTimeRes.count ?? 0;
+        const late = lateRes.count ?? 0;
+        return {
+          day: label,
+          date: dateKey,
+          total: onTime + late,
+          onTime,
+          late,
+        };
+      }),
+    );
 
     return { weeklyData, error: null };
   } catch (error: unknown) {

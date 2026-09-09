@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   XCircle,
   ArrowUpRight,
+  ArrowDownRight,
   Activity,
   Target,
   LayoutDashboard,
@@ -188,6 +189,7 @@ export const Dashboard = () => {
           weeklyAttendance[weeklyAttendance.length - 2].total,
         )
       : null;
+  const attendanceGrowthDown = Boolean(attendanceGrowthBadge?.startsWith('-'));
 
   // Calcular tasa de resolución
   const resolutionRate = stats.totalIncidents > 0 
@@ -463,8 +465,19 @@ export const Dashboard = () => {
                   </span>
                 )}
                 {attendanceGrowthBadge && (
-                  <span className="inline-flex shrink-0 items-center rounded-md border border-emerald-500/25 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 shadow-sm dark:text-emerald-400">
-                    <ArrowUpRight className="mr-1 h-3 w-3" />
+                  <span
+                    className={cn(
+                      'inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold shadow-sm',
+                      attendanceGrowthDown
+                        ? 'border-rose-500/25 bg-rose-500/15 text-rose-700 dark:text-rose-400'
+                        : 'border-emerald-500/25 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
+                    )}
+                  >
+                    {attendanceGrowthDown ? (
+                      <ArrowDownRight className="mr-1 h-3 w-3" />
+                    ) : (
+                      <ArrowUpRight className="mr-1 h-3 w-3" />
+                    )}
                     {attendanceGrowthBadge}
                   </span>
                 )}
