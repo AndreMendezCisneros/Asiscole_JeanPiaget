@@ -347,7 +347,8 @@ export type ArrivalEstadoDB =
   | 'Tarde'
   | 'Tarde justificada'
   | 'Falta justificada'
-  | 'Falta';
+  | 'Falta'
+  | 'Injustificada';
 
 export interface RegistroLlegadaDB {
   id_registro: number;

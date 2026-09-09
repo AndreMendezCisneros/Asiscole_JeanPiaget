@@ -38,7 +38,11 @@ import {
 } from '@/components/staff';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { arrivalService, authService } from '@/lib/services';
-import { MIN_JUSTIFICATION_REASON_LENGTH } from '@/lib/utils/attendanceJustification';
+import {
+  arrivalDateKey,
+  isWeekdayDateKey,
+  MIN_JUSTIFICATION_REASON_LENGTH,
+} from '@/lib/utils/attendanceJustification';
 import { getLimaTodayDate } from '@/lib/utils/limaDateTime';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { studentMatchesNameOrClassroom } from '@/lib/utils/studentSearch';
@@ -76,13 +80,14 @@ function formatArrivalDate(date: string, time?: string | null): { date: string; 
 }
 
 function kindLabel(status: ArrivalRecord['status']): string {
-  if (status === 'Falta justificada' || status === 'Falta') return 'Inasistencia';
+  if (status === 'Falta justificada') return 'Inasistencia justificada';
+  if (status === 'Falta' || status === 'Injustificada') return 'Falto';
   if (status === 'Tarde justificada') return 'Tardanza';
   return 'Tardanza';
 }
 
 function isPendingAbsence(row: ArrivalRecord): boolean {
-  return row.status === 'Falta' || row.id < 0;
+  return row.status === 'Falta' || row.status === 'Injustificada' || row.id < 0;
 }
 
 function isPendingRow(row: ArrivalRecord): boolean {
@@ -122,6 +127,12 @@ export const JustifyAttendance = () => {
       return;
     }
 
+    if (absenceDateKey && !isWeekdayDateKey(absenceDateKey)) {
+      setRecords([]);
+      setLoading(false);
+      return;
+    }
+
     const classroom = {
       level: levelFilter === 'all' ? undefined : levelFilter,
       grade: gradeFilter === 'all' ? undefined : gradeFilter,
@@ -147,7 +158,7 @@ export const JustifyAttendance = () => {
       setRecords([]);
       toast.error(result.error);
     } else {
-      let rows = result.records;
+      let rows = result.records.filter((row) => isWeekdayDateKey(arrivalDateKey(row.date)));
       if (statusFilter !== 'Inasistencias') {
         rows = rows.filter((row) => {
           if (classroom.level && row.student?.level !== classroom.level) return false;
@@ -193,6 +204,10 @@ export const JustifyAttendance = () => {
 
   const handleJustify = async () => {
     if (!selectedRecord) return;
+    if (!isWeekdayDateKey(arrivalDateKey(selectedRecord.date))) {
+      toast.error('No hay clases los sábados ni domingo; no se justifica esa fecha.');
+      return;
+    }
     if (justificationReason.trim().length < MIN_JUSTIFICATION_REASON_LENGTH) {
       toast.error(`El motivo debe tener al menos ${MIN_JUSTIFICATION_REASON_LENGTH} caracteres`);
       return;
@@ -220,7 +235,7 @@ export const JustifyAttendance = () => {
       if (error) {
         toast.error(error);
       } else {
-        toast.success(isAbsence ? 'Falta justificada (IJ)' : 'Tardanza justificada (TJ)');
+        toast.success(isAbsence ? 'Inasistencia justificada (IJ)' : 'Tardanza justificada (TJ)');
         setDialogOpen(false);
         setJustificationReason('');
         setSelectedRecord(null);
@@ -254,7 +269,7 @@ export const JustifyAttendance = () => {
         icon={Clock}
         eyebrow="Asistencia"
         title="Justificar asistencia"
-        description="Justifique tardanzas (TJ) o inasistencias (IJ) desde la lista. Las incidencias de conducta siguen en Justificar Faltas."
+        description="Justifique tardanzas (TJ) o faltos (IN → IJ). Desde el 07/09/2026, un día hábil cerrado sin llegada cuenta como falto. Las incidencias de conducta siguen en Justificar Faltas."
         accent="warning"
       />
 
@@ -263,14 +278,14 @@ export const JustifyAttendance = () => {
           label="En lista"
           value={filtered.length}
           hint={
-            statusFilter === 'Activa' ? 'Tardanzas pendientes' : 'Inasistencias del aula'
+            statusFilter === 'Activa' ? 'Tardanzas pendientes' : 'Faltos / inasistencias'
           }
           icon={Clock}
           tone="warning"
         />
         <StaffKpiStat
           label="Filtro"
-          value={statusFilter === 'Activa' ? 'Tardanzas' : 'Inasistencias'}
+          value={statusFilter === 'Activa' ? 'Tardanzas' : 'Faltos'}
           hint={dateFilter || 'Todas las fechas'}
           icon={CheckCircle2}
           tone="info"
@@ -331,7 +346,7 @@ export const JustifyAttendance = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Activa">Tardanzas</SelectItem>
-                <SelectItem value="Inasistencias">Inasistencias</SelectItem>
+                <SelectItem value="Inasistencias">Faltos / Inasistencias</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -405,7 +420,7 @@ export const JustifyAttendance = () => {
           description={
             statusFilter === 'Activa'
               ? 'Tardanzas sin justificar. Pulse Justificar e indique el motivo.'
-              : 'Alumnos sin llegada en la fecha. Puede acotar por nivel, grado o sección.'
+              : 'Faltos del día (día hábil cerrado desde el 07/09/2026, o registro Falta). El día en curso aún no se marca como falto.'
           }
         />
         <div className={loading ? 'p-4 pt-0 sm:p-5 sm:pt-0 opacity-70' : 'p-4 pt-0 sm:p-5 sm:pt-0'}>
@@ -425,11 +440,17 @@ export const JustifyAttendance = () => {
                 </Button>
               }
             />
+          ) : dateFilter && !isWeekdayDateKey(dateFilter) ? (
+            <StaffEmptyState
+              icon={Clock}
+              title="No hay clases ese día"
+              description="Los sábados y domingo no se justifican tardanzas ni faltos. Elija un día hábil (lunes a viernes)."
+            />
           ) : statusFilter === 'Inasistencias' && !absenceFiltersReady ? (
             <StaffEmptyState
               icon={Clock}
               title="Elija una fecha"
-              description="Las inasistencias se listan por día. Si no indica aula, se muestran todos los alumnos sin llegada."
+              description="Los faltos se listan por día cerrado. Elija una fecha hábil desde el 07/09/2026 (no el día en curso)."
             />
           ) : pageRows.length === 0 ? (
             <StaffEmptyState
@@ -437,8 +458,8 @@ export const JustifyAttendance = () => {
               title="Sin resultados"
               description={
                 statusFilter === 'Activa'
-                  ? 'No hay tardanzas pendientes con estos filtros'
-                  : 'Todos los alumnos de ese aula tienen llegada o ya están justificados'
+                  ? 'No hay tardanzas pendientes de días hábiles con estos filtros'
+                  : 'No hay faltos en esa fecha: o el día aún no cierra, es anterior al 07/09/2026, o todos tienen llegada o IJ.'
               }
             />
           ) : (
@@ -469,7 +490,7 @@ export const JustifyAttendance = () => {
                         <TableCell>{kindLabel(row.status)}</TableCell>
                         <TableCell>
                           <p>{when.date}</p>
-                          <p className="text-muted-foreground">{absence ? 'Sin llegada' : when.time}</p>
+                          <p className="text-muted-foreground">{absence ? 'Falto' : when.time}</p>
                         </TableCell>
                         <TableCell>
                           <Badge

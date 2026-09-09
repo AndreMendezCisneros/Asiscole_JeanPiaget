@@ -248,8 +248,9 @@ export function ParentAttendanceDashboard({
       : null;
 
   const metricCards = [
-    { key: 'present' as const, label: 'Días presentes', value: metrics.present },
-    { key: 'late' as const, label: 'Tardanzas', value: metrics.late },
+    { key: 'present' as const, style: 'present' as const, label: 'Días presentes', value: metrics.present },
+    { key: 'late' as const, style: 'late' as const, label: 'Tardanzas', value: metrics.late },
+    { key: 'absent' as const, style: 'absent' as const, label: 'Falto', value: metrics.absent },
   ];
 
   return (
@@ -277,9 +278,9 @@ export function ParentAttendanceDashboard({
         <div className="my-5 h-px w-full bg-[#E8EAF0]" />
 
         {/* Métricas */}
-        <div className="grid grid-cols-2 gap-2.5">
-          {metricCards.map(({ key, label, value }) => {
-            const s = DAY_STYLES[key === 'present' ? 'present' : key === 'late' ? 'late' : 'absent'];
+        <div className="grid grid-cols-3 gap-2.5">
+          {metricCards.map(({ key, style, label, value }) => {
+            const s = DAY_STYLES[style];
             return (
               <div
                 key={key}
@@ -511,6 +512,7 @@ export function ParentAttendanceDashboard({
                 ['present', 'A tiempo'],
                 ['late', 'Tardanza'],
                 ['late_justified', 'TJ'],
+                ['absent', 'Falto'],
                 ['absent_justified', 'IJ'],
                 ['noclass', 'Sin clase'],
                 ['norecord', 'Sin registro'],

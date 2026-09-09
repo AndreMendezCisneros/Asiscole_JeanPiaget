@@ -239,7 +239,7 @@ const ATTENDANCE_STATUS_LABELS: Record<string, string> = {
   Tarde_justificada: 'TJ',
   Inasistencia_justificada: 'IJ',
   Justificada: 'TJ',
-  Injustificada: 'I',
+  Injustificada: 'IN',
   Sin_registro: '—',
 };
 
@@ -261,7 +261,7 @@ export async function buildAttendanceDetailSheet(
   }
 ): Promise<import('exceljs').Worksheet> {
   const sheet = workbook.addWorksheet(sheetName);
-  const mergeCols = daysArray.length + 8;
+  const mergeCols = daysArray.length + 9;
 
   const startRow = await addBrandedExcelHeader(workbook, sheet, title, subtitle, mergeCols);
 
@@ -274,6 +274,7 @@ export async function buildAttendanceDetailSheet(
     'A tiempo',
     'Tardanzas',
     'TJ',
+    'IN',
     'IJ',
   ];
   const headerRow = sheet.addRow(headers);
@@ -290,6 +291,7 @@ export async function buildAttendanceDetailSheet(
       row.totals.onTime,
       row.totals.late,
       row.totals.lateJustified,
+      row.totals.unjustified,
       row.totals.absentJustified,
     ];
     const dataRow = sheet.addRow(values);
@@ -328,6 +330,7 @@ export async function buildAttendanceDetailSheet(
     totalsGlobal.onTime,
     totalsGlobal.late,
     totalsGlobal.lateJustified,
+    totalsGlobal.unjustified ?? 0,
     totalsGlobal.absentJustified,
   ]);
   summaryRow.font = { bold: true, size: 10 };
@@ -336,7 +339,7 @@ export async function buildAttendanceDetailSheet(
   });
 
   freezePane(sheet, startRow);
-  const widths = [30, 12, 10, 8, ...daysArray.map(() => 6), 10, 10, 10, 10];
+  const widths = [30, 12, 10, 8, ...daysArray.map(() => 6), 10, 10, 10, 10, 10];
   setColumnWidths(sheet, widths);
   autoFitColumns(sheet, 6, 32);
 

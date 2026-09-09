@@ -65,7 +65,7 @@ const statusMap: Record<string, { label: string; className: string; description:
   Tarde_justificada: { label: 'TJ', className: 'bg-sky-100 text-sky-800', description: 'Tarde justificada' },
   Inasistencia_justificada: { label: 'IJ', className: 'bg-violet-100 text-violet-800', description: 'Inasistencia justificada' },
   Justificada: { label: 'TJ', className: 'bg-sky-100 text-sky-800', description: 'Tarde justificada' },
-  Injustificada: { label: 'I', className: 'bg-rose-100 text-rose-700', description: 'Injustificada (legado)' },
+  Injustificada: { label: 'IN', className: 'bg-rose-100 text-rose-700', description: 'Inasistencia (falto)' },
   Sin_registro: { label: '—', className: 'text-muted-foreground', description: 'Sin registro' },
 };
 
@@ -313,11 +313,11 @@ export const AttendanceReport = () => {
         { label: 'A tiempo', value: totalsGlobal.onTime, tone: 'success' },
         { label: 'Tardanzas', value: totalsGlobal.late, tone: 'warning' },
         { label: 'TJ', value: totalsGlobal.lateJustified, tone: 'info' },
-        { label: 'IJ', value: totalsGlobal.absentJustified, tone: 'error' },
+        { label: 'IN / IJ', value: `${totalsGlobal.unjustified} / ${totalsGlobal.absentJustified}`, tone: 'error' },
       ]);
 
       doc.drawParagraph(
-        'Leyenda de estados: A = A tiempo · T = Tardanza · TJ = Tarde justificada · IJ = Inasistencia justificada · — = Sin registro'
+        'Leyenda de estados: A = A tiempo · T = Tardanza · TJ = Tarde justificada · IN = Inasistencia (falto) · IJ = Inasistencia justificada · — = Sin registro'
       );
 
       doc.drawSectionTitle('Resumen por estudiante');
@@ -329,8 +329,9 @@ export const AttendanceReport = () => {
           { header: 'Sec.', dataKey: 'section', width: 12, align: 'center' },
           { header: 'A tiempo', dataKey: 'onTime', width: 16, align: 'center' },
           { header: 'Tardanzas', dataKey: 'late', width: 16, align: 'center' },
-          { header: 'TJ', dataKey: 'lateJustified', width: 14, align: 'center' },
-          { header: 'IJ', dataKey: 'absentJustified', width: 14, align: 'center' },
+          { header: 'TJ', dataKey: 'lateJustified', width: 12, align: 'center' },
+          { header: 'IN', dataKey: 'unjustified', width: 12, align: 'center' },
+          { header: 'IJ', dataKey: 'absentJustified', width: 12, align: 'center' },
           {
             header: '% Puntualidad',
             dataKey: 'punctuality',
@@ -356,6 +357,7 @@ export const AttendanceReport = () => {
             onTime: String(row.totals.onTime),
             late: String(row.totals.late),
             lateJustified: String(row.totals.lateJustified),
+            unjustified: String(row.totals.unjustified),
             absentJustified: String(row.totals.absentJustified),
             punctuality: `${punctuality}%`,
           };
@@ -461,6 +463,7 @@ export const AttendanceReport = () => {
       summarySheet.addRow(['A tiempo', totalsGlobal.onTime]);
       summarySheet.addRow(['Tardanzas', totalsGlobal.late]);
       summarySheet.addRow(['Tarde justificada (TJ)', totalsGlobal.lateJustified]);
+      summarySheet.addRow(['Inasistencia (IN)', totalsGlobal.unjustified]);
       summarySheet.addRow(['Inasistencia justificada (IJ)', totalsGlobal.absentJustified]);
       setColumnWidths(summarySheet, [22, 14]);
       await addExcelWatermark(workbook, summarySheet, { mergeCols: 2, centerRow: 10 });
@@ -602,9 +605,9 @@ export const AttendanceReport = () => {
             tone="warning"
           />
           <StaffKpiStat
-            label="TJ / IJ"
-            value={hasQueried ? `${totalsGlobal.lateJustified} / ${totalsGlobal.absentJustified}` : '—'}
-            hint="Tarde justificada / Inasistencia justificada"
+            label="IN / IJ"
+            value={hasQueried ? `${totalsGlobal.unjustified} / ${totalsGlobal.absentJustified}` : '—'}
+            hint="Inasistencia (falto) / Inasistencia justificada"
             hintIcon={CheckCircle2}
             icon={AlertTriangle}
             tone="accent"
@@ -617,7 +620,7 @@ export const AttendanceReport = () => {
           description="Seleccione un estudiante de la lista o elija nivel, grado y sección; luego pulse Consultar"
           footer={
             <div className="flex flex-wrap gap-4 text-sm">
-              {['A_tiempo', 'Tarde', 'Tarde_justificada', 'Inasistencia_justificada', 'Sin_registro'].map((key) => {
+              {['A_tiempo', 'Tarde', 'Tarde_justificada', 'Injustificada', 'Inasistencia_justificada', 'Sin_registro'].map((key) => {
                 const value = statusMap[key];
                 return (
                 <div key={key} className="flex items-center gap-2">
@@ -815,6 +818,7 @@ export const AttendanceReport = () => {
                       <th className="min-w-[48px] px-2 py-2">A</th>
                       <th className="min-w-[48px] px-2 py-2">T</th>
                       <th className="min-w-[48px] px-2 py-2">TJ</th>
+                      <th className="min-w-[48px] px-2 py-2">IN</th>
                       <th className="min-w-[48px] px-2 py-2">IJ</th>
                     </tr>
                   </thead>
@@ -851,6 +855,9 @@ export const AttendanceReport = () => {
                         </td>
                         <td className="px-2 py-2 text-center font-semibold text-sky-800">
                           {row.totals.lateJustified}
+                        </td>
+                        <td className="px-2 py-2 text-center font-semibold text-rose-700">
+                          {row.totals.unjustified}
                         </td>
                         <td className="px-2 py-2 text-center font-semibold text-violet-800">
                           {row.totals.absentJustified}

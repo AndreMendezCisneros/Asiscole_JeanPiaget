@@ -80,7 +80,7 @@ function attendanceStatusLabel(status: string): string {
   if (status === 'Inasistencia_justificada' || status === 'Falta justificada') {
     return 'Inasistencia justificada (IJ)';
   }
-  if (status === 'Injustificada') return 'Injustificada';
+  if (status === 'Injustificada') return 'Inasistencia (falto)';
   return status.replace('_', ' ');
 }
 

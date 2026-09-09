@@ -14,9 +14,17 @@ import { SYSTEM_SETTING_KEYS, normalizeTimeValue } from '@/config/systemSettings
 import {
   ARRIVAL_ESTADO,
   MIN_JUSTIFICATION_REASON_LENGTH,
-  convertArrivalEstadoToReport,
   emptyAttendanceTotals,
+  isClosedFaltoEligibleDate,
+  isCountableArrivalStatus,
   isProtectedArrivalStatus,
+  isRawAbsenceStatus,
+  arrivalDateKey,
+  isWeekdayDateKey,
+  collapsePlaceholderArrivalStatus,
+  hasUsableArrivalTime,
+  resolveReportStatusForDay,
+  studentRecordId,
   tallyAttendanceStatus,
 } from '@/lib/utils/attendanceJustification';
 
@@ -612,22 +620,51 @@ async function fetchArrivalsForReport(
   const allRows: ArrivalReportRow[] = [];
   for (let i = 0; i < studentIds.length; i += ARRIVAL_REPORT_BATCH_SIZE) {
     const batch = studentIds.slice(i, i + ARRIVAL_REPORT_BATCH_SIZE);
-    const { data, error } = await supabase
-      .from('registros_llegada')
-      .select('id_estudiante, fecha, hora_llegada, estado, motivo_justificacion')
-      .in('id_estudiante', batch)
-      .gte('fecha', startStr)
-      .lte('fecha', endStr);
+    let from = 0;
+    const pageSize = 1000;
+    while (true) {
+      const { data, error } = await supabase
+        .from('registros_llegada')
+        .select('id_estudiante, fecha, hora_llegada, estado, motivo_justificacion')
+        .in('id_estudiante', batch)
+        .gte('fecha', startStr)
+        .lte('fecha', endStr)
+        .order('id_estudiante')
+        .order('fecha')
+        .range(from, from + pageSize - 1);
 
-    if (error) {
-      return { rows: [], error: error.message };
-    }
-    if (data?.length) {
-      allRows.push(...(data as ArrivalReportRow[]));
+      if (error) {
+        return { rows: [], error: error.message };
+      }
+      const page = (data ?? []) as ArrivalReportRow[];
+      if (page.length) allRows.push(...page);
+      if (page.length < pageSize) break;
+      from += pageSize;
     }
   }
 
   return { rows: allRows, error: null };
+}
+
+function buildArrivalRecordsMap(
+  arrivalsData: ArrivalReportRow[],
+): Map<number, Map<string, ArrivalReportRow>> {
+  const recordsMap = new Map<number, Map<string, ArrivalReportRow>>();
+  arrivalsData.forEach((record) => {
+    const studentId = studentRecordId(record.id_estudiante);
+    const dateKey = arrivalDateKey(record.fecha);
+    if (!studentId || !dateKey) return;
+    if (!recordsMap.has(studentId)) {
+      recordsMap.set(studentId, new Map());
+    }
+    const byDay = recordsMap.get(studentId)!;
+    const prev = byDay.get(dateKey);
+    if (prev && isCountableArrivalStatus(prev.estado) && !isCountableArrivalStatus(record.estado)) {
+      return;
+    }
+    byDay.set(dateKey, record);
+  });
+  return recordsMap;
 }
 
 /**
@@ -679,6 +716,7 @@ export async function getMonthlyAttendance(filters: {
       return { rows: [], daysInMonth, error: null };
     }
 
+    const todayKey = getLimaTodayDate();
     const { rows: arrivalsData, error: arrivalsError } = await fetchArrivalsForReport(
       studentIds,
       startStr,
@@ -690,24 +728,20 @@ export async function getMonthlyAttendance(filters: {
       return { rows: [], daysInMonth, error: arrivalsError };
     }
 
-    const recordsMap = new Map<number, Map<number, ArrivalReportRow>>();
-    arrivalsData.forEach((record) => {
-      const dateObj = new Date(record.fecha);
-      const day = dateObj.getUTCDate();
-      if (!recordsMap.has(record.id_estudiante)) {
-        recordsMap.set(record.id_estudiante, new Map());
-      }
-      recordsMap.get(record.id_estudiante)!.set(day, record);
-    });
+    const recordsMap = buildArrivalRecordsMap(arrivalsData);
 
     const rows: MonthlyAttendanceRow[] = (studentsData || []).map((student) => {
-      const dayStatusMap = recordsMap.get(student.id_estudiante) || new Map();
+      const dayStatusMap = recordsMap.get(studentRecordId(student.id_estudiante)) || new Map();
       const totals = emptyAttendanceTotals();
 
       const days = Array.from({ length: daysInMonth }, (_, idx) => {
         const day = idx + 1;
-        const record = dayStatusMap.get(day);
-        const status = convertArrivalEstadoToReport(record?.estado);
+        const dateKey = `${filters.year}-${String(filters.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const record = dayStatusMap.get(dateKey);
+        const status = resolveReportStatusForDay(dateKey, record?.estado, todayKey, {
+          hasRecord: Boolean(record),
+          arrivalTime: record?.hora_llegada,
+        });
         tallyAttendanceStatus(totals, status);
         return {
           day,
@@ -793,6 +827,7 @@ export async function getBimestralAttendance(filters: {
       return { rows: [], daysInBimestre, error: null };
     }
 
+    const todayKey = getLimaTodayDate();
     const { rows: arrivalsData, error: arrivalsError } = await fetchArrivalsForReport(
       studentIds,
       startStr,
@@ -804,14 +839,7 @@ export async function getBimestralAttendance(filters: {
       return { rows: [], daysInBimestre, error: arrivalsError };
     }
 
-    const recordsMap = new Map<number, Map<string, ArrivalReportRow>>();
-    arrivalsData.forEach((record) => {
-      const dateKey = record.fecha;
-      if (!recordsMap.has(record.id_estudiante)) {
-        recordsMap.set(record.id_estudiante, new Map());
-      }
-      recordsMap.get(record.id_estudiante)!.set(dateKey, record);
-    });
+    const recordsMap = buildArrivalRecordsMap(arrivalsData);
 
     // Crear array de todas las fechas del bimestre
     const allDates: string[] = [];
@@ -822,12 +850,15 @@ export async function getBimestralAttendance(filters: {
     }
 
     const rows: MonthlyAttendanceRow[] = (studentsData || []).map((student) => {
-      const dayStatusMap = recordsMap.get(student.id_estudiante) || new Map();
+      const dayStatusMap = recordsMap.get(studentRecordId(student.id_estudiante)) || new Map();
       const totals = emptyAttendanceTotals();
 
       const days = allDates.map((dateStr) => {
         const record = dayStatusMap.get(dateStr);
-        const status = convertArrivalEstadoToReport(record?.estado);
+        const status = resolveReportStatusForDay(dateStr, record?.estado, todayKey, {
+          hasRecord: Boolean(record),
+          arrivalTime: record?.hora_llegada,
+        });
         const dateObj = new Date(dateStr);
         const day = dateObj.getDate();
         tallyAttendanceStatus(totals, status);
@@ -1227,8 +1258,14 @@ export async function fetchMonthArrivalsForStudent(
     rawRecords = (data || []).map(mapArrivalRow);
   }
 
+  rawRecords = rawRecords.map((record) => {
+    const status = collapsePlaceholderArrivalStatus(record.status, record.arrivalTime);
+    return status === record.status ? record : { ...record, status: status as ArrivalRecord['status'] };
+  });
+
   const limits = await fetchPublicArrivalLimits();
-  return rawRecords.map((record) => applyScanStatus(record, limits, studentLevel));
+  const resolved = rawRecords.map((record) => applyScanStatus(record, limits, studentLevel));
+  return resolved;
 }
 
 /**
@@ -1397,11 +1434,14 @@ async function getPublicInfoByDniRpc(dni: string): Promise<{
         const fromMonth = recentArrivals.find(
           (row) => row.id === mapped.id || String(row.date).slice(0, 10) === String(mapped.date).slice(0, 10),
         );
+        const collapsed = collapsePlaceholderArrivalStatus(mapped.status, mapped.arrivalTime);
         const withExit = {
           ...mapped,
+          status: collapsed as ArrivalRecord['status'],
           departureTime: mapped.departureTime ?? fromMonth?.departureTime ?? null,
           departureType: mapped.departureType ?? fromMonth?.departureType ?? null,
         };
+        if (!hasUsableArrivalTime(withExit.arrivalTime)) return withExit;
         const status = resolveArrivalStatusForStudent(
           withExit.arrivalTime,
           limits,
@@ -1510,7 +1550,10 @@ export async function getAttendanceJustifications(filters?: {
   limit?: number;
 }): Promise<{ records: ArrivalRecord[]; error: string | null }> {
   const pending = filters?.pending ?? true;
-  return getArrivals({
+  if (filters?.date && !isWeekdayDateKey(filters.date)) {
+    return { records: [], error: null };
+  }
+  const result = await getArrivals({
     date: filters?.date,
     dateFrom: filters?.dateFrom,
     dateTo: filters?.dateTo,
@@ -1520,6 +1563,11 @@ export async function getAttendanceJustifications(filters?: {
       : [ARRIVAL_ESTADO.LATE_JUSTIFIED, ARRIVAL_ESTADO.ABSENCE_JUSTIFIED],
     limit: filters?.limit ?? 500,
   });
+  if (result.error) return result;
+  return {
+    records: result.records.filter((row) => isWeekdayDateKey(arrivalDateKey(row.date))),
+    error: null,
+  };
 }
 
 /** Alumnos activos sin llegada (o con estado Falta) en una fecha, para justificar IJ. */
@@ -1531,6 +1579,9 @@ export async function getPendingAbsencesForDate(filters: {
 }): Promise<{ records: ArrivalRecord[]; error: string | null }> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(filters.date)) {
     return { records: [], error: 'La fecha no es válida.' };
+  }
+  if (!isWeekdayDateKey(filters.date)) {
+    return { records: [], error: null };
   }
 
   try {
@@ -1549,7 +1600,7 @@ export async function getPendingAbsencesForDate(filters: {
 
     const arrivalsQuery = supabase
       .from('registros_llegada')
-      .select('id_registro, id_estudiante, estado')
+      .select('id_registro, id_estudiante, estado, hora_llegada')
       .eq('fecha', filters.date)
       .range(0, 1999);
 
@@ -1562,15 +1613,30 @@ export async function getPendingAbsencesForDate(filters: {
       return { records: [], error: arrivalsRes.error.message };
     }
 
-    const present = new Map<number, { id: number; estado: string }>();
+    const todayKey = getLimaTodayDate();
+    const inferFalto = isClosedFaltoEligibleDate(filters.date, todayKey);
+
+    const present = new Map<number, { id: number; estado: string; hora: string | null }>();
     for (const row of arrivalsRes.data ?? []) {
-      present.set(row.id_estudiante, { id: row.id_registro, estado: String(row.estado) });
+      present.set(row.id_estudiante, {
+        id: row.id_registro,
+        estado: String(row.estado),
+        hora: row.hora_llegada ?? null,
+      });
     }
 
     const pending: ArrivalRecord[] = [];
     for (const row of studentsRes.data ?? []) {
       const arrival = present.get(row.id_estudiante);
-      if (arrival && arrival.estado !== 'Falta') continue;
+      const usableArrival = Boolean(arrival && hasUsableArrivalTime(arrival.hora));
+      if (arrival && usableArrival && isCountableArrivalStatus(arrival.estado)) continue;
+      const isStoredFalto = Boolean(
+        arrival &&
+          (isRawAbsenceStatus(arrival.estado) ||
+            collapsePlaceholderArrivalStatus(arrival.estado, arrival.hora) === 'Falta'),
+      );
+      if (!isStoredFalto && !inferFalto) continue;
+      if (!isStoredFalto && arrival) continue;
 
       const student: Student = {
         id: row.id_estudiante,
@@ -1624,6 +1690,9 @@ export async function justifyTardiness(
 
     if (fetchError) return { record: null, error: fetchError.message };
     if (!current) return { record: null, error: 'No se encontró el registro de llegada.' };
+    if (!isWeekdayDateKey(arrivalDateKey(current.fecha))) {
+      return { record: null, error: 'No hay clases los sábados ni domingo; no se justifica esa fecha.' };
+    }
     if (current.estado === ARRIVAL_ESTADO.LATE_JUSTIFIED) {
       return { record: mapArrivalRow(current as never), error: null };
     }
@@ -1668,6 +1737,9 @@ export async function createJustifiedAbsence(input: {
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) {
     return { record: null, error: 'La fecha no es válida.' };
+  }
+  if (!isWeekdayDateKey(input.date)) {
+    return { record: null, error: 'No hay clases los sábados ni domingo; no se justifica esa fecha.' };
   }
 
   try {

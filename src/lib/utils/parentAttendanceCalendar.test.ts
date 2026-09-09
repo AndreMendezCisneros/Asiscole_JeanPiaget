@@ -35,6 +35,20 @@ describe('parentAttendanceCalendar', () => {
     expect(resolveDayStatus('2026-06-25', undefined, '2026-06-25')).toBe('norecord');
   });
 
+  it('desde el 07/09/2026 un día hábil cerrado sin registro es falto', () => {
+    expect(resolveDayStatus('2026-09-07', undefined, '2026-09-09')).toBe('absent');
+    expect(resolveDayStatus('2026-09-08', undefined, '2026-09-09')).toBe('absent');
+    expect(resolveDayStatus('2026-09-09', undefined, '2026-09-09')).toBe('norecord');
+    expect(resolveDayStatus('2026-09-07', record('2026-09-07', 'Falta'), '2026-09-09')).toBe('absent');
+  });
+
+  it('A tiempo con 00:00 no es presente: el RPC marca placeholder como llegada', () => {
+    const midnight = record('2026-09-07', 'A tiempo');
+    midnight.arrivalTime = '00:00';
+    expect(resolveDayStatus('2026-09-07', midnight, '2026-09-09')).toBe('absent');
+    expect(formatClassAttendanceLines(midnight)).toEqual(['Falto (inasistencia)']);
+  });
+
   it('recalcula tarde según límite del nivel en el calendario', () => {
     const lateByLimit = record('2026-06-03', 'A tiempo');
     lateByLimit.arrivalTime = '19:34';

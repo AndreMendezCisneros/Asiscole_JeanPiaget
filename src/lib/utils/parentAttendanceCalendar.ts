@@ -2,6 +2,11 @@ import { format, parseISO } from 'date-fns';
 import type { ArrivalRecord, Incident, TallerAsistencia } from '@/types';
 import type { ArrivalLimitsByLevel } from '@/lib/utils/arrivalLimit';
 import { resolveArrivalStatusForStudent } from '@/lib/utils/arrivalLimit';
+import {
+  hasUsableArrivalTime,
+  isClosedFaltoEligibleDate,
+  isRawAbsenceStatus,
+} from '@/lib/utils/attendanceJustification';
 
 export type CalendarLimitCtx = {
   limits: ArrivalLimitsByLevel;
@@ -47,7 +52,7 @@ export const DAY_STYLES: Record<
     text: '#8B1F1F',
     border: '#F2A0A0',
     icon: '✗',
-    label: 'falta',
+    label: 'falto',
   },
   absent_justified: {
     bg: '#F3E8FF',
@@ -93,6 +98,7 @@ export function isWeekend(dayKey: string): boolean {
 function arrivalKind(record: ArrivalRecord, ctx?: CalendarLimitCtx): DayStatus {
   if (record.status === 'Falta justificada') return 'absent_justified';
   if (record.status === 'Tarde justificada') return 'late_justified';
+  if (isRawAbsenceStatus(record.status)) return 'absent';
   const status = ctx
     ? resolveArrivalStatusForStudent(record.arrivalTime, ctx.limits, ctx.level)
     : record.status;
@@ -106,10 +112,13 @@ export function resolveDayStatus(
   ctx?: CalendarLimitCtx,
 ): DayStatus {
   if (isWeekend(dayKey) || dayKey > todayKey) return 'noclass';
-  if (record) {
+  if (record && hasUsableArrivalTime(record.arrivalTime)) {
     return arrivalKind(record, ctx);
   }
-  // Sin escaneo no se marca falta: el colegio aún no tiene historial completo.
+  if (record && (isRawAbsenceStatus(record.status) || record.status === 'Falta justificada')) {
+    return record.status === 'Falta justificada' ? 'absent_justified' : 'absent';
+  }
+  if (isClosedFaltoEligibleDate(dayKey, todayKey)) return 'absent';
   return 'norecord';
 }
 
@@ -151,6 +160,13 @@ export function formatClassAttendanceLines(record: ArrivalRecord | undefined): s
   if (!record) return [];
   if (record.status === 'Falta justificada') {
     return ['Inasistencia justificada (IJ)'];
+  }
+  if (
+    record.status === 'Falta' ||
+    record.status === 'Injustificada' ||
+    (record.status !== 'Tarde justificada' && !hasUsableArrivalTime(record.arrivalTime))
+  ) {
+    return ['Falto (inasistencia)'];
   }
   const statusLabel =
     record.status === 'Tarde justificada' ? 'Tarde justificada (TJ)' : record.status;
@@ -242,12 +258,12 @@ export function dayDetailCopy(
       };
     case 'absent':
       return {
-        badge: 'Falta',
-        description: `${studentFirstName} no asistió al colegio este día. Si fue por enfermedad u otro motivo, puede justificarlo con la tutora.`,
+        badge: 'Falto',
+        description: `${studentFirstName} no asistió al colegio este día (inasistencia). Si fue por enfermedad u otro motivo, puede justificarlo con la tutora.`,
       };
     case 'absent_justified':
       return {
-        badge: 'Falta justificada',
+        badge: 'Inasistencia justificada',
         description: `${studentFirstName} no asistió este día. La inasistencia está justificada ante el colegio.`,
       };
     case 'norecord':
