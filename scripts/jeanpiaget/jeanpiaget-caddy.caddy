@@ -37,9 +37,10 @@ jeanpiaget.asiscole.com {
 	@static path *.ico *.svg *.png *.jpg *.jpeg *.webp
 	header @static Cache-Control "public, max-age=86400"
 
-	# Canal movil desactivado en este VPS (migrado)
+	# Canal móvil (Django asiscole-canal en este mismo VPS)
 	handle /canal-api* {
-		respond "Canal migrado a otro servidor" 503
+		uri strip_prefix /canal-api
+		reverse_proxy 127.0.0.1:8000
 	}
 
 	# Cola chips JP (legado; servicio puede estar apagado)

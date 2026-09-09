@@ -89,7 +89,7 @@ function isPendingRow(row: ArrivalRecord): boolean {
   return row.status === 'Tarde' || isPendingAbsence(row);
 }
 
-type ListMode = 'Activa' | 'Inasistencias' | 'Justificada';
+type ListMode = 'Activa' | 'Inasistencias';
 
 export const JustifyAttendance = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -263,24 +263,14 @@ export const JustifyAttendance = () => {
           label="En lista"
           value={filtered.length}
           hint={
-            statusFilter === 'Activa'
-              ? 'Tardanzas pendientes'
-              : statusFilter === 'Inasistencias'
-                ? 'Inasistencias del aula'
-                : 'Historial TJ / IJ'
+            statusFilter === 'Activa' ? 'Tardanzas pendientes' : 'Inasistencias del aula'
           }
           icon={Clock}
           tone="warning"
         />
         <StaffKpiStat
           label="Filtro"
-          value={
-            statusFilter === 'Activa'
-              ? 'Pendiente'
-              : statusFilter === 'Inasistencias'
-                ? 'Inasistencias'
-                : 'Justificada'
-          }
+          value={statusFilter === 'Activa' ? 'Tardanzas' : 'Inasistencias'}
           hint={dateFilter || 'Todas las fechas'}
           icon={CheckCircle2}
           tone="info"
@@ -340,9 +330,8 @@ export const JustifyAttendance = () => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Activa">Pendiente (tardanzas)</SelectItem>
-                <SelectItem value="Inasistencias">Inasistencias (faltas)</SelectItem>
-                <SelectItem value="Justificada">Justificada (TJ / IJ)</SelectItem>
+                <SelectItem value="Activa">Tardanzas</SelectItem>
+                <SelectItem value="Inasistencias">Inasistencias</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -416,9 +405,7 @@ export const JustifyAttendance = () => {
           description={
             statusFilter === 'Activa'
               ? 'Tardanzas sin justificar. Pulse Justificar e indique el motivo.'
-              : statusFilter === 'Inasistencias'
-                ? 'Alumnos sin llegada en la fecha. Puede acotar por nivel, grado o sección.'
-                : 'Historial de tardanzas e inasistencias justificadas'
+              : 'Alumnos sin llegada en la fecha. Puede acotar por nivel, grado o sección.'
           }
         />
         <div className={loading ? 'p-4 pt-0 sm:p-5 sm:pt-0 opacity-70' : 'p-4 pt-0 sm:p-5 sm:pt-0'}>
@@ -451,9 +438,7 @@ export const JustifyAttendance = () => {
               description={
                 statusFilter === 'Activa'
                   ? 'No hay tardanzas pendientes con estos filtros'
-                  : statusFilter === 'Inasistencias'
-                    ? 'Todos los alumnos de ese aula tienen llegada o ya están justificados'
-                    : 'No hay justificaciones de asistencia en el historial'
+                  : 'Todos los alumnos de ese aula tienen llegada o ya están justificados'
               }
             />
           ) : (

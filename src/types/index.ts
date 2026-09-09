@@ -15,7 +15,12 @@ export interface BimestreInfo {
   label: string;
 }
 
-export type FaultCategory = 'Conducta' | 'Uniforme' | 'Académica' | 'Puntualidad';
+export type FaultCategory =
+  | 'Conducta'
+  | 'Uniforme'
+  | 'Académica'
+  | 'Puntualidad'
+  | 'Salida autorizada';
 
 export type FaultSeverity = 'Leve' | 'Grave';
 

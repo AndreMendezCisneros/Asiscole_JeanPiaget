@@ -57,7 +57,7 @@ const faultFormSchema = z.object({
   recomendacion: z.string()
     .max(800, 'Máximo 800 caracteres')
     .optional(),
-  categoria: z.enum(['Conducta', 'Uniforme', 'Académica', 'Puntualidad'] as const, {
+  categoria: z.enum(['Conducta', 'Uniforme', 'Académica', 'Puntualidad', 'Salida autorizada'] as const, {
     required_error: 'La categoría es requerida',
   }),
   es_grave: z.boolean(),
@@ -107,6 +107,7 @@ export const FaultsCatalog = () => {
     { value: 'Uniforme', label: 'Uniforme' },
     { value: 'Académica', label: 'Académica' },
     { value: 'Puntualidad', label: 'Puntualidad' },
+    { value: 'Salida autorizada', label: 'Salidas' },
   ];
 
   const openCreateDialog = () => {
@@ -118,7 +119,7 @@ export const FaultsCatalog = () => {
 
   const openEditDialog = (fault: FaultType) => {
     const categoria = (
-      ['Conducta', 'Uniforme', 'Académica', 'Puntualidad'].includes(fault.category)
+      ['Conducta', 'Uniforme', 'Académica', 'Puntualidad', 'Salida autorizada'].includes(fault.category)
         ? fault.category
         : 'Conducta'
     ) as FaultCategory;
@@ -307,6 +308,7 @@ export const FaultsCatalog = () => {
                             <SelectItem value="Uniforme">Uniforme</SelectItem>
                             <SelectItem value="Académica">Académica</SelectItem>
                             <SelectItem value="Puntualidad">Puntualidad</SelectItem>
+                            <SelectItem value="Salida autorizada">Salida autorizada</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />

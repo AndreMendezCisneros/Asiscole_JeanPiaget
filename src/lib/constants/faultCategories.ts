@@ -3,6 +3,7 @@ export const DEFAULT_FAULT_CATEGORIES = [
   'Uniforme',
   'Académica',
   'Puntualidad',
+  'Salida autorizada',
 ] as const;
 
 export const FAULT_CATEGORIES_CONFIG_KEY = 'categorias_faltas';

@@ -212,6 +212,7 @@ export const DepartureControl = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [confirmBulk, setConfirmBulk] = useState<BulkConfirmTarget | null>(null);
   const [individualOpen, setIndividualOpen] = useState(false);
+  const [registeringId, setRegisteringId] = useState<number | null>(null);
   const isMountedRef = useRef(true);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
@@ -403,6 +404,49 @@ export const DepartureControl = () => {
     } finally {
       if (isMountedRef.current) {
         setScanning(false);
+      }
+    }
+  };
+
+  const handleRegisterOneDeparture = async (record: ArrivalRecord) => {
+    if (record.departureTime) {
+      toast.info(
+        `${record.student?.fullName || 'El estudiante'} ya tiene salida (${record.departureTime})`,
+      );
+      return;
+    }
+
+    const currentUser = authService.getCurrentUser();
+    if (!currentUser) {
+      toast.error('Debe estar autenticado para registrar salidas');
+      return;
+    }
+
+    setRegisteringId(record.id);
+    try {
+      const { successCount, error, updatedIds, departureTime } =
+        await arrivalService.createBulkDepartureRecords(
+          [record.id],
+          currentUser.id,
+          departureType,
+        );
+
+      if (!isMountedRef.current) return;
+
+      if (error || successCount === 0) {
+        toast.error(error || 'No se pudo registrar la salida');
+        return;
+      }
+
+      enqueueDepartureWhatsApp(records, updatedIds, departureTime, departureType);
+      staffNotify.success(
+        'Salida registrada',
+        record.student?.fullName || 'Estudiante',
+      );
+      void loadArrivals();
+    } finally {
+      if (isMountedRef.current) {
+        setRegisteringId(null);
       }
     }
   };
@@ -904,9 +948,21 @@ export const DepartureControl = () => {
           title="Listado del día"
           description={listSummary}
           action={
-            <Button onClick={() => void loadArrivals()} variant="outline" size="sm" disabled={loading}>
-              Actualizar
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2 rounded-full"
+                onClick={() => setIndividualOpen(true)}
+              >
+                <LogOut className="h-4 w-4" />
+                Registrar Salida
+              </Button>
+              <Button onClick={() => void loadArrivals()} variant="outline" size="sm" disabled={loading}>
+                Actualizar
+              </Button>
+            </div>
           }
         />
         <div className="p-4 pt-0 sm:p-5 sm:pt-0">
@@ -935,6 +991,7 @@ export const DepartureControl = () => {
                     <TableHead>Hora llegada</TableHead>
                     <TableHead>Hora salida</TableHead>
                     <TableHead>Estado llegada</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -984,6 +1041,27 @@ export const DepartureControl = () => {
                         >
                           {record.status}
                         </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {!record.departureTime ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-2 rounded-full"
+                            disabled={registeringId != null || bulkSubmitting || scanning}
+                            onClick={() => void handleRegisterOneDeparture(record)}
+                          >
+                            {registeringId === record.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <LogOut className="h-4 w-4" />
+                            )}
+                            Registrar Salida
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
