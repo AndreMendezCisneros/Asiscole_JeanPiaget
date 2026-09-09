@@ -29,6 +29,7 @@ import {
   sessionService,
 } from '@/lib/services';
 import { Student, FaultType, ArrivalRecord } from '@/types';
+import { pickTutorQuickFaults } from '@/lib/utils/tutorQuickFaults';
 import type { StudentScheduleStatus } from '@/lib/utils/sectionSchedule';
 import { useNavigate } from 'react-router-dom';
 import { useInvalidateIncidents } from '@/hooks/queries/useIncidentsQuery';
@@ -342,14 +343,7 @@ export const TutorScanner = () => {
     };
   }, [student, nowHHMM]);
 
-  const quickFaults = useMemo(
-    () =>
-      [...faults]
-        .filter((f) => f.active)
-        .sort((a, b) => (a.ordenVisualizacion ?? 99) - (b.ordenVisualizacion ?? 99))
-        .slice(0, 6),
-    [faults]
-  );
+  const quickFaults = useMemo(() => pickTutorQuickFaults(faults), [faults]);
 
   const scheduleBadgeVariant = useMemo(() => {
     if (!studentSchedule) return 'secondary' as const;
