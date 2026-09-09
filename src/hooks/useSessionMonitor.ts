@@ -6,7 +6,7 @@ const ACTIVITY_THROTTLE_MS = 1000;
 
 /**
  * Cierra la sesión tras inactividad real (sin renovar el temporizador en segundo plano).
- * Tutor y padre: 15 min · resto de roles: 30 min.
+ * Tutor y docente: 45 min · padre: 15 min · resto de roles: 30 min.
  */
 export const useSessionMonitor = () => {
   const navigate = useNavigate();

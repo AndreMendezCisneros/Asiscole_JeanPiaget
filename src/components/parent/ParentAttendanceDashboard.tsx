@@ -510,6 +510,8 @@ export function ParentAttendanceDashboard({
               [
                 ['present', 'A tiempo'],
                 ['late', 'Tardanza'],
+                ['late_justified', 'TJ'],
+                ['absent_justified', 'IJ'],
                 ['noclass', 'Sin clase'],
                 ['norecord', 'Sin registro'],
               ] as const

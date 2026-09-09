@@ -25,6 +25,7 @@ import { ArrivalControl } from "./pages/ArrivalControl";
 import { DepartureControl } from "./pages/DepartureControl";
 import { ParentMeetings } from "./pages/ParentMeetings";
 import { JustifyFaults } from "./pages/JustifyFaults";
+import { JustifyAttendance } from "./pages/JustifyAttendance";
 import { FaultsCatalog } from "./pages/FaultsCatalog";
 import { Reports } from "./pages/Reports";
 import { AuditLogs } from "./pages/AuditLogs";
@@ -125,6 +126,7 @@ const AppContent = () => {
         />
         <Route path="/arrival-control" element={<ArrivalControl />} />
         <Route path="/departure-control" element={<DepartureControl />} />
+        <Route path="/justify-attendance" element={<JustifyAttendance />} />
         <Route path="/parent-meetings" element={<ParentMeetings />} />
         <Route path="/justify-faults" element={<JustifyFaults />} />
         <Route
@@ -267,7 +269,12 @@ const App = () => (
         <Toaster />
         <Sonner />
         <SuccessFlashOverlay />
-        <BrowserRouter>
+        <BrowserRouter
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true,
+          }}
+        >
           <AppWithSessionMonitor />
         </BrowserRouter>
       </TooltipProvider>

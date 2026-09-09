@@ -1,16 +1,17 @@
 /**
- * Assets de marca SIE/Guardy.
+ * Assets de marca Asiscole.
  *
- * - UI del sistema: SVG (favicon.svg) — nítido en sidebar, login, etc.
- * - WhatsApp / Open Graph: solo PNG (og-image.png) — el crawler no usa SVG.
- *
- * No usar guardy-mark.png (asset Lovable heredado).
+ * - UI del sistema: PNG con transparencia (logo_asiscole_sf.png).
+ * - WhatsApp / Open Graph: JPEG (whatsapp-preview.jpg) — el crawler no usa SVG.
  */
-/** Escudo vectorial para componentes de la app */
-export const BRAND_ICON_SVG = '/favicon.svg';
+/** Marca oficial (escudo + A + birrete, fondo transparente) */
+export const BRAND_MARK = '/logo_asiscole_sf.png';
 
-/** Logo completo (escudo + wordmark) — solo hero/login */
-export const BRAND_LOGIN_LOGO = '/guardy-logo.png';
+/** Escudo para componentes compactos (sidebar, cabeceras) */
+export const BRAND_ICON_SVG = BRAND_MARK;
+
+/** Logo completo — login y pie de formulario */
+export const BRAND_LOGIN_LOGO = BRAND_MARK;
 
 /** PNG para favicon del navegador y PWA */
 export const BRAND_ICON_SM = '/favicon-192.png';

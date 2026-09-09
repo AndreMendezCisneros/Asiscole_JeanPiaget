@@ -76,4 +76,5 @@ export const NOINDEX_PREFIXES = [
   '/parent-meetings',
   '/parent-portal',
   '/justify-faults',
+  '/justify-attendance',
 ];

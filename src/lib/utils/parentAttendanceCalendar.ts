@@ -8,7 +8,14 @@ export type CalendarLimitCtx = {
   level?: string | null;
 };
 
-export type DayStatus = 'present' | 'late' | 'absent' | 'norecord' | 'noclass';
+export type DayStatus =
+  | 'present'
+  | 'late'
+  | 'late_justified'
+  | 'absent'
+  | 'absent_justified'
+  | 'norecord'
+  | 'noclass';
 
 export const DAY_STYLES: Record<
   DayStatus,
@@ -28,12 +35,26 @@ export const DAY_STYLES: Record<
     icon: '⏱',
     label: 'tarde',
   },
+  late_justified: {
+    bg: '#E8F1FE',
+    text: '#1E40AF',
+    border: '#93C5FD',
+    icon: '⏱',
+    label: 'TJ',
+  },
   absent: {
     bg: '#FDEAEA',
     text: '#8B1F1F',
     border: '#F2A0A0',
     icon: '✗',
     label: 'falta',
+  },
+  absent_justified: {
+    bg: '#F3E8FF',
+    text: '#6B21A8',
+    border: '#D8B4FE',
+    icon: 'IJ',
+    label: 'justif.',
   },
   norecord: {
     bg: '#F7F8FA',
@@ -69,7 +90,9 @@ export function isWeekend(dayKey: string): boolean {
   return dow === 0 || dow === 6;
 }
 
-function arrivalKind(record: ArrivalRecord, ctx?: CalendarLimitCtx): 'present' | 'late' {
+function arrivalKind(record: ArrivalRecord, ctx?: CalendarLimitCtx): DayStatus {
+  if (record.status === 'Falta justificada') return 'absent_justified';
+  if (record.status === 'Tarde justificada') return 'late_justified';
   const status = ctx
     ? resolveArrivalStatusForStudent(record.arrivalTime, ctx.limits, ctx.level)
     : record.status;
@@ -126,7 +149,12 @@ export function formatTallerIncidentDayDetail(rows: Incident[]): string[] {
 /** Líneas de asistencia de clase: llegada y salida (si hay). */
 export function formatClassAttendanceLines(record: ArrivalRecord | undefined): string[] {
   if (!record) return [];
-  const lines = [`Llegada: ${parseArrivalTime12h(record.arrivalTime)} (${record.status})`];
+  if (record.status === 'Falta justificada') {
+    return ['Inasistencia justificada (IJ)'];
+  }
+  const statusLabel =
+    record.status === 'Tarde justificada' ? 'Tarde justificada (TJ)' : record.status;
+  const lines = [`Llegada: ${parseArrivalTime12h(record.arrivalTime)} (${statusLabel})`];
   if (record.departureTime) {
     const tipo = record.departureType ? ` · ${record.departureType}` : '';
     lines.push(`Salida: ${parseArrivalTime12h(record.departureTime)}${tipo}`);
@@ -171,8 +199,8 @@ export function computeMonthMetrics(
     const key = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     const status = resolveDayStatus(key, byDate.get(key), todayKey, ctx);
     if (status === 'present') present++;
-    else if (status === 'late') late++;
-    else if (status === 'absent') absent++;
+    else if (status === 'late' || status === 'late_justified') late++;
+    else if (status === 'absent' || status === 'absent_justified') absent++;
   }
   return { present, late, absent };
 }
@@ -207,10 +235,20 @@ export function dayDetailCopy(
         badge: 'Tardanza',
         description: `${studentFirstName} llegó tarde. Entrada registrada a las ${hora}.${salida} Se recomienda reforzar la puntualidad.`,
       };
+    case 'late_justified':
+      return {
+        badge: 'Tardanza justificada',
+        description: `${studentFirstName} llegó tarde, con justificación registrada. Entrada a las ${hora}.${salida}`,
+      };
     case 'absent':
       return {
         badge: 'Falta',
         description: `${studentFirstName} no asistió al colegio este día. Si fue por enfermedad u otro motivo, puede justificarlo con la tutora.`,
+      };
+    case 'absent_justified':
+      return {
+        badge: 'Falta justificada',
+        description: `${studentFirstName} no asistió este día. La inasistencia está justificada ante el colegio.`,
       };
     case 'norecord':
       return {

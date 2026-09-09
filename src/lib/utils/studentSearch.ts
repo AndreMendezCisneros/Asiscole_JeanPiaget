@@ -59,6 +59,36 @@ export function studentMatchesSearchTokens(student: Student, tokens: string[]): 
   });
 }
 
+/** Nombre, DNI/código o aula (nivel, grado, sección). Acepta "3ro A" y acentos. */
+export function studentMatchesNameOrClassroom(
+  student: Pick<Student, 'fullName' | 'barcode' | 'level' | 'grade' | 'section'> | undefined,
+  query: string,
+): boolean {
+  const rawParts = normalizeSearchQuery(query).split(' ').filter(Boolean);
+  if (rawParts.length === 0) return true;
+  if (!student) return false;
+
+  const nameFolded = foldSearchText(student.fullName);
+  const barcodeFolded = foldSearchText(student.barcode);
+  const barcodeDigits = student.barcode.replace(/\D/g, '');
+  const classroomFolded = foldSearchText(
+    `${student.level} ${student.grade} ${student.section} ${student.grade}${student.section}`,
+  );
+
+  return rawParts.every((part) => {
+    const folded = foldSearchText(part);
+    if (!folded) return true;
+    if (folded.length === 1) {
+      return foldSearchText(student.section) === folded;
+    }
+    if (nameFolded.includes(folded)) return true;
+    if (barcodeFolded.includes(folded)) return true;
+    if (classroomFolded.includes(folded)) return true;
+    const digits = part.replace(/\D/g, '');
+    return digits.length >= 2 && barcodeDigits.includes(digits);
+  });
+}
+
 /** Tokens ordenados del más selectivo (largo) al más común. */
 export function orderSearchTokensBySelectivity(tokens: string[]): string[] {
   return [...tokens].sort((a, b) => b.length - a.length || a.localeCompare(b, 'es'));

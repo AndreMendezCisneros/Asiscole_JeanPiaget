@@ -71,6 +71,15 @@ describe('parentAttendanceCalendar', () => {
     ]);
   });
 
+  it('muestra tardanza justificada y falta justificada en el calendario', () => {
+    expect(resolveDayStatus('2026-06-03', record('2026-06-03', 'Tarde justificada'), '2026-06-28')).toBe(
+      'late_justified',
+    );
+    expect(resolveDayStatus('2026-06-04', record('2026-06-04', 'Falta justificada'), '2026-06-28')).toBe(
+      'absent_justified',
+    );
+  });
+
   it('formatea incidencias del día con nombre y hora', () => {
     const incident = {
       id: 1,

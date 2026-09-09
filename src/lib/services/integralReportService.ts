@@ -24,6 +24,8 @@ export type IntegralStudentBlock = {
     records: IntegralAttendanceRecord[];
     onTime: number;
     late: number;
+    lateJustified: number;
+    absentJustified: number;
     justified: number;
     unjustified: number;
   };
@@ -184,7 +186,9 @@ export async function assembleIntegralBlocks(input: {
     const tardeMapped = tarde ? recordsFromTardeRow(tarde, dateKeys) : [];
     const onTime = morning?.totals.onTime ?? 0;
     const late = morning?.totals.late ?? 0;
-    const justified = morning?.totals.justified ?? 0;
+    const lateJustified = morning?.totals.lateJustified ?? 0;
+    const absentJustified = morning?.totals.absentJustified ?? 0;
+    const justified = lateJustified;
     const unjustified = morning?.totals.unjustified ?? 0;
     const presentTarde = tarde?.totals.onTime ?? 0;
     const studentIncidents = incidentsByStudent.get(student.id) ?? [];
@@ -197,6 +201,8 @@ export async function assembleIntegralBlocks(input: {
         records: mananaRecords.filter((record) => record.status !== 'Sin_registro'),
         onTime,
         late,
+        lateJustified,
+        absentJustified,
         justified,
         unjustified,
       },
@@ -208,8 +214,8 @@ export async function assembleIntegralBlocks(input: {
       notas: [] as IntegralNotaRow[],
       pensiones: studentPensiones,
       summary: {
-        asistenciasManana: onTime + late,
-        faltas: unjustified,
+        asistenciasManana: onTime + late + lateJustified,
+        faltas: absentJustified + unjustified,
         tardanzas: late,
         asistenciasTarde: presentTarde,
         incidencias: studentIncidents.length,

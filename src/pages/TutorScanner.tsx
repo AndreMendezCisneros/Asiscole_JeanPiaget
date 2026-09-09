@@ -938,7 +938,7 @@ export const TutorScanner = () => {
       lastScanRef.current = { code, at: now };
 
       // Cada escaneo es actividad real: mantiene viva la sesión del tutor (cliente
-      // y servidor) aunque no toque la pantalla, evitando cierres a los 15 min.
+      // y servidor) aunque no toque la pantalla, evitando cierres a los 45 min.
       sessionService.touchActivity();
       authService.renewSessionThrottled();
       setBarcode('');

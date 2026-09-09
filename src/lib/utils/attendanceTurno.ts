@@ -62,6 +62,8 @@ export function buildTardeAttendanceRows(
       totals: {
         onTime,
         late: 0,
+        lateJustified: 0,
+        absentJustified: 0,
         justified: 0,
         unjustified: 0,
       },

@@ -1,5 +1,5 @@
 import { supabase } from '../supabaseClient';
-import type { ArrivalRecord, RegistroLlegadaDB, Student, EducationalLevel, MonthlyAttendanceRow, AttendanceStatus } from '@/types';
+import type { ArrivalRecord, RegistroLlegadaDB, Student, EducationalLevel, MonthlyAttendanceRow } from '@/types';
 import { configService } from './configService';
 import { studentsService } from './studentsService';
 import { authService } from './authService';
@@ -11,6 +11,14 @@ import {
   resolveArrivalStatusForStudent,
 } from '@/lib/utils/arrivalLimit';
 import { SYSTEM_SETTING_KEYS, normalizeTimeValue } from '@/config/systemSettings';
+import {
+  ARRIVAL_ESTADO,
+  MIN_JUSTIFICATION_REASON_LENGTH,
+  convertArrivalEstadoToReport,
+  emptyAttendanceTotals,
+  isProtectedArrivalStatus,
+  tallyAttendanceStatus,
+} from '@/lib/utils/attendanceJustification';
 
 const ARRIVAL_LIMIT_CACHE_TTL = 15 * 60 * 1000;
 
@@ -63,6 +71,9 @@ function mapArrivalRecord(record: RegistroLlegadaDB & {
       active: record.usuario.activo,
     } : undefined,
     createdAt: record.fecha_creacion,
+    justificationReason: record.motivo_justificacion ?? null,
+    justifiedBy: record.justificado_por ?? null,
+    justifiedAt: record.fecha_justificacion ?? null,
     departureTime: departureTime,
     departureRegisteredBy: record.registrado_salida_por || null,
     departureType: (record.tipo_salida as 'Normal' | 'Autorizada' | 'Sin registro' | null) || null,
@@ -83,19 +94,29 @@ function canSyncArrivalEstadoInDb(): boolean {
   return role === 'Admin' || role === 'Director' || role === 'Supervisor';
 }
 
+function applyScanStatus(
+  record: ArrivalRecord,
+  limits: ArrivalLimitsByLevel,
+  level?: string | null,
+): ArrivalRecord {
+  if (isProtectedArrivalStatus(record.status)) return record;
+  const status = resolveArrivalStatusForStudent(record.arrivalTime, limits, level);
+  return status === record.status ? record : { ...record, status };
+}
+
 async function resolveRecordStatus(
   record: ArrivalRecord,
   level?: string | null,
   syncToDb = false,
 ): Promise<ArrivalRecord> {
+  if (isProtectedArrivalStatus(record.status)) return record;
   const limits = await fetchArrivalLimits();
-  const status = resolveArrivalStatusForStudent(record.arrivalTime, limits, level);
-  if (status === record.status) return record;
-  const resolved = { ...record, status };
+  const resolved = applyScanStatus(record, limits, level);
+  if (resolved.status === record.status) return record;
   if (syncToDb && canSyncArrivalEstadoInDb() && record.id > 0) {
     const { error } = await supabase
       .from('registros_llegada')
-      .update({ estado: status })
+      .update({ estado: resolved.status })
       .eq('id_registro', record.id);
     if (error) console.warn('resolveRecordStatus sync:', error.message);
   }
@@ -215,7 +236,7 @@ export type CreateArrivalResult = {
 };
 
 const ARRIVAL_ROW_SELECT =
-  'id_registro, id_estudiante, fecha, hora_llegada, hora_salida, tipo_salida, estado, fecha_creacion, registrado_por';
+  'id_registro, id_estudiante, fecha, hora_llegada, hora_salida, tipo_salida, estado, fecha_creacion, registrado_por, motivo_justificacion, justificado_por, fecha_justificacion';
 
 /** Evita carrera solo para el mismo estudiante; distintos escanean en paralelo. */
 const arrivalCreateLocks = new Map<number, Promise<CreateArrivalResult>>();
@@ -235,6 +256,9 @@ function mapArrivalRow(data: {
   estado: string;
   fecha_creacion: string;
   registrado_por: number | null;
+  motivo_justificacion?: string | null;
+  justificado_por?: number | null;
+  fecha_justificacion?: string | null;
 }): ArrivalRecord {
   const arrivalTime = trimTime(data.hora_llegada) || data.hora_llegada;
 
@@ -246,6 +270,9 @@ function mapArrivalRow(data: {
     status: data.estado as ArrivalRecord['status'],
     registeredBy: data.registrado_por ?? 0,
     createdAt: data.fecha_creacion,
+    justificationReason: data.motivo_justificacion ?? null,
+    justifiedBy: data.justificado_por ?? null,
+    justifiedAt: data.fecha_justificacion ?? null,
     departureTime: trimTime(data.hora_salida),
     departureType: (data.tipo_salida as ArrivalRecord['departureType']) ?? null,
   };
@@ -399,8 +426,10 @@ export async function createArrivalRecord(
  */
 export async function getArrivals(filters?: {
   date?: string;
+  dateFrom?: string;
+  dateTo?: string;
   studentId?: number;
-  status?: 'A tiempo' | 'Tarde';
+  status?: ArrivalRecord['status'] | ArrivalRecord['status'][];
   limit?: number;
 }): Promise<{ records: ArrivalRecord[]; error: string | null }> {
   try {
@@ -443,12 +472,23 @@ export async function getArrivals(filters?: {
       }
     }
 
+    if (filters?.dateFrom) {
+      query = query.gte('fecha', filters.dateFrom);
+    }
+    if (filters?.dateTo) {
+      query = query.lte('fecha', filters.dateTo);
+    }
+
     if (filters?.studentId) {
       query = query.eq('id_estudiante', filters.studentId);
     }
 
     if (filters?.status) {
-      query = query.eq('estado', filters.status);
+      if (Array.isArray(filters.status)) {
+        query = query.in('estado', filters.status);
+      } else {
+        query = query.eq('estado', filters.status);
+      }
     }
 
     if (filters?.limit) {
@@ -469,8 +509,7 @@ export async function getArrivals(filters?: {
       }
       const mapped = mapArrivalRecord(row);
       const nivel = mapped.student?.level ?? row.estudiante?.nivel_educativo ?? null;
-      const status = resolveArrivalStatusForStudent(mapped.arrivalTime, limits, nivel);
-      return status === mapped.status ? mapped : { ...mapped, status };
+      return applyScanStatus(mapped, limits, nivel);
     });
 
     return { records, error: null };
@@ -544,11 +583,7 @@ export async function getArrivalsForStudents(
     }
 
     const limits = await fetchArrivalLimits();
-    const records = rows.map((row) => {
-      const mapped = mapClassroomArrivalRow(row);
-      const status = resolveArrivalStatusForStudent(mapped.arrivalTime, limits, null);
-      return status === mapped.status ? mapped : { ...mapped, status };
-    });
+    const records = rows.map((row) => applyScanStatus(mapClassroomArrivalRow(row), limits, null));
 
     return { records, error: null };
   } catch (error: unknown) {
@@ -560,7 +595,10 @@ export async function getArrivalsForStudents(
 
 const ARRIVAL_REPORT_BATCH_SIZE = 150;
 
-type ArrivalReportRow = Pick<RegistroLlegadaDB, 'id_estudiante' | 'fecha' | 'hora_llegada' | 'estado'>;
+type ArrivalReportRow = Pick<
+  RegistroLlegadaDB,
+  'id_estudiante' | 'fecha' | 'hora_llegada' | 'estado' | 'motivo_justificacion'
+>;
 
 async function fetchArrivalsForReport(
   studentIds: number[],
@@ -576,7 +614,7 @@ async function fetchArrivalsForReport(
     const batch = studentIds.slice(i, i + ARRIVAL_REPORT_BATCH_SIZE);
     const { data, error } = await supabase
       .from('registros_llegada')
-      .select('id_estudiante, fecha, hora_llegada, estado')
+      .select('id_estudiante, fecha, hora_llegada, estado, motivo_justificacion')
       .in('id_estudiante', batch)
       .gte('fecha', startStr)
       .lte('fecha', endStr);
@@ -662,44 +700,20 @@ export async function getMonthlyAttendance(filters: {
       recordsMap.get(record.id_estudiante)!.set(day, record);
     });
 
-    const convertStatus = (status?: string): AttendanceStatus => {
-      if (!status) return 'Sin_registro';
-      if (status === 'A tiempo') return 'A_tiempo';
-      if (status === 'Tarde') return 'Tarde';
-      if (status === 'Justificada') return 'Justificada';
-      if (status === 'Injustificada') return 'Injustificada';
-      return 'Sin_registro';
-    };
-
     const rows: MonthlyAttendanceRow[] = (studentsData || []).map((student) => {
       const dayStatusMap = recordsMap.get(student.id_estudiante) || new Map();
-      let onTime = 0;
-      let late = 0;
-      let justified = 0;
-      let unjustified = 0;
+      const totals = emptyAttendanceTotals();
 
       const days = Array.from({ length: daysInMonth }, (_, idx) => {
         const day = idx + 1;
         const record = dayStatusMap.get(day);
-        const status = convertStatus(record?.estado);
-        switch (status) {
-          case 'A_tiempo':
-            onTime += 1;
-            break;
-          case 'Tarde':
-            late += 1;
-            break;
-          case 'Justificada':
-            justified += 1;
-            break;
-          case 'Injustificada':
-            unjustified += 1;
-            break;
-        }
+        const status = convertArrivalEstadoToReport(record?.estado);
+        tallyAttendanceStatus(totals, status);
         return {
           day,
           status,
           arrivalTime: record?.hora_llegada,
+          justificationReason: record?.motivo_justificacion ?? undefined,
         };
       });
 
@@ -715,12 +729,7 @@ export async function getMonthlyAttendance(filters: {
           active: student.activo,
         },
         days,
-        totals: {
-          onTime,
-          late,
-          justified,
-          unjustified,
-        },
+        totals,
       };
     });
 
@@ -804,15 +813,6 @@ export async function getBimestralAttendance(filters: {
       recordsMap.get(record.id_estudiante)!.set(dateKey, record);
     });
 
-    const convertStatus = (status?: string): AttendanceStatus => {
-      if (!status) return 'Sin_registro';
-      if (status === 'A tiempo') return 'A_tiempo';
-      if (status === 'Tarde') return 'Tarde';
-      if (status === 'Justificada') return 'Justificada';
-      if (status === 'Injustificada') return 'Injustificada';
-      return 'Sin_registro';
-    };
-
     // Crear array de todas las fechas del bimestre
     const allDates: string[] = [];
     const currentDate = new Date(inicio);
@@ -823,35 +823,19 @@ export async function getBimestralAttendance(filters: {
 
     const rows: MonthlyAttendanceRow[] = (studentsData || []).map((student) => {
       const dayStatusMap = recordsMap.get(student.id_estudiante) || new Map();
-      let onTime = 0;
-      let late = 0;
-      let justified = 0;
-      let unjustified = 0;
+      const totals = emptyAttendanceTotals();
 
-      const days = allDates.map((dateStr, idx) => {
+      const days = allDates.map((dateStr) => {
         const record = dayStatusMap.get(dateStr);
-        const status = convertStatus(record?.estado);
+        const status = convertArrivalEstadoToReport(record?.estado);
         const dateObj = new Date(dateStr);
         const day = dateObj.getDate();
-        
-        switch (status) {
-          case 'A_tiempo':
-            onTime += 1;
-            break;
-          case 'Tarde':
-            late += 1;
-            break;
-          case 'Justificada':
-            justified += 1;
-            break;
-          case 'Injustificada':
-            unjustified += 1;
-            break;
-        }
+        tallyAttendanceStatus(totals, status);
         return {
           day,
           status,
           arrivalTime: record?.hora_llegada,
+          justificationReason: record?.motivo_justificacion ?? undefined,
         };
       });
 
@@ -867,12 +851,7 @@ export async function getBimestralAttendance(filters: {
           active: student.activo,
         },
         days,
-        totals: {
-          onTime,
-          late,
-          justified,
-          unjustified,
-        },
+        totals,
       };
     });
 
@@ -1237,10 +1216,7 @@ export async function fetchMonthArrivalsForStudent(
   }
 
   const limits = await fetchPublicArrivalLimits();
-  return rawRecords.map((record) => {
-    const status = resolveArrivalStatusForStudent(record.arrivalTime, limits, studentLevel);
-    return status === record.status ? record : { ...record, status };
-  });
+  return rawRecords.map((record) => applyScanStatus(record, limits, studentLevel));
 }
 
 /**
@@ -1509,6 +1485,236 @@ export async function getPublicArrivalInfo(recordId: number): Promise<{
   }
 }
 
+function trimJustificationReason(motivo: string): string {
+  return motivo.trim().replace(/\s+/g, ' ');
+}
+
+export async function getAttendanceJustifications(filters?: {
+  pending?: boolean;
+  date?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  studentId?: number;
+  limit?: number;
+}): Promise<{ records: ArrivalRecord[]; error: string | null }> {
+  const pending = filters?.pending ?? true;
+  return getArrivals({
+    date: filters?.date,
+    dateFrom: filters?.dateFrom,
+    dateTo: filters?.dateTo,
+    studentId: filters?.studentId,
+    status: pending
+      ? ARRIVAL_ESTADO.LATE
+      : [ARRIVAL_ESTADO.LATE_JUSTIFIED, ARRIVAL_ESTADO.ABSENCE_JUSTIFIED],
+    limit: filters?.limit ?? 500,
+  });
+}
+
+/** Alumnos activos sin llegada (o con estado Falta) en una fecha, para justificar IJ. */
+export async function getPendingAbsencesForDate(filters: {
+  date: string;
+  level?: EducationalLevel;
+  grade?: string;
+  section?: string;
+}): Promise<{ records: ArrivalRecord[]; error: string | null }> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(filters.date)) {
+    return { records: [], error: 'La fecha no es válida.' };
+  }
+
+  try {
+    let studentQuery = supabase
+      .from('estudiantes')
+      .select(
+        'id_estudiante, nombre_completo, grado, seccion, nivel_educativo, codigo_barras, foto_perfil, activo',
+      )
+      .eq('activo', true)
+      .order('nombre_completo', { ascending: true })
+      .range(0, 1999);
+
+    if (filters.level) studentQuery = studentQuery.eq('nivel_educativo', filters.level);
+    if (filters.grade) studentQuery = studentQuery.eq('grado', filters.grade);
+    if (filters.section) studentQuery = studentQuery.eq('seccion', filters.section);
+
+    const arrivalsQuery = supabase
+      .from('registros_llegada')
+      .select('id_registro, id_estudiante, estado')
+      .eq('fecha', filters.date)
+      .range(0, 1999);
+
+    const [studentsRes, arrivalsRes] = await Promise.all([studentQuery, arrivalsQuery]);
+
+    if (studentsRes.error) {
+      return { records: [], error: studentsRes.error.message };
+    }
+    if (arrivalsRes.error) {
+      return { records: [], error: arrivalsRes.error.message };
+    }
+
+    const present = new Map<number, { id: number; estado: string }>();
+    for (const row of arrivalsRes.data ?? []) {
+      present.set(row.id_estudiante, { id: row.id_registro, estado: String(row.estado) });
+    }
+
+    const pending: ArrivalRecord[] = [];
+    for (const row of studentsRes.data ?? []) {
+      const arrival = present.get(row.id_estudiante);
+      if (arrival && arrival.estado !== 'Falta') continue;
+
+      const student: Student = {
+        id: row.id_estudiante,
+        fullName: row.nombre_completo,
+        grade: row.grado,
+        section: row.seccion,
+        level: (row.nivel_educativo || 'Secundaria') as EducationalLevel,
+        barcode: row.codigo_barras,
+        profilePhoto: row.foto_perfil,
+        active: row.activo !== false,
+      };
+
+      pending.push({
+        id: arrival?.id ?? -student.id,
+        studentId: student.id,
+        student,
+        date: filters.date,
+        arrivalTime: '',
+        status: 'Falta',
+        registeredBy: null,
+        createdAt: filters.date,
+      });
+    }
+
+    return { records: pending, error: null };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Error al listar inasistencias';
+    return { records: [], error: message };
+  }
+}
+
+export async function justifyTardiness(
+  recordId: number,
+  userId: number,
+  motivo: string,
+): Promise<{ record: ArrivalRecord | null; error: string | null }> {
+  const reason = trimJustificationReason(motivo);
+  if (reason.length < MIN_JUSTIFICATION_REASON_LENGTH) {
+    return {
+      record: null,
+      error: `El motivo debe tener al menos ${MIN_JUSTIFICATION_REASON_LENGTH} caracteres.`,
+    };
+  }
+
+  try {
+    const { data: current, error: fetchError } = await supabase
+      .from('registros_llegada')
+      .select(ARRIVAL_ROW_SELECT)
+      .eq('id_registro', recordId)
+      .maybeSingle();
+
+    if (fetchError) return { record: null, error: fetchError.message };
+    if (!current) return { record: null, error: 'No se encontró el registro de llegada.' };
+    if (current.estado === ARRIVAL_ESTADO.LATE_JUSTIFIED) {
+      return { record: mapArrivalRow(current as never), error: null };
+    }
+    if (current.estado !== ARRIVAL_ESTADO.LATE) {
+      return { record: null, error: 'Solo se pueden justificar tardanzas pendientes.' };
+    }
+
+    const { data, error } = await supabase
+      .from('registros_llegada')
+      .update({
+        estado: ARRIVAL_ESTADO.LATE_JUSTIFIED,
+        motivo_justificacion: reason,
+        justificado_por: userId,
+        fecha_justificacion: new Date().toISOString(),
+      })
+      .eq('id_registro', recordId)
+      .eq('estado', ARRIVAL_ESTADO.LATE)
+      .select(ARRIVAL_ROW_SELECT)
+      .maybeSingle();
+
+    if (error) return { record: null, error: error.message };
+    if (!data) return { record: null, error: 'La tardanza ya no está pendiente.' };
+    return { record: mapArrivalRow(data as never), error: null };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Error al justificar la tardanza';
+    return { record: null, error: message };
+  }
+}
+
+export async function createJustifiedAbsence(input: {
+  studentId: number;
+  date: string;
+  motivo: string;
+  userId: number;
+}): Promise<{ record: ArrivalRecord | null; error: string | null }> {
+  const reason = trimJustificationReason(input.motivo);
+  if (reason.length < MIN_JUSTIFICATION_REASON_LENGTH) {
+    return {
+      record: null,
+      error: `El motivo debe tener al menos ${MIN_JUSTIFICATION_REASON_LENGTH} caracteres.`,
+    };
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) {
+    return { record: null, error: 'La fecha no es válida.' };
+  }
+
+  try {
+    const { record: existing, error: existingError } = await getTodayArrivalForStudent(
+      input.studentId,
+      input.date,
+    );
+    if (existingError) return { record: null, error: existingError };
+    if (existing) {
+      if (existing.status === ARRIVAL_ESTADO.LATE) {
+        return {
+          record: null,
+          error: 'Ese día hay una tardanza. Justifíquela desde la lista de tardanzas pendientes.',
+        };
+      }
+      if (isProtectedArrivalStatus(existing.status)) {
+        return { record: existing, error: 'Ese día ya está justificado.' };
+      }
+      return {
+        record: null,
+        error: 'Ese día ya hay asistencia registrada; no se puede marcar falta justificada.',
+      };
+    }
+
+    const insertData = {
+      id_estudiante: input.studentId,
+      fecha: input.date,
+      hora_llegada: '00:00:00',
+      estado: ARRIVAL_ESTADO.ABSENCE_JUSTIFIED,
+      registrado_por: input.userId,
+      fecha_creacion: new Date().toISOString(),
+      motivo_justificacion: reason,
+      justificado_por: input.userId,
+      fecha_justificacion: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from('registros_llegada')
+      .insert(insertData)
+      .select(ARRIVAL_ROW_SELECT)
+      .single();
+
+    if (error) {
+      if (error.code === '23505') {
+        return {
+          record: null,
+          error: 'Ya existe un registro de asistencia para ese estudiante y fecha.',
+        };
+      }
+      return { record: null, error: error.message };
+    }
+
+    return { record: mapArrivalRow(data as never), error: null };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Error al registrar la falta justificada';
+    return { record: null, error: message };
+  }
+}
+
 export const arrivalService = {
   createArrivalRecord,
   getTodayArrivalForStudent,
@@ -1530,4 +1736,8 @@ export const arrivalService = {
   getPublicArrivalInfo,
   getPublicInfoByDNI,
   fetchMonthArrivalsForStudent,
+  getAttendanceJustifications,
+  getPendingAbsencesForDate,
+  justifyTardiness,
+  createJustifiedAbsence,
 };

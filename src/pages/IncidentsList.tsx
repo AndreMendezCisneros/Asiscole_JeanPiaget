@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Eye, Edit, Printer, Camera, FileSpreadsheet, FileText, AlertCircle, CheckCircle2, Sparkles, Loader2, Check } from 'lucide-react';
+import { Search, Eye, Edit, Printer, Camera, FileSpreadsheet, FileText, AlertCircle, CheckCircle2, Sparkles, Loader2, Check, X } from 'lucide-react';
 import {
   StaffKpiStat,
   StaffToolbar,
@@ -34,7 +34,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Incident, EducationalLevel, IncidentEvidence } from '@/types';
+import { Incident, EducationalLevel, IncidentEvidence, EstadoIncidencia, EstadoEvidencia, FaultSeverity } from '@/types';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
@@ -45,7 +45,14 @@ import {
 } from '@/hooks/queries/useIncidentsQuery';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { incidentsService, evidenceService, authService } from '@/lib/services';
-import { revisadoAppEstado } from '@/lib/utils/revisadoAppEstado';
+import { revisadoAppEstado, type RevisadoAppEstado } from '@/lib/utils/revisadoAppEstado';
+import { REINCIDENCE_LEVELS } from '@/lib/utils/reincidenceUtils';
+import { getLimaTodayDate } from '@/lib/utils/limaDateTime';
+import {
+  CLASSROOM_FIELD_LABELS,
+  CLASSROOM_GRADES,
+  CLASSROOM_SECTIONS,
+} from '@/lib/constants/classrooms';
 import {
   Pagination,
   PaginationContent,
@@ -62,6 +69,15 @@ export const IncidentsList = () => {
   const debouncedSearch = useDebouncedValue(searchTerm, 350);
   const [currentPage, setCurrentPage] = useState(1);
   const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('all');
+  const [gradeFilter, setGradeFilter] = useState<'all' | string>('all');
+  const [sectionFilter, setSectionFilter] = useState<'all' | string>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | EstadoIncidencia>('all');
+  const [severityFilter, setSeverityFilter] = useState<'all' | FaultSeverity>('all');
+  const [reincidenceFilter, setReincidenceFilter] = useState<'all' | string>('all');
+  const [evidenceFilter, setEvidenceFilter] = useState<'all' | EstadoEvidencia>('all');
+  const [reviewedFilter, setReviewedFilter] = useState<'all' | RevisadoAppEstado>('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [exporting, setExporting] = useState(false);
 
   const [detailOpen, setDetailOpen] = useState(false);
@@ -77,21 +93,42 @@ export const IncidentsList = () => {
 
   const invalidateIncidents = useInvalidateIncidents();
 
-  const incidentFilters = useMemo(
+  const listFilters = useMemo(
     () => ({
       nivelEducativo: levelFilter === 'all' ? undefined : levelFilter,
+      grado: gradeFilter === 'all' ? undefined : gradeFilter,
+      seccion: sectionFilter === 'all' ? undefined : sectionFilter,
+      estado: statusFilter === 'all' ? undefined : statusFilter,
+      gravedad: severityFilter === 'all' ? undefined : severityFilter,
+      nivelReincidencia:
+        reincidenceFilter === 'all' ? undefined : Number.parseInt(reincidenceFilter, 10),
+      estadoEvidencia: evidenceFilter === 'all' ? undefined : evidenceFilter,
+      revisado: reviewedFilter === 'all' ? undefined : reviewedFilter,
+      fechaDesde: dateFrom || undefined,
+      fechaHasta: dateTo || undefined,
       search: debouncedSearch.trim() || undefined,
-      page: currentPage,
     }),
-    [levelFilter, debouncedSearch, currentPage],
+    [
+      levelFilter,
+      gradeFilter,
+      sectionFilter,
+      statusFilter,
+      severityFilter,
+      reincidenceFilter,
+      evidenceFilter,
+      reviewedFilter,
+      dateFrom,
+      dateTo,
+      debouncedSearch,
+    ],
   );
 
-  const summaryFilters = useMemo(
+  const incidentFilters = useMemo(
     () => ({
-      nivelEducativo: levelFilter === 'all' ? undefined : levelFilter,
-      search: debouncedSearch.trim() || undefined,
+      ...listFilters,
+      page: currentPage,
     }),
-    [levelFilter, debouncedSearch],
+    [listFilters, currentPage],
   );
 
   const {
@@ -101,8 +138,7 @@ export const IncidentsList = () => {
     isError,
     refetch,
   } = useIncidentsQuery(incidentFilters);
-
-  const { data: summary } = useIncidentsSummaryQuery(summaryFilters);
+  const { data: summary } = useIncidentsSummaryQuery(listFilters);
 
   const incidents = pageData?.incidents ?? [];
   const totalRecords = pageData?.total ?? 0;
@@ -214,7 +250,19 @@ export const IncidentsList = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, levelFilter]);
+  }, [
+    debouncedSearch,
+    levelFilter,
+    gradeFilter,
+    sectionFilter,
+    statusFilter,
+    severityFilter,
+    reincidenceFilter,
+    evidenceFilter,
+    reviewedFilter,
+    dateFrom,
+    dateTo,
+  ]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -227,8 +275,7 @@ export const IncidentsList = () => {
     toast.loading('Preparando exportación…', { id: 'incidents-export' });
     try {
       const { incidents: allRows, error } = await incidentsService.getAll({
-        nivelEducativo: levelFilter === 'all' ? undefined : levelFilter,
-        search: debouncedSearch.trim() || undefined,
+        ...listFilters,
         fetchAll: true,
       });
       if (error) {
@@ -237,6 +284,15 @@ export const IncidentsList = () => {
       }
       const parts: string[] = [];
       if (levelFilter !== 'all') parts.push(`Nivel: ${levelFilter}`);
+      if (gradeFilter !== 'all') parts.push(`Grado: ${gradeFilter}`);
+      if (sectionFilter !== 'all') parts.push(`Sección: ${sectionFilter}`);
+      if (statusFilter !== 'all') parts.push(`Estado: ${statusFilter}`);
+      if (severityFilter !== 'all') parts.push(`Gravedad: ${severityFilter}`);
+      if (reincidenceFilter !== 'all') parts.push(`Nivel ${reincidenceFilter}`);
+      if (evidenceFilter !== 'all') parts.push(evidenceFilter);
+      if (reviewedFilter !== 'all') parts.push(`Revisado: ${reviewedFilter}`);
+      if (dateFrom) parts.push(`Desde: ${dateFrom}`);
+      if (dateTo) parts.push(`Hasta: ${dateTo}`);
       if (debouncedSearch.trim()) parts.push(`Búsqueda: "${debouncedSearch.trim()}"`);
       const { exportIncidentsListExcel } = await import('@/lib/utils/excelListExports');
       await exportIncidentsListExcel(allRows, parts.length ? parts.join(' · ') : undefined);
@@ -253,6 +309,35 @@ export const IncidentsList = () => {
   const listTotal = summary?.total ?? (pageData ? totalRecords : undefined);
   const tableLoading = isLoading && !pageData;
 
+  const hasActiveFilters =
+    Boolean(searchTerm.trim()) ||
+    levelFilter !== 'all' ||
+    gradeFilter !== 'all' ||
+    sectionFilter !== 'all' ||
+    statusFilter !== 'all' ||
+    severityFilter !== 'all' ||
+    reincidenceFilter !== 'all' ||
+    evidenceFilter !== 'all' ||
+    reviewedFilter !== 'all' ||
+    Boolean(dateFrom) ||
+    Boolean(dateTo);
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setLevelFilter('all');
+    setGradeFilter('all');
+    setSectionFilter('all');
+    setStatusFilter('all');
+    setSeverityFilter('all');
+    setReincidenceFilter('all');
+    setEvidenceFilter('all');
+    setReviewedFilter('all');
+    setDateFrom('');
+    setDateTo('');
+  };
+
+  const todayLima = getLimaTodayDate();
+
   return (
     <div className="app-page app-page-shell relative overflow-hidden">
       {/* Decoraciones de fondo */}
@@ -267,7 +352,7 @@ export const IncidentsList = () => {
           icon={FileText}
           eyebrow="Incidencias"
           title="Lista de Incidencias"
-          description="Historial completo con filtros por nivel y exportación a Excel"
+          description="Filtre por aula, estado, fechas y gravedad; exporte el listado a Excel"
           accent="warning"
         >
           <Badge variant="outline" className="hidden sm:inline-flex gap-1 border-accent/40 bg-accent/5 text-accent">
@@ -317,8 +402,24 @@ export const IncidentsList = () => {
       </div>
 
       <div className="space-y-6">
-        <StaffToolbar title="Buscar y filtrar" description="Refine por texto o nivel educativo">
-          <div className="space-y-2 sm:col-span-2 lg:col-span-3">
+        <StaffToolbar
+          title="Buscar y filtrar"
+          description="Busque por ID, alumno o falta. Combine aula, fechas, estado y evidencia."
+          footer={
+            hasActiveFilters ? (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  {listTotal ?? 0} resultado{(listTotal ?? 0) === 1 ? '' : 's'} con los filtros actuales
+                </p>
+                <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={clearFilters}>
+                  <X className="h-4 w-4" />
+                  Limpiar filtros
+                </Button>
+              </div>
+            ) : null
+          }
+        >
+          <div className="space-y-2 sm:col-span-2 lg:col-span-4">
             <Label htmlFor="incidents-search">Buscar</Label>
             <div className="relative min-w-0">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -332,18 +433,154 @@ export const IncidentsList = () => {
             </div>
           </div>
           <div className="space-y-2">
-            <Label>Nivel educativo</Label>
+            <Label>{CLASSROOM_FIELD_LABELS.level}</Label>
             <Select
               value={levelFilter}
               onValueChange={(value) => setLevelFilter(value as 'all' | EducationalLevel)}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Nivel educativo" />
+                <SelectValue placeholder={CLASSROOM_FIELD_LABELS.level} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos los niveles</SelectItem>
+                <SelectItem value="all">{CLASSROOM_FIELD_LABELS.allLevels}</SelectItem>
                 <SelectItem value="Primaria">Primaria</SelectItem>
                 <SelectItem value="Secundaria">Secundaria</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>{CLASSROOM_FIELD_LABELS.grade}</Label>
+            <Select value={gradeFilter} onValueChange={setGradeFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder={CLASSROOM_FIELD_LABELS.allGrades} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{CLASSROOM_FIELD_LABELS.allGrades}</SelectItem>
+                {CLASSROOM_GRADES.map((grade) => (
+                  <SelectItem key={grade} value={grade}>
+                    {grade}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>{CLASSROOM_FIELD_LABELS.section}</Label>
+            <Select value={sectionFilter} onValueChange={setSectionFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder={CLASSROOM_FIELD_LABELS.allSections} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{CLASSROOM_FIELD_LABELS.allSections}</SelectItem>
+                {CLASSROOM_SECTIONS.map((section) => (
+                  <SelectItem key={section} value={section}>
+                    {section}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Estado</Label>
+            <Select
+              value={statusFilter}
+              onValueChange={(value) => setStatusFilter(value as 'all' | EstadoIncidencia)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="Activa">Activas</SelectItem>
+                <SelectItem value="Justificada">Justificadas</SelectItem>
+                <SelectItem value="Anulada">Anuladas</SelectItem>
+                <SelectItem value="En revisión">En revisión</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="incidents-from">Desde</Label>
+            <Input
+              id="incidents-from"
+              type="date"
+              value={dateFrom}
+              max={dateTo || todayLima}
+              onChange={(e) => setDateFrom(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="incidents-to">Hasta</Label>
+            <Input
+              id="incidents-to"
+              type="date"
+              value={dateTo}
+              min={dateFrom || undefined}
+              max={todayLima}
+              onChange={(e) => setDateTo(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Gravedad</Label>
+            <Select
+              value={severityFilter}
+              onValueChange={(value) => setSeverityFilter(value as 'all' | FaultSeverity)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                <SelectItem value="Leve">Leve</SelectItem>
+                <SelectItem value="Grave">Grave</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Nivel reincidencia</Label>
+            <Select value={reincidenceFilter} onValueChange={setReincidenceFilter}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {REINCIDENCE_LEVELS.map((level) => (
+                  <SelectItem key={level} value={String(level)}>
+                    Nivel {level}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Evidencia</Label>
+            <Select
+              value={evidenceFilter}
+              onValueChange={(value) => setEvidenceFilter(value as 'all' | EstadoEvidencia)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                <SelectItem value="Con evidencia">Con evidencia</SelectItem>
+                <SelectItem value="Sin evidencia">Sin evidencia</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Revisado</Label>
+            <Select
+              value={reviewedFilter}
+              onValueChange={(value) => setReviewedFilter(value as 'all' | RevisadoAppEstado)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="no">No</SelectItem>
+                <SelectItem value="visto">Visto</SelectItem>
+                <SelectItem value="confirmado">Confirmado</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -386,7 +623,7 @@ export const IncidentsList = () => {
               <StaffEmptyState
                 icon={FileText}
                 title="No hay incidencias"
-                description="Prueba otro término de búsqueda o cambia el filtro de nivel"
+                description="Ajuste los filtros o limpie la búsqueda para ver más registros"
               />
             ) : (
               <div className="app-table-wrap">

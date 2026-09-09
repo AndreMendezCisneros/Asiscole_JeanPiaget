@@ -263,12 +263,24 @@
     @apply grid grid-cols-1 items-stretch gap-4 xl:grid-cols-3;
   }
 
+  .app-dashboard-charts > .app-card {
+    @apply flex h-full min-h-0 flex-col;
+  }
+
+  .app-dashboard-charts > .app-card > .app-card-header {
+    @apply shrink-0;
+  }
+
   .app-chart-wrap {
-    @apply h-[300px] w-full min-w-0 overflow-hidden;
+    @apply relative h-[280px] w-full min-w-0 overflow-hidden;
+  }
+
+  .app-chart-wrap--fill {
+    @apply min-h-[280px] flex-1 xl:h-full xl:min-h-[20rem];
   }
 
   .app-chart-surface {
-    @apply border-t border-primary/15 bg-gradient-to-b from-primary/10 via-card to-card px-3 pb-3 pt-2 sm:px-4;
+    @apply flex min-h-0 flex-1 flex-col border-t border-primary/15 bg-gradient-to-b from-primary/10 via-card to-card px-3 pb-3 pt-2 sm:px-4;
   }
 
   .app-chart-surface--success {
@@ -2027,43 +2039,22 @@
   }
 
   .login-brand__logo-clip {
-    @apply relative z-[1] shrink-0 overflow-hidden;
-    width: 7.75rem;
-    height: 7.75rem;
-    -webkit-mask-image: radial-gradient(
-      circle at 50% 40%,
-      #000 64%,
-      rgb(0 0 0 / 0.75) 76%,
-      rgb(0 0 0 / 0.22) 88%,
-      transparent 98%
-    );
-    mask-image: radial-gradient(
-      circle at 50% 40%,
-      #000 64%,
-      rgb(0 0 0 / 0.75) 76%,
-      rgb(0 0 0 / 0.22) 88%,
-      transparent 98%
-    );
+    @apply relative z-[1] shrink-0;
+    width: 8.25rem;
+    height: 8.25rem;
     filter: drop-shadow(0 14px 30px hsl(var(--login-deep) / 0.38));
     will-change: transform, opacity;
   }
 
   .login-brand--compact .login-brand__logo-clip {
-    width: 5.5rem;
-    height: 5.5rem;
+    width: 5.75rem;
+    height: 5.75rem;
   }
 
   .login-brand__logo {
     @apply block h-full w-full select-none;
-    object-fit: cover;
-    object-position: center 26%;
-    transform: scale(1.18);
-    transform-origin: center 36%;
-  }
-
-  .login-brand--compact .login-brand__logo {
-    transform: scale(1.15);
-    object-position: center 26%;
+    object-fit: contain;
+    object-position: center;
   }
 
   .login-brand__caption {
@@ -2293,10 +2284,10 @@
 
   .login-form-card__footer-logo {
     display: block;
-    width: 5.5rem;
-    height: 1.35rem;
-    object-fit: cover;
-    object-position: center 93%;
+    width: 2.5rem;
+    height: 2.5rem;
+    object-fit: contain;
+    object-position: center;
   }
 
   .login-form-card__shine {

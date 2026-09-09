@@ -866,7 +866,7 @@ export async function notifyParentIncident(
     const stubRecord: Partial<ArrivalRecord> = {
       id: incident.id,
       date: (incident.registeredAt || '').slice(0, 10),
-      status: fault.name,
+      status: fault.name as ArrivalRecord['status'],
     };
     const result =
       WPPCONNECT_ROTATION
@@ -892,7 +892,7 @@ export async function notifyParentIncident(
   const stubRecord: Partial<ArrivalRecord> = {
     id: incident.id,
     date: (incident.registeredAt || '').slice(0, 10),
-    status: fault.name,
+    status: fault.name as ArrivalRecord['status'],
   };
 
   const result = META_WA_ENABLED

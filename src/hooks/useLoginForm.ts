@@ -32,10 +32,12 @@ export function useLoginForm() {
     const role = searchParams.get('role');
     const message =
       role === 'tutor'
-        ? 'Sesión del tutor cerrada por inactividad (15 min).'
-        : role === 'padre'
-          ? 'Sesión del portal familiar cerrada por inactividad (15 min).'
-          : 'Su sesión se cerró por inactividad. Vuelva a iniciar sesión.';
+        ? 'Sesión del tutor cerrada por inactividad (45 min).'
+        : role === 'docente'
+          ? 'Sesión del docente cerrada por inactividad (45 min).'
+          : role === 'padre'
+            ? 'Sesión del portal familiar cerrada por inactividad (15 min).'
+            : 'Su sesión se cerró por inactividad. Vuelva a iniciar sesión.';
     toast.info(message);
   }, [searchParams]);
 

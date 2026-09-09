@@ -15,6 +15,7 @@ const STAFF_ROUTE_IMPORTS: Record<string, PreloadFn> = {
   '/integral-report': () => import('@/pages/IntegralStudentReport'),
   '/arrival-control': () => import('@/pages/ArrivalControl'),
   '/departure-control': () => import('@/pages/DepartureControl'),
+  '/justify-attendance': () => import('@/pages/JustifyAttendance'),
   '/parent-meetings': () => import('@/pages/ParentMeetings'),
   '/justify-faults': () => import('@/pages/JustifyFaults'),
   '/faults': () => import('@/pages/FaultsCatalog'),

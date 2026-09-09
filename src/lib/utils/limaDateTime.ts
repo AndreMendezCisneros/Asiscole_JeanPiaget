@@ -88,6 +88,16 @@ export function parseMeetingDateTime(
   return { start, end };
 }
 
+/**
+ * Borde de día en Lima para filtros de incidencias.
+ * `YYYY-MM-DD` → inicio o fin del día (-05:00). Si ya trae hora, no se altera.
+ */
+export function toLimaDayBound(date: string | undefined, endOfDay: boolean): string | undefined {
+  if (!date) return undefined;
+  if (date.length > 10) return date;
+  return endOfDay ? `${date}T23:59:59.999-05:00` : `${date}T00:00:00-05:00`;
+}
+
 /** Rango ISO para filtrar timestamps de un día (input type=date YYYY-MM-DD) */
 export function getLimaDayRangeISO(dateKey: string): { desde: string; hasta: string } {
   const key = dateKey.trim().slice(0, 10);

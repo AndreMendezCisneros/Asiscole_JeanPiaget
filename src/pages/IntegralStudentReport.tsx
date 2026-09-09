@@ -74,7 +74,12 @@ const PDF_DETAIL_LIMIT = 8;
 function attendanceStatusLabel(status: string): string {
   if (status === 'A_tiempo' || status === 'A tiempo') return 'A tiempo';
   if (status === 'Tarde') return 'Tardanza';
-  if (status === 'Justificada') return 'Justificada';
+  if (status === 'Tarde_justificada' || status === 'Tarde justificada' || status === 'Justificada') {
+    return 'Tardanza justificada (TJ)';
+  }
+  if (status === 'Inasistencia_justificada' || status === 'Falta justificada') {
+    return 'Inasistencia justificada (IJ)';
+  }
   if (status === 'Injustificada') return 'Injustificada';
   return status.replace('_', ' ');
 }

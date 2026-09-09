@@ -234,11 +234,13 @@ export async function exportParentMeetingsExcel(meetings: ParentMeeting[]): Prom
 }
 
 const ATTENDANCE_STATUS_LABELS: Record<string, string> = {
-  A_tiempo: 'A tiempo',
-  Tarde: 'Tarde',
-  Justificada: 'Justificada',
-  Injustificada: 'Injustificada',
-  Sin_registro: 'Sin registro',
+  A_tiempo: 'A',
+  Tarde: 'T',
+  Tarde_justificada: 'TJ',
+  Inasistencia_justificada: 'IJ',
+  Justificada: 'TJ',
+  Injustificada: 'I',
+  Sin_registro: '—',
 };
 
 /** Hoja detalle de asistencia mensual (usado por AttendanceReport) */
@@ -249,7 +251,14 @@ export async function buildAttendanceDetailSheet(
   subtitle: string,
   daysArray: number[],
   rows: MonthlyAttendanceRow[],
-  totalsGlobal: { onTime: number; late: number; justified: number; unjustified: number }
+  totalsGlobal: {
+    onTime: number;
+    late: number;
+    lateJustified: number;
+    absentJustified: number;
+    justified?: number;
+    unjustified?: number;
+  }
 ): Promise<import('exceljs').Worksheet> {
   const sheet = workbook.addWorksheet(sheetName);
   const mergeCols = daysArray.length + 8;
@@ -264,8 +273,8 @@ export async function buildAttendanceDetailSheet(
     ...daysArray.map((d) => `Día ${d}`),
     'A tiempo',
     'Tardanzas',
-    'Justificadas',
-    'Injustificadas',
+    'TJ',
+    'IJ',
   ];
   const headerRow = sheet.addRow(headers);
   styleHeaderRow(headerRow);
@@ -280,8 +289,8 @@ export async function buildAttendanceDetailSheet(
       ...row.days.map((day) => ATTENDANCE_STATUS_LABELS[day.status] ?? day.status),
       row.totals.onTime,
       row.totals.late,
-      row.totals.justified,
-      row.totals.unjustified,
+      row.totals.lateJustified,
+      row.totals.absentJustified,
     ];
     const dataRow = sheet.addRow(values);
     row.days.forEach((day, index) => {
@@ -289,6 +298,8 @@ export async function buildAttendanceDetailSheet(
       const colors: Record<string, { bg: string; fg: string }> = {
         A_tiempo: { bg: 'FFD1FAE5', fg: 'FF065F46' },
         Tarde: { bg: 'FFFEF3C7', fg: 'FF92400E' },
+        Tarde_justificada: { bg: 'FFDBEAFE', fg: 'FF1E40AF' },
+        Inasistencia_justificada: { bg: 'FFEDE9FE', fg: 'FF5B21B6' },
         Justificada: { bg: 'FFDBEAFE', fg: 'FF1E40AF' },
         Injustificada: { bg: 'FFFEE2E2', fg: 'FF991B1B' },
       };
@@ -296,6 +307,9 @@ export async function buildAttendanceDetailSheet(
       if (c) {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: c.bg } };
         cell.font = { size: 9, color: { argb: c.fg } };
+      }
+      if (day.justificationReason) {
+        cell.note = day.justificationReason;
       }
     });
   });
@@ -313,8 +327,8 @@ export async function buildAttendanceDetailSheet(
     ...Array(daysArray.length).fill(''),
     totalsGlobal.onTime,
     totalsGlobal.late,
-    totalsGlobal.justified,
-    totalsGlobal.unjustified,
+    totalsGlobal.lateJustified,
+    totalsGlobal.absentJustified,
   ]);
   summaryRow.font = { bold: true, size: 10 };
   summaryRow.eachCell((cell) => {
@@ -322,7 +336,7 @@ export async function buildAttendanceDetailSheet(
   });
 
   freezePane(sheet, startRow);
-  const widths = [30, 12, 10, 8, ...daysArray.map(() => 6), 10, 10, 12, 12];
+  const widths = [30, 12, 10, 8, ...daysArray.map(() => 6), 10, 10, 10, 10];
   setColumnWidths(sheet, widths);
   autoFitColumns(sheet, 6, 32);
 

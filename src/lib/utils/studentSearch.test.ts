@@ -5,6 +5,7 @@ import {
   orderSearchTokensBySelectivity,
   scoreStudentSearchMatch,
   studentMatchesSearchTokens,
+  studentMatchesNameOrClassroom,
   tokenizeSearchQuery,
 } from './studentSearch';
 
@@ -54,6 +55,14 @@ describe('studentSearch', () => {
   it('ignora acentos al comparar', () => {
     expect(foldSearchText('José')).toBe('jose');
     expect(studentMatchesSearchTokens({ ...sample, fullName: 'José García' }, ['jose'])).toBe(true);
+  });
+
+  it('busca por nombre, aula o DNI', () => {
+    expect(studentMatchesNameOrClassroom(sample, 'huamani')).toBe(true);
+    expect(studentMatchesNameOrClassroom(sample, '4to A')).toBe(true);
+    expect(studentMatchesNameOrClassroom(sample, 'secundaria 4to')).toBe(true);
+    expect(studentMatchesNameOrClassroom(sample, '76127901')).toBe(true);
+    expect(studentMatchesNameOrClassroom(sample, 'jose')).toBe(false);
   });
 
   it('prioriza apellido exacto', () => {

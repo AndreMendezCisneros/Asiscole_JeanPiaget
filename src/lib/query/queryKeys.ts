@@ -11,9 +11,9 @@ export const queryKeys = {
   },
   incidents: {
     all: ['incidents'] as const,
-    list: (filters: { nivelEducativo?: EducationalLevel; search?: string; page?: number }) =>
+    list: (filters: Record<string, unknown>) =>
       [...queryKeys.incidents.all, 'list', filters] as const,
-    summary: (filters: { nivelEducativo?: EducationalLevel; search?: string }) =>
+    summary: (filters: Record<string, unknown>) =>
       [...queryKeys.incidents.all, 'summary', filters] as const,
     justify: (filters: Record<string, unknown>) =>
       [...queryKeys.incidents.all, 'justify', filters] as const,

@@ -39,6 +39,7 @@ const ALL_STAFF_NAV_ITEMS: StaffNavItem[] = [
     subItems: [
       { path: '/arrival-control', label: 'Control de Llegadas' },
       { path: '/departure-control', label: 'Registro de Salidas' },
+      { path: '/justify-attendance', label: 'Justificar asistencia' },
     ],
   },
   {

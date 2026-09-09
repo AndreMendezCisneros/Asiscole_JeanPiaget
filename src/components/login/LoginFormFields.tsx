@@ -123,10 +123,10 @@ export function LoginFormFields({ form, lite = false }: LoginFormFieldsProps) {
         </span>
         <img
           src={BRAND_LOGIN_LOGO}
-          alt="Guardy — software educativo"
+          alt="Asiscole"
           className="login-form-card__footer-logo mx-auto"
-          width={96}
-          height={32}
+          width={40}
+          height={40}
           draggable={false}
         />
       </p>

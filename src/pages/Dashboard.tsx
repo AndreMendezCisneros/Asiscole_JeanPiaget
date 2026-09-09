@@ -61,6 +61,7 @@ import {
   useMonthlyTrendQuery,
   useWeeklyAttendanceTrendQuery,
 } from '@/hooks/queries/useDashboardQueries';
+import { niceAxisScale } from '@/lib/utils/chartAxis';
 
 /** Paleta ejecutiva para gráficos (azul pizarra, sin acentos chillones) */
 const CHART = {
@@ -170,13 +171,13 @@ export const Dashboard = () => {
     return `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`;
   };
 
-  const CHART_MARGIN = { top: 12, right: 12, left: 4, bottom: 4 };
+  const CHART_MARGIN = { top: 16, right: 12, left: 0, bottom: 8 };
 
-  const maxTrend = Math.max(1, ...monthlyTrend.map((d) => d.incidents));
-  const yAxisMax = Math.max(4, Math.ceil(maxTrend * 1.15));
+  const maxTrend = Math.max(0, ...monthlyTrend.map((d) => d.incidents));
+  const trendAxis = niceAxisScale(maxTrend);
 
-  const maxAttendanceDay = Math.max(1, ...weeklyAttendance.map((d) => d.total));
-  const attendanceYMax = Math.max(4, Math.ceil(maxAttendanceDay * 1.15));
+  const maxAttendanceDay = Math.max(0, ...weeklyAttendance.map((d) => d.total));
+  const attendanceAxis = niceAxisScale(maxAttendanceDay);
 
   const todayAttendance =
     weeklyAttendance.length > 0 ? weeklyAttendance[weeklyAttendance.length - 1] : null;
@@ -293,24 +294,27 @@ export const Dashboard = () => {
             }
           />
           <StaffDataPanelBody compact className="app-chart-surface !p-0">
-            <div className="app-chart-wrap">
-              <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={monthlyTrend} margin={CHART_MARGIN}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+            <div className="app-chart-wrap app-chart-wrap--fill">
+              <ResponsiveContainer width="100%" height="100%" debounce={50}>
+              <ComposedChart data={monthlyTrend} margin={CHART_MARGIN} barCategoryGap="32%">
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} vertical={false} />
                 <XAxis
                   dataKey="month"
                   stroke={CHART.axis}
                   fontSize={12}
                   tickLine={false}
                   axisLine={{ stroke: CHART.grid }}
+                  tickMargin={8}
                 />
                 <YAxis
                   stroke={CHART.axis}
                   fontSize={12}
                   tickLine={false}
-                  axisLine={{ stroke: CHART.grid }}
+                  axisLine={false}
                   allowDecimals={false}
-                  domain={[0, yAxisMax]}
+                  width={36}
+                  domain={[0, trendAxis.max]}
+                  ticks={trendAxis.ticks}
                 />
                 <Tooltip
                   contentStyle={{
@@ -324,17 +328,16 @@ export const Dashboard = () => {
                 <Bar
                   dataKey="incidents"
                   fill={CHART.bar}
-                  radius={[8, 8, 0, 0]}
-                  maxBarSize={48}
-                  barSize={32}
+                  radius={[6, 6, 0, 0]}
+                  maxBarSize={56}
                 />
                 <Line
-                  type="monotone"
+                  type="linear"
                   dataKey="incidents"
                   stroke={CHART.line}
                   strokeWidth={2}
                   dot={{
-                    r: 5,
+                    r: 4,
                     fill: 'hsl(var(--card))',
                     stroke: CHART.line,
                     strokeWidth: 2,
@@ -504,7 +507,8 @@ export const Dashboard = () => {
                   tickLine={false}
                   axisLine={{ stroke: CHART.grid }}
                   allowDecimals={false}
-                  domain={[0, attendanceYMax]}
+                  domain={[0, attendanceAxis.max]}
+                  ticks={attendanceAxis.ticks}
                 />
                 <Tooltip
                   contentStyle={{

@@ -21,7 +21,6 @@ import {
   CheckCircle2,
   Clock,
   AlertTriangle,
-  XCircle,
 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
@@ -63,8 +62,10 @@ const TABLE_PAGE_SIZE = 25;
 const statusMap: Record<string, { label: string; className: string; description: string }> = {
   A_tiempo: { label: 'A', className: 'bg-emerald-100 text-emerald-700', description: 'A tiempo' },
   Tarde: { label: 'T', className: 'bg-amber-100 text-amber-700', description: 'Tardanza' },
-  Justificada: { label: 'J', className: 'bg-blue-100 text-blue-700', description: 'Justificada' },
-  Injustificada: { label: 'I', className: 'bg-rose-100 text-rose-700', description: 'Injustificada' },
+  Tarde_justificada: { label: 'TJ', className: 'bg-sky-100 text-sky-800', description: 'Tarde justificada' },
+  Inasistencia_justificada: { label: 'IJ', className: 'bg-violet-100 text-violet-800', description: 'Inasistencia justificada' },
+  Justificada: { label: 'TJ', className: 'bg-sky-100 text-sky-800', description: 'Tarde justificada' },
+  Injustificada: { label: 'I', className: 'bg-rose-100 text-rose-700', description: 'Injustificada (legado)' },
   Sin_registro: { label: '—', className: 'text-muted-foreground', description: 'Sin registro' },
 };
 
@@ -261,10 +262,12 @@ export const AttendanceReport = () => {
       (acc, row) => ({
         onTime: acc.onTime + row.totals.onTime,
         late: acc.late + row.totals.late,
+        lateJustified: acc.lateJustified + row.totals.lateJustified,
+        absentJustified: acc.absentJustified + row.totals.absentJustified,
         justified: acc.justified + row.totals.justified,
         unjustified: acc.unjustified + row.totals.unjustified,
       }),
-      { onTime: 0, late: 0, justified: 0, unjustified: 0 }
+      { onTime: 0, late: 0, lateJustified: 0, absentJustified: 0, justified: 0, unjustified: 0 }
     );
   }, [rows]);
 
@@ -309,12 +312,12 @@ export const AttendanceReport = () => {
       doc.drawKpiCards([
         { label: 'A tiempo', value: totalsGlobal.onTime, tone: 'success' },
         { label: 'Tardanzas', value: totalsGlobal.late, tone: 'warning' },
-        { label: 'Justificadas', value: totalsGlobal.justified, tone: 'info' },
-        { label: 'Injustificadas', value: totalsGlobal.unjustified, tone: 'error' },
+        { label: 'TJ', value: totalsGlobal.lateJustified, tone: 'info' },
+        { label: 'IJ', value: totalsGlobal.absentJustified, tone: 'error' },
       ]);
 
       doc.drawParagraph(
-        'Leyenda de estados: A = A tiempo · T = Tardanza · J = Justificada · I = Injustificada · — = Sin registro'
+        'Leyenda de estados: A = A tiempo · T = Tardanza · TJ = Tarde justificada · IJ = Inasistencia justificada · — = Sin registro'
       );
 
       doc.drawSectionTitle('Resumen por estudiante');
@@ -326,8 +329,8 @@ export const AttendanceReport = () => {
           { header: 'Sec.', dataKey: 'section', width: 12, align: 'center' },
           { header: 'A tiempo', dataKey: 'onTime', width: 16, align: 'center' },
           { header: 'Tardanzas', dataKey: 'late', width: 16, align: 'center' },
-          { header: 'Justif.', dataKey: 'justified', width: 14, align: 'center' },
-          { header: 'Injustif.', dataKey: 'unjustified', width: 14, align: 'center' },
+          { header: 'TJ', dataKey: 'lateJustified', width: 14, align: 'center' },
+          { header: 'IJ', dataKey: 'absentJustified', width: 14, align: 'center' },
           {
             header: '% Puntualidad',
             dataKey: 'punctuality',
@@ -337,7 +340,12 @@ export const AttendanceReport = () => {
         ],
         rows.map((row) => {
           const totalMarked =
-            row.totals.onTime + row.totals.late + row.totals.justified + row.totals.unjustified;
+            row.totals.onTime +
+            row.totals.late +
+            row.totals.lateJustified +
+            row.totals.absentJustified +
+            row.totals.justified +
+            row.totals.unjustified;
           const punctuality =
             totalMarked > 0 ? Math.round((row.totals.onTime / totalMarked) * 100) : 0;
           return {
@@ -347,8 +355,8 @@ export const AttendanceReport = () => {
             section: row.student.section,
             onTime: String(row.totals.onTime),
             late: String(row.totals.late),
-            justified: String(row.totals.justified),
-            unjustified: String(row.totals.unjustified),
+            lateJustified: String(row.totals.lateJustified),
+            absentJustified: String(row.totals.absentJustified),
             punctuality: `${punctuality}%`,
           };
         }),
@@ -452,8 +460,8 @@ export const AttendanceReport = () => {
       summarySheet.addRow(['Concepto', 'Cantidad']);
       summarySheet.addRow(['A tiempo', totalsGlobal.onTime]);
       summarySheet.addRow(['Tardanzas', totalsGlobal.late]);
-      summarySheet.addRow(['Justificadas', totalsGlobal.justified]);
-      summarySheet.addRow(['Injustificadas', totalsGlobal.unjustified]);
+      summarySheet.addRow(['Tarde justificada (TJ)', totalsGlobal.lateJustified]);
+      summarySheet.addRow(['Inasistencia justificada (IJ)', totalsGlobal.absentJustified]);
       setColumnWidths(summarySheet, [22, 14]);
       await addExcelWatermark(workbook, summarySheet, { mergeCols: 2, centerRow: 10 });
 
@@ -594,10 +602,10 @@ export const AttendanceReport = () => {
             tone="warning"
           />
           <StaffKpiStat
-            label="Injustificadas"
-            value={hasQueried ? totalsGlobal.unjustified : '—'}
-            hint={hasQueried ? `${totalsGlobal.justified} justificadas` : 'Sin consulta aún'}
-            hintIcon={XCircle}
+            label="TJ / IJ"
+            value={hasQueried ? `${totalsGlobal.lateJustified} / ${totalsGlobal.absentJustified}` : '—'}
+            hint="Tarde justificada / Inasistencia justificada"
+            hintIcon={CheckCircle2}
             icon={AlertTriangle}
             tone="accent"
           />
@@ -609,16 +617,19 @@ export const AttendanceReport = () => {
           description="Seleccione un estudiante de la lista o elija nivel, grado y sección; luego pulse Consultar"
           footer={
             <div className="flex flex-wrap gap-4 text-sm">
-              {Object.entries(statusMap).map(([key, value]) => (
+              {['A_tiempo', 'Tarde', 'Tarde_justificada', 'Inasistencia_justificada', 'Sin_registro'].map((key) => {
+                const value = statusMap[key];
+                return (
                 <div key={key} className="flex items-center gap-2">
                   <span
-                    className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-semibold ${value.className}`}
+                    className={`inline-flex h-6 min-w-6 items-center justify-center rounded-md px-0.5 text-[11px] font-semibold ${value.className}`}
                   >
                     {value.label}
                   </span>
                   <span className="text-muted-foreground">{value.description}</span>
                 </div>
-              ))}
+                );
+              })}
             </div>
           }
         >
@@ -803,8 +814,8 @@ export const AttendanceReport = () => {
                       ))}
                       <th className="min-w-[48px] px-2 py-2">A</th>
                       <th className="min-w-[48px] px-2 py-2">T</th>
-                      <th className="min-w-[48px] px-2 py-2">J</th>
-                      <th className="min-w-[48px] px-2 py-2">I</th>
+                      <th className="min-w-[48px] px-2 py-2">TJ</th>
+                      <th className="min-w-[48px] px-2 py-2">IJ</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -819,9 +830,13 @@ export const AttendanceReport = () => {
                         {row.days.map((day) => {
                           const info = statusMap[day.status] || statusMap.Sin_registro;
                           return (
-                            <td key={day.day} className="px-1 py-2 text-center">
+                            <td
+                              key={day.day}
+                              className="px-1 py-2 text-center"
+                              title={day.justificationReason || info.description}
+                            >
                               <span
-                                className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-semibold ${info.className}`}
+                                className={`inline-flex h-6 min-w-6 items-center justify-center rounded-md px-0.5 text-[11px] font-semibold ${info.className}`}
                               >
                                 {info.label}
                               </span>
@@ -834,11 +849,11 @@ export const AttendanceReport = () => {
                         <td className="px-2 py-2 text-center font-semibold text-amber-700">
                           {row.totals.late}
                         </td>
-                        <td className="px-2 py-2 text-center font-semibold text-blue-700">
-                          {row.totals.justified}
+                        <td className="px-2 py-2 text-center font-semibold text-sky-800">
+                          {row.totals.lateJustified}
                         </td>
-                        <td className="px-2 py-2 text-center font-semibold text-rose-700">
-                          {row.totals.unjustified}
+                        <td className="px-2 py-2 text-center font-semibold text-violet-800">
+                          {row.totals.absentJustified}
                         </td>
                       </tr>
                     ))}

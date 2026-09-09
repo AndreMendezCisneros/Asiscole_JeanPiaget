@@ -1,9 +1,16 @@
 import { supabase } from '../supabaseClient';
-import { Incident, EducationalLevel, EstadoIncidencia } from '@/types';
+import {
+  Incident,
+  EducationalLevel,
+  EstadoIncidencia,
+  EstadoEvidencia,
+  FaultSeverity,
+} from '@/types';
+import type { RevisadoAppEstado } from '@/lib/utils/revisadoAppEstado';
 import { fetchAllPages } from '@/lib/utils/supabasePagination';
 import { ensureSupabaseReady } from '@/lib/supabaseWarmup';
 import { isTalleresEnabled } from '@/config/features';
-import { getLimaMonthBounds, getMonthBounds } from '@/lib/utils/limaDateTime';
+import { getLimaMonthBounds, getMonthBounds, toLimaDayBound } from '@/lib/utils/limaDateTime';
 import {
   buildIncidentSelect,
   isMissingTallerSchemaError,
@@ -20,6 +27,9 @@ export interface IncidentsListFilters {
   seccion?: string;
   nivelEducativo?: EducationalLevel;
   nivelReincidencia?: number;
+  estadoEvidencia?: EstadoEvidencia;
+  gravedad?: FaultSeverity;
+  revisado?: RevisadoAppEstado;
   bimestre?: number;
   añoEscolar?: number;
   search?: string;
@@ -48,6 +58,7 @@ interface IncidentQueryScope {
   incidentId?: number;
   studentIds?: number[];
   faultIds?: number[];
+  gravityFaultIds?: number[];
 }
 
 /** Resuelve filtros de estudiante/búsqueda en tablas base (evita joins lentos en incidencias). */
@@ -123,14 +134,39 @@ async function resolveIncidentQueryScope(
 
     if (scope.studentIds.length === 0 && scope.faultIds.length === 0) {
       scope.empty = true;
+      return scope;
     }
-    return scope;
+    return attachGravityScope(scope, filters);
   }
 
   if (scopedStudentIds) {
     scope.studentIds = scopedStudentIds;
   }
 
+  return attachGravityScope(scope, filters);
+}
+
+async function attachGravityScope(
+  scope: IncidentQueryScope,
+  filters?: IncidentsListFilters,
+): Promise<IncidentQueryScope> {
+  if (scope.empty || !filters?.gravedad) {
+    return scope;
+  }
+  const { data, error } = await supabase
+    .from('catalogo_faltas')
+    .select('id_falta')
+    .eq('es_grave', filters.gravedad === 'Grave')
+    .limit(SEARCH_MATCH_LIMIT);
+  if (error) {
+    throw new Error(error.message);
+  }
+  const gravityIds = (data ?? []).map((row) => row.id_falta);
+  if (gravityIds.length === 0) {
+    scope.empty = true;
+    return scope;
+  }
+  scope.gravityFaultIds = gravityIds;
   return scope;
 }
 
@@ -148,7 +184,10 @@ async function resolveDateRange(filters?: IncidentsListFilters): Promise<{
     fechaHasta = fin.toISOString();
   }
 
-  return { fechaDesde, fechaHasta };
+  return {
+    fechaDesde: toLimaDayBound(fechaDesde, false),
+    fechaHasta: toLimaDayBound(fechaHasta, true),
+  };
 }
 
 function applyIncidentFilters(
@@ -183,6 +222,22 @@ function applyIncidentFilters(
 
   if (filters?.nivelReincidencia !== undefined) {
     query = query.eq('nivel_reincidencia', filters.nivelReincidencia);
+  }
+
+  if (filters?.estadoEvidencia) {
+    query = query.eq('estado_evidencia', filters.estadoEvidencia);
+  }
+
+  if (scope.gravityFaultIds?.length) {
+    query = query.in('id_falta', scope.gravityFaultIds);
+  }
+
+  if (filters?.revisado === 'confirmado') {
+    query = query.eq('confirmada_app', true);
+  } else if (filters?.revisado === 'visto') {
+    query = query.eq('revisado_app', true).eq('confirmada_app', false);
+  } else if (filters?.revisado === 'no') {
+    query = query.eq('revisado_app', false).eq('confirmada_app', false);
   }
 
   if (scope.studentIds?.length && scope.faultIds?.length) {
@@ -394,7 +449,7 @@ export const incidentsService = {
 
   /** Totales para KPIs del listado (consultas ligeras en paralelo). */
   async getListSummary(
-    filters?: Pick<IncidentsListFilters, 'nivelEducativo' | 'search' | 'fechaDesde' | 'fechaHasta' | 'grado' | 'seccion'>,
+    filters?: Omit<IncidentsListFilters, 'page' | 'pageSize' | 'offset' | 'limit' | 'fetchAll'>,
   ): Promise<{ summary: IncidentsListSummary; error: string | null }> {
     try {
       await ensureSupabaseReady();

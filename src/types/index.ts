@@ -22,7 +22,14 @@ export type FaultSeverity = 'Leve' | 'Grave';
 export type EstadoEvidencia = 'Sin evidencia' | 'Con evidencia';
 
 export type EstadoIncidencia = 'Activa' | 'Anulada' | 'En revisión' | 'Justificada';
-export type AttendanceStatus = 'A_tiempo' | 'Tarde' | 'Justificada' | 'Injustificada' | 'Sin_registro';
+export type AttendanceStatus =
+  | 'A_tiempo'
+  | 'Tarde'
+  | 'Tarde_justificada'
+  | 'Inasistencia_justificada'
+  | 'Justificada'
+  | 'Injustificada'
+  | 'Sin_registro';
 
 // Tipos de la base de datos (DB)
 export interface UsuarioDB {
@@ -330,14 +337,24 @@ export interface ReincidenceSettings {
   active: boolean;
 }
 
+export type ArrivalEstadoDB =
+  | 'A tiempo'
+  | 'Tarde'
+  | 'Tarde justificada'
+  | 'Falta justificada'
+  | 'Falta';
+
 export interface RegistroLlegadaDB {
   id_registro: number;
   id_estudiante: number;
   fecha: string;
   hora_llegada: string;
-  estado: 'A tiempo' | 'Tarde';
+  estado: ArrivalEstadoDB;
   registrado_por: number | null;
   fecha_creacion: string;
+  motivo_justificacion?: string | null;
+  justificado_por?: number | null;
+  fecha_justificacion?: string | null;
   // Campos para control de salidas (nuevos)
   hora_salida?: string | null;
   registrado_salida_por?: number | null;
@@ -366,10 +383,13 @@ export interface ArrivalRecord {
   student?: Student;
   date: string;
   arrivalTime: string;
-  status: 'A tiempo' | 'Tarde';
+  status: ArrivalEstadoDB;
   registeredBy: number | null;
   registeredByUser?: User;
   createdAt: string;
+  justificationReason?: string | null;
+  justifiedBy?: number | null;
+  justifiedAt?: string | null;
   // Campos para control de salidas
   departureTime?: string | null;
   departureRegisteredBy?: number | null;
@@ -381,6 +401,7 @@ export interface MonthlyAttendanceDay {
   status: AttendanceStatus;
   arrivalTime?: string;
   departureTime?: string;
+  justificationReason?: string;
 }
 
 export interface MonthlyAttendanceRow {
@@ -389,6 +410,8 @@ export interface MonthlyAttendanceRow {
   totals: {
     onTime: number;
     late: number;
+    lateJustified: number;
+    absentJustified: number;
     justified: number;
     unjustified: number;
   };
