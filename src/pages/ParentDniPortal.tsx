@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { SCHOOL_NAME } from '@/config/siteSeo';
 import { toast } from 'sonner';
 
-/** Portal público para padres — solo DNI del estudiante. */
+/** Portal público para padres — número del carnet institucional. */
 export function ParentDniPortal() {
   const navigate = useNavigate();
   const [dni, setDni] = useState('');
@@ -16,7 +16,7 @@ export function ParentDniPortal() {
     e.preventDefault();
     const trimmed = dni.trim();
     if (!trimmed) {
-      toast.error('Ingrese el DNI del estudiante');
+      toast.error('Ingrese el número que aparece en el carnet de su hijo o hija');
       return;
     }
     navigate(`/llegada/dni/${encodeURIComponent(trimmed)}`);
@@ -52,14 +52,16 @@ export function ParentDniPortal() {
             </span>
             <div>
               <h1 className="text-lg font-semibold text-[#1A1D23]">Consultar asistencia</h1>
-              <p className="mt-0.5 text-xs text-[#6B7280]">Ingresa el DNI de tu hijo/a</p>
+              <p className="mt-0.5 text-xs text-[#6B7280]">
+                Ingresa el n.° que aparece en el carnet de tu hijo o hija
+              </p>
             </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="parent-dni" className="text-sm text-[#6B7280]">
-                DNI del estudiante
+                N.° del carnet
               </Label>
               <Input
                 id="parent-dni"
@@ -68,7 +70,7 @@ export function ParentDniPortal() {
                 value={dni}
                 onChange={(e) => setDni(e.target.value.replace(/\D/g, ''))}
                 className="h-12 border-[#D9E0EC] bg-[#F4F6FA] text-center text-lg font-semibold tracking-widest text-[#1A1D23] placeholder:text-[#9095A3] focus-visible:ring-[#1A305E]/30"
-                placeholder="Ej. 70234567"
+                placeholder="Como figura en el carnet"
                 autoComplete="off"
                 maxLength={12}
                 autoFocus
@@ -86,7 +88,7 @@ export function ParentDniPortal() {
           </form>
 
           <p className="mt-6 text-center text-[11px] leading-relaxed text-[#9095A3]">
-            El DNI es el mismo código que aparece en el carnet escolar del estudiante.
+            Es el número impreso en el carnet institucional de su hijo o hija.
           </p>
         </div>
 

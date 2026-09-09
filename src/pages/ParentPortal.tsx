@@ -170,7 +170,7 @@ export const ParentPortal = () => {
           <h2 className="text-lg font-semibold">Aún no hay alumno vinculado</h2>
           <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
             {isParentRole
-              ? 'Comuníquese con secretaría del colegio para asociar su cuenta con el DNI de su hijo o hija.'
+              ? 'Comuníquese con secretaría del colegio para asociar su cuenta con el carnet de su hijo o hija.'
               : 'Vista de prueba sin estudiantes vinculados.'}
           </p>
         </CardContent>

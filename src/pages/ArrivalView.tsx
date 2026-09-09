@@ -23,7 +23,7 @@ export function ArrivalView() {
       arrivalService.getPublicInfoByDNI(decodeURIComponent(dni)).then(
         ({ arrival, recentArrivals, student, error: err }) => {
           if (err || !student) {
-            setError(err || 'No se encontró ningún estudiante con ese DNI.');
+            setError(err || 'No se encontró ningún estudiante con ese número de carnet.');
           } else {
             setInfo({ arrival, recentArrivals, student });
           }
@@ -76,7 +76,7 @@ export function ArrivalView() {
           </div>
           {dni && (
             <p className="text-xs text-[#9095A3]">
-              DNI consultado:{' '}
+              N.° consultado:{' '}
               <span className="font-mono text-[#6B7280]">{decodeURIComponent(dni)}</span>
             </p>
           )}
@@ -86,7 +86,7 @@ export function ArrivalView() {
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#D9E0EC] bg-white px-4 py-2.5 text-sm font-medium text-[#1A305E] transition-colors hover:bg-[#E8EEF7]"
             >
               <ChevronLeft className="h-4 w-4" />
-              Intentar con otro DNI
+              Intentar con otro número
             </Link>
             <Link to="/login" className="text-xs text-[#9095A3] transition-colors hover:text-[#1A305E]">
               Ir al login

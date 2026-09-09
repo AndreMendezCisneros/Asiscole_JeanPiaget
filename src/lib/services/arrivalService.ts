@@ -1404,7 +1404,7 @@ async function getPublicInfoByDniRpc(dni: string): Promise<{
       arrival: null,
       recentArrivals: [],
       student: null,
-      error: 'No se encontró ningún estudiante con ese DNI.',
+      error: 'No se encontró ningún estudiante con ese número de carnet.',
     };
   }
 
@@ -1471,7 +1471,7 @@ export async function getPublicInfoByDNI(dni: string): Promise<{
 
     const { student, error: studentErr } = await studentsService.getByBarcode(dni.trim(), { skipReincidence: true });
     if (studentErr || !student) {
-      return { arrival: null, recentArrivals: [], student: null, error: 'No se encontró ningún estudiante con ese DNI.' };
+      return { arrival: null, recentArrivals: [], student: null, error: 'No se encontró ningún estudiante con ese número de carnet.' };
     }
 
     const today = getLimaTodayDate();

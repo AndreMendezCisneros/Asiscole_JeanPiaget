@@ -40,7 +40,7 @@ export const PUBLIC_ROUTE_META: Record<string, PageMeta> = {
   '/portal-padres': {
     title: 'Portal de padres | Consulta de asistencia — Colegio Jean Piaget',
     description:
-      'Consulte la asistencia diaria de su hijo o hija en el Colegio Jean Piaget ingresando el DNI del estudiante.',
+      'Consulte la asistencia diaria de su hijo o hija en el Colegio Jean Piaget ingresando el número del carnet institucional.',
     canonical: `${SITE_URL}/portal-padres`,
   },
 };
