@@ -496,12 +496,16 @@
   .login-page--no-motion [data-login-card],
   .login-page--no-motion [data-login-field],
   .login-page--no-motion [data-login-title],
+  .login-page--no-motion [data-login-brand-mark],
+  .login-page--no-motion [data-login-brand-line],
   .login-page--gsap-fallback [data-login-anim],
   .login-page--gsap-fallback [data-login-panel-split],
   .login-page--gsap-fallback [data-login-mobile-intro],
   .login-page--gsap-fallback [data-login-card],
   .login-page--gsap-fallback [data-login-field],
-  .login-page--gsap-fallback [data-login-title] {
+  .login-page--gsap-fallback [data-login-title],
+  .login-page--gsap-fallback [data-login-brand-mark],
+  .login-page--gsap-fallback [data-login-brand-line] {
     opacity: 1 !important;
     visibility: visible !important;
     transform: none !important;

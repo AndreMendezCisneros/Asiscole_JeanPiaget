@@ -4,8 +4,9 @@
  * - UI del sistema: PNG con transparencia (logo_asiscole_sf.png).
  * - WhatsApp / Open Graph: JPEG (whatsapp-preview.jpg) — el crawler no usa SVG.
  */
-/** Marca oficial (escudo + A + birrete, fondo transparente) */
-export const BRAND_MARK = '/logo_asiscole_sf.png';
+/** Marca oficial (escudo + A + birrete, fondo transparente).
+ *  Nombre nuevo: Cloudflare cacheó HTML en `/logo_asiscole_sf.png`. */
+export const BRAND_MARK = '/logo-asiscole.png';
 
 /** Escudo para componentes compactos (sidebar, cabeceras) */
 export const BRAND_ICON_SVG = BRAND_MARK;

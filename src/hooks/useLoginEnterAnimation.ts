@@ -6,7 +6,7 @@ import { shouldSkipHeavyAnimations } from '@/lib/utils/deviceCompat';
 import { addSetIf, addToIf, setIf } from '@/lib/utils/gsapTargets';
 
 const VISIBLE_SEL =
-  '[data-login-anim], [data-login-panel-split], [data-login-mobile-intro], [data-login-card], [data-login-field], [data-login-title]';
+  '[data-login-anim], [data-login-panel-split], [data-login-mobile-intro], [data-login-card], [data-login-field], [data-login-title], [data-login-brand-mark], [data-login-brand-line]';
 
 function revealLoginWithoutMotion(scope: HTMLElement | null): void {
   scope?.classList.add('login-page--no-motion');

@@ -34,7 +34,7 @@ jeanpiaget.asiscole.com {
 	@assets path /assets/*
 	header @assets Cache-Control "public, max-age=31536000, immutable"
 
-	@static path *.ico *.svg *.png *.jpg *.webp
+	@static path *.ico *.svg *.png *.jpg *.jpeg *.webp
 	header @static Cache-Control "public, max-age=86400"
 
 	# Canal movil desactivado en este VPS (migrado)
@@ -68,6 +68,11 @@ jeanpiaget.asiscole.com {
 	}
 
 	handle /assets/* {
+		root * /opt/sie-jp/dist
+		file_server
+	}
+
+	handle @static {
 		root * /opt/sie-jp/dist
 		file_server
 	}

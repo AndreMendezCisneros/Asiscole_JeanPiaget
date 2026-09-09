@@ -17,6 +17,8 @@ export function LoginBrandBlock({ compact = false }: LoginBrandBlockProps) {
             src={BRAND_LOGIN_LOGO}
             alt="Asiscole"
             className="login-brand__logo"
+            width={132}
+            height={132}
             draggable={false}
           />
         </div>
