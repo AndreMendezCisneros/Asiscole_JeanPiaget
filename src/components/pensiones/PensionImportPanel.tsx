@@ -31,16 +31,20 @@ type Props = {
 };
 
 async function loadAllActiveStudents(): Promise<{ students: Student[]; error: string | null }> {
-  const first = await studentsService.getAll({ active: true, fetchAll: true });
-  if (!first.error && first.students.length >= 20) {
-    return { students: first.students, error: null };
+  const lite = await studentsService.listLite({ active: true });
+  if (!lite.error && lite.students.length >= 20) {
+    return { students: lite.students, error: null };
+  }
+  if (!lite.error && lite.students.length > 0) {
+    // Menos de 20 activos: aún así lo aceptamos, no hace falta paginar.
+    return { students: lite.students, error: null };
   }
 
   const pageSize = 100;
   let page = 1;
   let total = Number.POSITIVE_INFINITY;
   const all: Student[] = [];
-  let lastError: string | null = first.error;
+  let lastError: string | null = lite.error;
 
   while (all.length < total && page <= 50) {
     const res = await studentsService.getAll({ active: true, page, pageSize });
@@ -55,9 +59,6 @@ async function loadAllActiveStudents(): Promise<{ students: Student[]; error: st
   }
 
   if (all.length > 0) return { students: all, error: null };
-  if (!first.error && first.students.length > 0) {
-    return { students: first.students, error: null };
-  }
   return { students: [], error: lastError || 'Nómina vacía' };
 }
 

@@ -1,6 +1,7 @@
 import { supabase } from '../supabaseClient';
 import { Student, EducationalLevel, DocenteClassroom } from '@/types';
 import { resolveStudentProfilePhotoUrl } from '@/lib/utils/profilePhoto';
+import { gradeFilterValues } from '@/lib/utils/gradeAliases';
 import {
   TUTOR_NAME_SEARCH_LIMIT,
   foldSearchText,
@@ -414,6 +415,135 @@ export const studentsService = {
         stats: { sinIncidencias: 0, nivelModerado: 0, nivelAlto: 0 },
         error: message,
       };
+    }
+  },
+
+  /**
+   * Consulta directa a `estudiantes` sin JOIN a la vista pesada de reincidencia.
+   * Úsala en reportes que NO muestran nivel/faltas de reincidencia (asistencia,
+   * meetings, control de llegada/salida, etc.). Mucho más rápida que la RPC
+   * `sie_lista_estudiantes` con `fetchAll: true`.
+   *
+   * Modos:
+   *  - Sin `page`/`pageSize`: pagina internamente en bloques de 1000 y trae todo.
+   *  - Con `page`/`pageSize`: trae solo esa página + devuelve `total` con COUNT exact.
+   *  - Con `withReincidence: true`: enriquece cada estudiante con `reincidenceLevel`
+   *    y `faultsLast60Days` consultando `v_estudiantes_nivel_actual` en una sola
+   *    query adicional (`.in('id_estudiante', ids)`), lo cual es super rápido
+   *    porque el filtro es una lista corta.
+   */
+  async listLite(filters?: {
+    active?: boolean;
+    level?: EducationalLevel;
+    grade?: string;
+    section?: string;
+    search?: string;
+    limit?: number;
+    /** Página 1-based; si se define, activa modo paginado */
+    page?: number;
+    /** Tamaño de página en modo paginado (default 1000 en fetchAll, 10 paginado) */
+    pageSize?: number;
+    /** Añade reincidencia consultando la vista solo para los IDs de la página */
+    withReincidence?: boolean;
+  }): Promise<{ students: Student[]; total: number; error: string | null }> {
+    try {
+      const isPaginated = filters?.page !== undefined;
+      const pageSize = filters?.pageSize ?? filters?.limit ?? (isPaginated ? 10 : 1000);
+      const page = Math.max(1, filters?.page ?? 1);
+
+      const buildBaseQuery = (from: number, to: number, withCount: boolean) => {
+        let q = supabase
+          .from('estudiantes')
+          .select(
+            'id_estudiante, codigo_barras, nombre_completo, grado, seccion, nivel_educativo, foto_perfil, activo, telefono_contacto, email_contacto, nombre_responsable, parentesco_responsable, telefono_emergencia',
+            withCount ? { count: 'exact' } : undefined,
+          )
+          .order('nombre_completo', { ascending: true })
+          .range(from, to);
+
+        if (filters?.active !== undefined) q = q.eq('activo', filters.active);
+        if (filters?.level) q = q.eq('nivel_educativo', filters.level);
+        if (filters?.grade) q = q.in('grado', gradeFilterValues(filters.grade));
+        if (filters?.section) q = q.eq('seccion', filters.section);
+        if (filters?.search && filters.search.trim()) {
+          const term = filters.search.trim().replace(/[%_]/g, (m) => `\\${m}`);
+          q = q.or(`nombre_completo.ilike.%${term}%,codigo_barras.ilike.%${term}%`);
+        }
+        return q;
+      };
+
+      const mapRow = (row: Record<string, unknown>): Student => ({
+        id: Number(row.id_estudiante),
+        fullName: String(row.nombre_completo ?? ''),
+        grade: String(row.grado ?? ''),
+        section: String(row.seccion ?? ''),
+        level: (row.nivel_educativo as EducationalLevel) ?? 'Secundaria',
+        barcode: String(row.codigo_barras ?? ''),
+        profilePhoto: mapProfilePhoto(row.foto_perfil as string | null | undefined),
+        reincidenceLevel: 0,
+        faultsLast60Days: 0,
+        active: row.activo !== false,
+        contactPhone: (row.telefono_contacto as string | null) ?? null,
+        contactEmail: (row.email_contacto as string | null) ?? null,
+        responsibleName: (row.nombre_responsable as string | null) ?? null,
+        responsibleRelationship: (row.parentesco_responsable as string | null) ?? null,
+        emergencyPhone: (row.telefono_emergencia as string | null) ?? null,
+        estadoPension: 'sin_dato',
+      });
+
+      const enrichWithReincidence = async (students: Student[]): Promise<Student[]> => {
+        if (!filters?.withReincidence || students.length === 0) return students;
+        const ids = students.map((s) => s.id);
+        const { data: rein, error: reinError } = await supabase
+          .from('v_estudiantes_nivel_actual')
+          .select('id_estudiante, nivel_actual, total_faltas_60_dias')
+          .in('id_estudiante', ids);
+        if (reinError) return students; // no bloquear la lista si la vista falla
+        const byId = new Map<number, { nivel: number; faltas: number }>();
+        for (const r of rein ?? []) {
+          byId.set(Number((r as Record<string, unknown>).id_estudiante), {
+            nivel: Number((r as Record<string, unknown>).nivel_actual) || 0,
+            faltas: Number((r as Record<string, unknown>).total_faltas_60_dias) || 0,
+          });
+        }
+        return students.map((s) => {
+          const r = byId.get(s.id);
+          if (!r) return s;
+          return {
+            ...s,
+            reincidenceLevel: r.nivel as Student['reincidenceLevel'],
+            faultsLast60Days: r.faltas,
+          };
+        });
+      };
+
+      if (isPaginated) {
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        const { data, error, count } = await buildBaseQuery(from, to, true);
+        if (error) return { students: [], total: 0, error: error.message };
+        const rows = (data ?? []) as Array<Record<string, unknown>>;
+        const students = await enrichWithReincidence(rows.map(mapRow));
+        return { students, total: count ?? students.length, error: null };
+      }
+
+      // Modo fetchAll: pagina interna de 1000 en 1000
+      const all: Student[] = [];
+      let from = 0;
+      for (let guard = 0; guard < 20; guard += 1) {
+        const { data, error } = await buildBaseQuery(from, from + pageSize - 1, false);
+        if (error) return { students: [], total: 0, error: error.message };
+        const rows = (data ?? []) as Array<Record<string, unknown>>;
+        all.push(...rows.map(mapRow));
+        if (rows.length < pageSize) break;
+        from += pageSize;
+      }
+      const enriched = await enrichWithReincidence(all);
+      return { students: enriched, total: enriched.length, error: null };
+    } catch (error: unknown) {
+      console.error('Error en listLite:', error);
+      const message = error instanceof Error ? error.message : 'Error al listar estudiantes';
+      return { students: [], total: 0, error: message };
     }
   },
 

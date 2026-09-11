@@ -35,13 +35,15 @@ export function cspConnectSrcPlugin(): Plugin {
       const origins = new Set<string>();
       const openwaOrigin = resolveHttpOrigin(env.VITE_OPENWA_API_URL);
       if (openwaOrigin) origins.add(openwaOrigin);
-      const supabaseOrigin = resolveHttpOrigin(env.VITE_SUPABASE_URL);
-      if (supabaseOrigin) {
-        origins.add(supabaseOrigin);
-        origins.add(supabaseOrigin.replace(/^https:/, 'wss:'));
-      }
 
-      const connectExtra = origins.size > 0 ? ` ${[...origins].join(' ')}` : '';
+      // Jean Piaget por defecto (no San Ramón)
+      const supabaseOrigin =
+        resolveHttpOrigin(env.VITE_SUPABASE_URL) ||
+        'https://kelylvvoebneugnajiwv.supabase.co';
+      origins.add(supabaseOrigin);
+      origins.add(supabaseOrigin.replace(/^https:/, 'wss:'));
+
+      const connectList = [...origins].join(' ');
       const devCsp = [
         "default-src 'self'",
         "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
@@ -49,7 +51,7 @@ export function cspConnectSrcPlugin(): Plugin {
         "font-src 'self' data: https://fonts.gstatic.com",
         "img-src 'self' data: https: blob:",
         "media-src 'self' blob: data:",
-        `connect-src 'self' https://spdugaykkcgpcfslcpac.supabase.co wss://spdugaykkcgpcfslcpac.supabase.co${connectExtra}`,
+        `connect-src 'self' ${connectList}`,
         "base-uri 'self'",
         "form-action 'self'",
         "frame-ancestors 'none'",

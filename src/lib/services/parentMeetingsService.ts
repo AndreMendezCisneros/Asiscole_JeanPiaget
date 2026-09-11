@@ -666,9 +666,8 @@ async function fetchActiveStudentIdsForBulk(meetings: {
     return { ids: [], error: 'Debe seleccionar grado y sección' };
   }
 
-  const { students, error } = await studentsService.getAll({
+  const { students, error } = await studentsService.listLite({
     active: true,
-    fetchAll: true,
     grade: meetings.tipo === 'grade' || meetings.tipo === 'section' ? meetings.grade : undefined,
     section: meetings.tipo === 'section' ? meetings.section : undefined,
     level: meetings.level as import('@/types').EducationalLevel | undefined,

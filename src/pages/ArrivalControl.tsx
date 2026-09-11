@@ -109,9 +109,12 @@ export const ArrivalControl = () => {
   }, [selectedDate]);
 
   const loadActiveStudents = async (): Promise<{ students: Student[]; error: string | null }> => {
-    const first = await studentsService.getAll({ active: true, fetchAll: true });
-    if (!first.error && first.students.length > 0) {
-      return { students: first.students, error: null };
+    const lite = await studentsService.listLite({ active: true });
+    if (!lite.error && lite.students.length > 0) {
+      return { students: lite.students, error: null };
+    }
+    if (lite.error) {
+      console.warn('listLite falló, usando paginación via RPC:', lite.error);
     }
 
     // Fallback: paginar si fetchAll no está soportado o devolvió vacío con error
@@ -119,7 +122,7 @@ export const ArrivalControl = () => {
     let page = 1;
     let total = Number.POSITIVE_INFINITY;
     const all: Student[] = [];
-    let lastError: string | null = first.error;
+    let lastError: string | null = lite.error;
 
     while (all.length < total) {
       const res = await studentsService.getAll({ active: true, page, pageSize });

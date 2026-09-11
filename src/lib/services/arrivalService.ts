@@ -686,10 +686,9 @@ export async function getMonthlyAttendance(filters: {
     const startStr = startDate.toISOString().split('T')[0];
     const endStr = endDate.toISOString().split('T')[0];
 
-    // Obtener estudiantes del filtro (vía RPC con token de sesión)
-    const { students: studentsList, error: studentsError } = await studentsService.getAll({
+    // Obtener estudiantes del filtro (consulta directa, sin JOIN pesado)
+    const { students: studentsList, error: studentsError } = await studentsService.listLite({
       active: true,
-      fetchAll: true,
       level: filters.level,
       grade: filters.grade,
       section: filters.section,
@@ -798,9 +797,8 @@ export async function getBimestralAttendance(filters: {
     // Calcular días totales en el bimestre
     const daysInBimestre = Math.ceil((fin.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-    const { students: studentsList, error: studentsError } = await studentsService.getAll({
+    const { students: studentsList, error: studentsError } = await studentsService.listLite({
       active: true,
-      fetchAll: true,
       level: filters.level,
       grade: filters.grade,
       section: filters.section,

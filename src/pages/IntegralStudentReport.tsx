@@ -203,9 +203,8 @@ export const IntegralStudentReport = () => {
         morningRows = morningRows.filter((row) => row.student.id === selectedStudent.id);
         students = [selectedStudent];
       } else {
-        const list = await studentsService.getAll({
+        const list = await studentsService.listLite({
           active: true,
-          fetchAll: true,
           level: attendanceFilters.level,
           grade: attendanceFilters.grade,
           section: attendanceFilters.section,

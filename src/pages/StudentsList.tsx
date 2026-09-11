@@ -392,13 +392,13 @@ export const StudentsList = () => {
     if (sectionFilter !== 'all') filterParts.push(`Sección: ${sectionFilter}`);
     if (searchTerm) filterParts.push(`Búsqueda: ${searchTerm}`);
     const filters = filterParts.length > 0 ? filterParts.join(' · ') : undefined;
-    const { students: allRows, error } = await studentsService.getAll({
+    const { students: allRows, error } = await studentsService.listLite({
       active: true,
-      fetchAll: true,
       search: debouncedSearch || undefined,
       level: levelFilter === 'all' ? undefined : levelFilter,
       grade: gradeFilter === 'all' ? undefined : gradeFilter,
       section: sectionFilter === 'all' ? undefined : sectionFilter,
+      withReincidence: true, // El Excel muestra nivel de reincidencia; se pide en 1 query .in()
     });
     if (error) {
       toast.error(error);
