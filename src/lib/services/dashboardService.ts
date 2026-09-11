@@ -1,5 +1,6 @@
 import { supabase } from '../supabaseClient';
 import { DashboardStats, EducationalLevel } from '@/types';
+import { gradeFilterValues } from '@/lib/utils/gradeAliases';
 
 type IncidentCountFilters = {
   estado?: string;
@@ -426,16 +427,32 @@ export const dashboardService = {
         fechaHasta = fin.toISOString();
       }
 
-      // Obtener todas las incidencias con información de estudiantes
+      // Pre-filtrar IDs de estudiantes en DB cuando hay filtro de nivel
+      // Evita traer TODAS las incidencias y filtrar en cliente (causa timeout)
+      let studentIds: number[] | undefined;
+      if (filters?.level) {
+        const { data: students } = await supabase
+          .from('estudiantes')
+          .select('id_estudiante')
+          .eq('nivel_educativo', filters.level);
+        studentIds = (students ?? []).map((s: any) => s.id_estudiante);
+        if (studentIds.length === 0) return { comparison: [], error: null };
+      }
+
       let query = supabase
         .from('incidencias')
         .select(`
           id_incidencia,
           nivel_reincidencia,
+          id_estudiante,
           estudiantes:id_estudiante (grado, seccion, nivel_educativo)
         `)
-        .eq('estado', 'Activa');
+        .eq('estado', 'Activa')
+        .limit(DASHBOARD_LEAN_LIMIT);
 
+      if (studentIds) {
+        query = query.in('id_estudiante', studentIds);
+      }
       if (fechaDesde) {
         query = query.gte('fecha_hora_registro', fechaDesde);
       }
@@ -465,9 +482,6 @@ export const dashboardService = {
         const nivel = (estudiante.nivel_educativo || 'Secundaria') as EducationalLevel;
         const grado = estudiante.grado || 'Sin grado';
 
-        // Aplicar filtro de nivel si existe
-        if (filters?.level && nivel !== filters.level) return;
-
         const key = `${nivel}-${grado}`;
         if (!gradeGroups[key]) {
           gradeGroups[key] = {
@@ -480,7 +494,7 @@ export const dashboardService = {
         }
 
         gradeGroups[key].incidents.push(inc);
-        gradeGroups[key].students.add(inc.estudiantes.id_estudiante);
+        gradeGroups[key].students.add(inc.id_estudiante);
         gradeGroups[key].nivelReincidencia.push(inc.nivel_reincidencia);
       });
 
@@ -558,16 +572,32 @@ export const dashboardService = {
         fechaHasta = fin.toISOString();
       }
 
-      // Obtener todas las incidencias con información de estudiantes
+      // Pre-filtrar IDs de estudiantes en DB cuando hay filtro de nivel y/o grado
+      // Evita traer todas las incidencias y filtrar en cliente (causa timeout)
+      let studentIdsSection: number[] | undefined;
+      if (filters?.level || filters?.grade) {
+        let studentQ = supabase.from('estudiantes').select('id_estudiante');
+        if (filters.level) studentQ = studentQ.eq('nivel_educativo', filters.level);
+        if (filters.grade) studentQ = studentQ.in('grado', gradeFilterValues(filters.grade));
+        const { data: students } = await studentQ;
+        studentIdsSection = (students ?? []).map((s: any) => s.id_estudiante);
+        if (studentIdsSection.length === 0) return { comparison: [], error: null };
+      }
+
       let query = supabase
         .from('incidencias')
         .select(`
           id_incidencia,
           nivel_reincidencia,
+          id_estudiante,
           estudiantes:id_estudiante (grado, seccion, nivel_educativo)
         `)
-        .eq('estado', 'Activa');
+        .eq('estado', 'Activa')
+        .limit(DASHBOARD_LEAN_LIMIT);
 
+      if (studentIdsSection) {
+        query = query.in('id_estudiante', studentIdsSection);
+      }
       if (fechaDesde) {
         query = query.gte('fecha_hora_registro', fechaDesde);
       }
@@ -599,10 +629,6 @@ export const dashboardService = {
         const grado = estudiante.grado || 'Sin grado';
         const seccion = estudiante.seccion || 'Sin sección';
 
-        // Aplicar filtros
-        if (filters?.level && nivel !== filters.level) return;
-        if (filters?.grade && grado !== filters.grade) return;
-
         const key = `${nivel}-${grado}-${seccion}`;
         if (!sectionGroups[key]) {
           sectionGroups[key] = {
@@ -616,7 +642,7 @@ export const dashboardService = {
         }
 
         sectionGroups[key].incidents.push(inc);
-        sectionGroups[key].students.add(inc.estudiantes.id_estudiante);
+        sectionGroups[key].students.add(inc.id_estudiante);
         sectionGroups[key].nivelReincidencia.push(inc.nivel_reincidencia);
       });
 

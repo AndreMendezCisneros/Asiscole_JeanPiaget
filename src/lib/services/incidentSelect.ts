@@ -31,7 +31,7 @@ const INCIDENT_LIST_BASE = `
     es_grave,
     puntos_reincidencia,
     descripcion,
-    recomendacion,
+    {{RECOMENDACION}}
     activo
   ),
   usuarios_registro:id_usuario_registro (
@@ -59,7 +59,7 @@ const INCIDENT_FULL_BASE = `
     es_grave,
     puntos_reincidencia,
     descripcion,
-    recomendacion,
+    {{RECOMENDACION}}
     activo
   ),
   usuarios_registro:id_usuario_registro (
@@ -78,11 +78,14 @@ const TALLER_EMBED = `
 export function buildIncidentSelect(opts: {
   full?: boolean;
   includeTaller?: boolean;
+  includeRecomendacion?: boolean;
 }): string {
   const base = opts.full ? INCIDENT_FULL_BASE : INCIDENT_LIST_BASE;
-  if (!opts.includeTaller) return base.trim();
+  const withRec = opts.includeRecomendacion !== false && recomendacionAvailable !== false;
+  const resolved = base.replace('{{RECOMENDACION}}', withRec ? 'recomendacion,' : '');
+  if (!opts.includeTaller) return resolved.trim();
   // FULL ya trae `*`; igual pedimos el embed explícito para hidratar nombre.
-  return `${base.trim()},\n  ${TALLER_EMBED.trim()}`;
+  return `${resolved.trim()},\n  ${TALLER_EMBED.trim()}`;
 }
 
 export function isMissingTallerSchemaError(error: {
@@ -98,8 +101,22 @@ export function isMissingTallerSchemaError(error: {
   return false;
 }
 
+/** Detecta que la columna `recomendacion` no existe aún en catalogo_faltas. */
+export function isMissingRecomendacionError(error: {
+  code?: string;
+  message?: string;
+} | null | undefined): boolean {
+  if (!error) return false;
+  const code = error.code ?? '';
+  const message = (error.message ?? '').toLowerCase();
+  return code === '42703' && message.includes('recomendacion');
+}
+
 /** Tras un fallo de esquema, no reintentar el embed en esta sesión de página. */
 let tallerSchemaAvailable: boolean | null = null;
+
+/** `null` = sin confirmar; `false` = no existe en esta DB; `true` = existe. */
+let recomendacionAvailable: boolean | null = null;
 
 export function getTallerSchemaAvailable(): boolean | null {
   return tallerSchemaAvailable;
@@ -109,8 +126,13 @@ export function setTallerSchemaAvailable(value: boolean): void {
   tallerSchemaAvailable = value;
 }
 
+export function setRecomendacionAvailable(value: boolean): void {
+  recomendacionAvailable = value;
+}
+
 export function resetTallerSchemaCacheForTests(): void {
   tallerSchemaAvailable = null;
+  recomendacionAvailable = null;
 }
 
 export function shouldIncludeTallerEmbed(featureEnabled: boolean): boolean {
