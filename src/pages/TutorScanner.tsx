@@ -77,6 +77,13 @@ import {
   shouldAlertPensionMorosa,
   unlockPensionAudio,
 } from '@/lib/utils/pensionBeep';
+import {
+  isCarnetFaultName,
+  isDebtAlarmEnabled,
+  isFaltaInasistenciaName,
+  shouldAlertDebtAfterIncident,
+  shouldAlertDebtFromCounts,
+} from '@/lib/utils/debtAlarm';
 import { pensionesService } from '@/lib/services/pensionesService';
 
 const NAME_SEARCH_SCROLL_AFTER = 8;
@@ -675,6 +682,35 @@ export const TutorScanner = () => {
         });
       }
 
+      // Alarma deuda (solo local): faltas / carnet / ≥3 tardanzas — no bloquea registro
+      if (isDebtAlarmEnabled()) {
+        void incidentsService.countDebtTriggerFaults(foundStudent.id).then((debt) => {
+          if (!isMountedRef.current || debt.error) return;
+          if (scanSeq !== latestProfileScanRef.current) return;
+          const { alertFalta, alertCarnet, alertTarde } = shouldAlertDebtFromCounts(debt);
+          if (!alertFalta && !alertCarnet && !alertTarde) return;
+          playPensionMorosoBeep();
+          if (alertFalta) {
+            toast.warning('Deuda por faltas', {
+              description: `${foundStudent.fullName}: ${debt.faltaCount} inasistencias (Falta)`,
+              duration: 3500,
+            });
+          }
+          if (alertCarnet) {
+            toast.warning('Deuda por carnet', {
+              description: `${foundStudent.fullName}: ${debt.carnetCount} sin carné institucional`,
+              duration: 3500,
+            });
+          }
+          if (alertTarde) {
+            toast.warning('Deuda por tardanzas', {
+              description: `${foundStudent.fullName}: ${debt.tardeCount} tardanzas`,
+              duration: 3500,
+            });
+          }
+        });
+      }
+
       const isLatestProfile = scanSeq === latestProfileScanRef.current;
       const shouldUpdateProfile =
         isLatestProfile || foundStudent.id !== displayedStudentIdRef.current;
@@ -1163,6 +1199,37 @@ export const TutorScanner = () => {
     }
 
     toast.success('Incidencia registrada');
+
+    // Si la falta nueva cruza umbral de deuda (carnet/faltas), alarma + toast (solo local)
+    const faultNameForDebt = faultForWa?.name;
+    if (
+      isDebtAlarmEnabled() &&
+      (isCarnetFaultName(faultNameForDebt) || isFaltaInasistenciaName(faultNameForDebt))
+    ) {
+      void incidentsService.countDebtTriggerFaults(studentForWa.id).then((debt) => {
+        if (!isMountedRef.current || debt.error) return;
+        const { alertFalta, alertCarnet } = shouldAlertDebtAfterIncident({
+          faultName: faultNameForDebt,
+          faltaCount: debt.faltaCount,
+          carnetCount: debt.carnetCount,
+        });
+        if (!alertFalta && !alertCarnet) return;
+        playPensionMorosoBeep();
+        if (alertFalta) {
+          toast.warning('Deuda por faltas', {
+            description: `${studentForWa.fullName}: ${debt.faltaCount} inasistencias (Falta)`,
+            duration: 3500,
+          });
+        }
+        if (alertCarnet) {
+          toast.warning('Deuda por carnet', {
+            description: `${studentForWa.fullName}: ${debt.carnetCount} sin carné institucional`,
+            duration: 3500,
+          });
+        }
+      });
+    }
+
     invalidateIncidents();
     invalidateStudents();
     void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats() });

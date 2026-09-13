@@ -860,14 +860,14 @@ export const IncidentsList = () => {
                 </div>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground mb-2">Revisado en la app</p>
+                <p className="text-sm text-muted-foreground mb-2">Revisado / confirmado (colegio)</p>
                 {revisadoAppEstado(detailIncident) === 'confirmado' ? (
                   <Badge
                     variant="secondary"
                     className="gap-1 bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
                   >
                     <Check className="h-3 w-3" aria-hidden />
-                    Confirmada
+                    Confirmada por el apoderado
                     {detailIncident.confirmadaAppAt
                       ? ` · ${format(new Date(detailIncident.confirmadaAppAt), 'dd/MM/yyyy HH:mm', { locale: es })}`
                       : ''}
@@ -878,13 +878,16 @@ export const IncidentsList = () => {
                     className="gap-1 bg-sky-100 text-sky-800 hover:bg-sky-100"
                   >
                     <Check className="h-3 w-3" aria-hidden />
-                    Visto en mensajes
+                    Visto en mensajes · pendiente de confirmar
                     {detailIncident.revisadoAppAt
                       ? ` · ${format(new Date(detailIncident.revisadoAppAt), 'dd/MM/yyyy HH:mm', { locale: es })}`
                       : ''}
                   </Badge>
                 ) : (
-                  <p className="text-sm text-muted-foreground">Aún no la confirmó el apoderado</p>
+                  <p className="text-sm text-muted-foreground">
+                    Sin confirmación en la BD del colegio (la app puede mostrarla confirmada
+                    si solo quedó en el canal).
+                  </p>
                 )}
               </div>
 

@@ -20,6 +20,10 @@ import {
   shouldIncludeTallerEmbed,
 } from './incidentSelect';
 import { gradeFilterValues } from '@/lib/utils/gradeAliases';
+import {
+  isCarnetFaultName,
+  isFaltaInasistenciaName,
+} from '@/lib/utils/debtAlarm';
 
 export interface IncidentsListFilters {
   estudianteId?: number;
@@ -513,6 +517,69 @@ export const incidentsService = {
         summary: { total: 0, activas: 0, conEvidencia: 0 },
         error: message,
       };
+    }
+  },
+
+  /**
+   * Conteo ligero de faltas / carnet / tardanzas que disparan alarma de deuda.
+   * Falta / Falta académica; carnet = "No porta carnet institucional"; Tarde en llegadas.
+   */
+  async countDebtTriggerFaults(studentId: number): Promise<{
+    faltaCount: number;
+    carnetCount: number;
+    tardeCount: number;
+    error: string | null;
+  }> {
+    try {
+      await ensureSupabaseReady();
+      const [incRes, faltaArrivalRes, tardeArrivalRes] = await Promise.all([
+        supabase
+          .from('incidencias')
+          .select('id_incidencia, catalogos_faltas:id_falta ( nombre_falta )')
+          .eq('id_estudiante', studentId)
+          .neq('estado', 'Anulada'),
+        supabase
+          .from('registros_llegada')
+          .select('id_registro')
+          .eq('id_estudiante', studentId)
+          .eq('estado', 'Falta'),
+        supabase
+          .from('registros_llegada')
+          .select('id_registro')
+          .eq('id_estudiante', studentId)
+          .eq('estado', 'Tarde'),
+      ]);
+
+      if (incRes.error) {
+        return {
+          faltaCount: 0,
+          carnetCount: 0,
+          tardeCount: 0,
+          error: incRes.error.message,
+        };
+      }
+
+      let faltaCount = 0;
+      let carnetCount = 0;
+      for (const row of incRes.data ?? []) {
+        const falta = (row as { catalogos_faltas?: { nombre_falta?: string } | null })
+          .catalogos_faltas;
+        const name = falta?.nombre_falta;
+        if (isFaltaInasistenciaName(name)) faltaCount += 1;
+        else if (isCarnetFaultName(name)) carnetCount += 1;
+      }
+
+      if (!faltaArrivalRes.error) {
+        faltaCount += faltaArrivalRes.data?.length ?? 0;
+      }
+
+      const tardeCount = tardeArrivalRes.error ? 0 : (tardeArrivalRes.data?.length ?? 0);
+
+      return { faltaCount, carnetCount, tardeCount, error: null };
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Error al contar faltas de deuda';
+      return { faltaCount: 0, carnetCount: 0, tardeCount: 0, error: message };
     }
   },
 
