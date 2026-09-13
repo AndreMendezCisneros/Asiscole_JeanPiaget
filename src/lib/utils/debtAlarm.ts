@@ -7,10 +7,9 @@ export const DEBT_CARNET_THRESHOLD = 4;
 /** Umbral colegio: ≥ 3 tardanzas (estado "Tarde"). */
 export const DEBT_TARDE_THRESHOLD = 3;
 
-/** Solo local / flag explícito — no activar en build de producción. */
+/** Alarma de deuda siempre activa (faltas / carnet / tardanzas). */
 export function isDebtAlarmEnabled(): boolean {
-  if (import.meta.env.VITE_DEBT_ALARM_LOCAL === 'true') return true;
-  return Boolean(import.meta.env.DEV);
+  return true;
 }
 
 /** Normaliza nombre de falta para comparar (minúsculas, sin acentos). */
