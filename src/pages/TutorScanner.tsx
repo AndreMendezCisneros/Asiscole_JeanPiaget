@@ -1327,11 +1327,11 @@ export const TutorScanner = () => {
         <div className="tutor-header__inner">
           <div className="tutor-header__brand">
             <div className="tutor-header__shield p-1" aria-hidden>
-              <GuardyMark size="sm" />
+              <GuardyMark size="md" />
             </div>
             <div className="min-w-0">
               <p className="tutor-header__title">Control de asistencia</p>
-              <p className="tutor-header__subtitle hidden sm:block">SIE — Sistema de Incidencias Escolares</p>
+              <p className="tutor-header__subtitle hidden sm:block">SIE Asis Academy</p>
             </div>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">

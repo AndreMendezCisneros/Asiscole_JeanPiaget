@@ -64,7 +64,7 @@ export function StaffDataPanelHeader({
   return (
     <div
       className={cn(
-        'app-card-header flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between',
+        'app-card-header flex shrink-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between',
         headerAccentStyles[accent],
         compact ? 'px-3 py-2.5 sm:px-4' : 'gap-2 px-4 py-3 sm:px-5 sm:py-4'
       )}

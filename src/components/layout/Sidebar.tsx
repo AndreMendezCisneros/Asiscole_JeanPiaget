@@ -133,15 +133,15 @@ export const Sidebar = () => {
             className="group flex flex-col items-center justify-center gap-2.5 text-center"
             onClick={() => setMobileMenuOpen(false)}
           >
-            <div className="rounded-2xl bg-white/[0.06] p-2.5 ring-1 ring-white/10 transition-transform duration-200 group-hover:scale-[1.02]">
-              <GuardyMark size="lg" />
+            <div className="transition-transform duration-200 group-hover:scale-[1.02]">
+              <GuardyMark size="2xl" />
             </div>
             <div className="flex flex-col items-center gap-1">
               <span className="font-display text-lg font-bold leading-none tracking-wide text-sidebar-foreground">
-                SIE
+                SIE Asis Academy
               </span>
               <p className="text-[11px] leading-snug text-sidebar-foreground/60">
-                Incidencias Escolares
+                Academia Sofía
               </p>
             </div>
           </Link>

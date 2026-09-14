@@ -9,7 +9,7 @@ export default {
   host: 'http://127.0.0.1',
   port: '21465',
   deviceName: 'Asiscole SIE',
-  poweredBy: 'Asis Academy',
+  poweredBy: 'Academia Sofía',
   // false: cada chip se inicia bajo demanda (evita colgar al vincular el 2.º celular)
   startAllSession: false,
   tokenStoreType: 'file',

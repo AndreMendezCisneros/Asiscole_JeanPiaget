@@ -62,12 +62,12 @@ import {
   useWeeklyAttendanceTrendQuery,
 } from '@/hooks/queries/useDashboardQueries';
 
-/** Paleta ejecutiva para gráficos (azul pizarra, sin acentos chillones) */
+/** Paleta Sofía para gráficos (rojo de marca + naranja de acento) */
 const CHART = {
-  bar: 'hsl(217, 48%, 42%)',
-  line: 'hsl(262, 45%, 52%)',
-  grid: 'hsl(214, 16%, 90%)',
-  axis: 'hsl(215, 14%, 48%)',
+  bar: 'hsl(var(--primary))',
+  line: 'hsl(var(--accent))',
+  grid: 'hsl(var(--border))',
+  axis: 'hsl(var(--muted-foreground))',
 };
 
 const ATTENDANCE_CHART = {
@@ -170,7 +170,7 @@ export const Dashboard = () => {
     return `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`;
   };
 
-  const CHART_MARGIN = { top: 12, right: 12, left: 4, bottom: 4 };
+  const CHART_MARGIN = { top: 8, right: 8, left: 0, bottom: 0 };
 
   const maxTrend = Math.max(1, ...monthlyTrend.map((d) => d.incidents));
   const yAxisMax = Math.max(4, Math.ceil(maxTrend * 1.15));
@@ -296,21 +296,24 @@ export const Dashboard = () => {
             <div className="app-chart-wrap">
               <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={monthlyTrend} margin={CHART_MARGIN}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} vertical={false} />
                 <XAxis
                   dataKey="month"
                   stroke={CHART.axis}
                   fontSize={12}
                   tickLine={false}
                   axisLine={{ stroke: CHART.grid }}
+                  interval={0}
+                  padding={{ left: 8, right: 8 }}
                 />
                 <YAxis
                   stroke={CHART.axis}
                   fontSize={12}
                   tickLine={false}
-                  axisLine={{ stroke: CHART.grid }}
+                  axisLine={false}
                   allowDecimals={false}
                   domain={[0, yAxisMax]}
+                  width={28}
                 />
                 <Tooltip
                   contentStyle={{
@@ -325,8 +328,7 @@ export const Dashboard = () => {
                   dataKey="incidents"
                   fill={CHART.bar}
                   radius={[8, 8, 0, 0]}
-                  maxBarSize={48}
-                  barSize={32}
+                  maxBarSize={56}
                 />
                 <Line
                   type="monotone"

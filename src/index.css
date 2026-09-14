@@ -2,91 +2,88 @@
 @tailwind components;
 @tailwind utilities;
 
-/* SIE Design System — neutros + azul pizarra corporativo */
+/* SIE Asis Academy — cromática Academia Sofía (rojo / blanco / negro) */
 
 @layer base {
   :root {
-    /* Superficies (Apple Fog + Paper) */
-    /* Ajuste ejecutivo: blancos más limpios, menos gris */
+    /* Superficies — Blanco Hielo #F8FAFC */
     --background: 210 40% 98%;
-    --background-alt: 210 24% 96%;
+    --background-alt: 214 32% 96%;
     --background-warm: 210 30% 97%;
     --foreground: 222 47% 11%;
 
     --card: 0 0% 100%;
-    --card-alt: 240 5% 98%;
-    --card-foreground: 240 4% 12%;
+    --card-alt: 210 40% 98%;
+    --card-foreground: 222 47% 11%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 240 4% 12%;
+    --popover-foreground: 222 47% 11%;
 
-    /* Acción principal — Morado Principal #5B21E6 */
-    --primary: 258 80% 52%;
+    /* Acción principal — Rojo Sofía #E30613 */
+    --primary: 355 95% 45%;
     --primary-foreground: 0 0% 100%;
 
-    /* Secundario — Morado Secundario #7C3AED */
-    --secondary: 262 83% 58%;
+    /* Secundario — hover #B91C1C */
+    --secondary: 0 74% 42%;
     --secondary-foreground: 0 0% 100%;
 
     --muted: 214 32% 96%;
-    /* Texto secundario — Gris Azulado #475569 */
     --muted-foreground: 215 16% 47%;
 
-    /* Acento — Celeste Tecnológico #22C7F2 */
-    --accent: 191 89% 54%;
-    --accent-foreground: 222 47% 11%;
+    /* Acento — naranja #F97316 (no usar como error) */
+    --accent: 25 95% 53%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 72% 48%;
+    --destructive: 0 72% 38%;
     --destructive-foreground: 0 0% 100%;
 
-    /* Bordes — Gris Claro #E2E8F0 */
     --border: 214 32% 91%;
     --input: 0 0% 100%;
-    --ring: 258 80% 52%;
+    --ring: 355 95% 45%;
 
-    /* Semáforo */
+    /* Semáforo (independiente del rojo de marca) */
     --success: 152 55% 38%;
     --success-foreground: 0 0% 100%;
     --warning: 32 90% 48%;
     --warning-foreground: 0 0% 100%;
-    --info: 191 89% 42%;
+    --info: 25 90% 42%;
     --info-foreground: 0 0% 100%;
-    --danger: 0 72% 48%;
+    --danger: 0 72% 38%;
     --danger-foreground: 0 0% 100%;
 
     --radius: 0.75rem;
 
-    /* Sidebar — morado profundo Asiscole */
-    --sidebar-background: 258 70% 18%;
+    /* Sidebar — rojo profundo Sofía */
+    --sidebar-background: 0 75% 15%;
     --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 271 91% 75%;
-    --sidebar-primary-foreground: 258 70% 14%;
-    --sidebar-accent: 258 55% 28%;
+    --sidebar-primary: 48 96% 53%;
+    --sidebar-primary-foreground: 0 75% 12%;
+    --sidebar-accent: 0 63% 31%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 258 40% 30%;
-    --sidebar-ring: 191 89% 54%;
+    --sidebar-border: 0 50% 24%;
+    --sidebar-ring: 25 95% 53%;
 
     /* Tokens de marca (login) */
-    --brand-accent: 258 80% 52%;
-    --brand-accent-dark: 258 75% 38%;
-    --brand-accent-light: 271 91% 95%;
-    --brand-link: 262 83% 50%;
+    --brand-accent: 355 95% 45%;
+    --brand-accent-dark: 0 74% 32%;
+    --brand-accent-light: 0 86% 95%;
+    --brand-link: 355 85% 40%;
     --canvas-ice: 214 32% 91%;
     --ink: 222 47% 11%;
     --fog: 210 40% 98%;
     --silver-mist: 214 32% 91%;
 
-    /* Login — morado / celeste Asiscole */
-    --login-deep: 258 45% 6%;
-    --login-surface: 258 35% 10%;
-    --login-elevated: 258 30% 14%;
-    --login-border: 258 22% 28%;
+    /* Login — rojo oscuro / glow naranja */
+    --login-deep: 0 70% 6%;
+    --login-surface: 0 55% 10%;
+    --login-elevated: 0 45% 14%;
+    --login-border: 0 30% 26%;
     --login-foreground: 210 30% 98%;
-    --login-muted: 216 20% 83%;
-    --login-caption: 216 16% 75%;
-    --login-placeholder: 216 14% 65%;
-    --login-accent: 191 89% 54%;
-    --login-glow: 262 83% 62%;
+    --login-muted: 20 20% 83%;
+    --login-caption: 20 16% 75%;
+    --login-placeholder: 20 14% 65%;
+    --login-accent: 25 95% 53%;
+    --login-glow: 355 90% 52%;
   }
 
   /**
@@ -126,34 +123,34 @@
   }
 
   .dark {
-    --background: 0 0% 10%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 14%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 14%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 217 48% 48%;
+    --background: 0 40% 7%;
+    --foreground: 210 40% 98%;
+    --card: 0 30% 12%;
+    --card-foreground: 210 40% 98%;
+    --popover: 0 30% 12%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 355 90% 55%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 217 42% 54%;
+    --secondary: 0 70% 48%;
     --secondary-foreground: 0 0% 100%;
-    --muted: 0 0% 20%;
-    --muted-foreground: 0 0% 65%;
-    --accent: 262 45% 58%;
+    --muted: 0 20% 16%;
+    --muted-foreground: 20 15% 68%;
+    --accent: 25 95% 53%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 70% 52%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 22%;
-    --input: 0 0% 18%;
-    --ring: 217 48% 48%;
+    --border: 0 20% 20%;
+    --input: 0 25% 14%;
+    --ring: 355 90% 55%;
     --success: 152 50% 45%;
     --warning: 32 85% 52%;
-    --info: 217 45% 52%;
+    --info: 25 85% 52%;
     --danger: 0 70% 52%;
-    --sidebar-background: 0 0% 8%;
-    --sidebar-foreground: 0 0% 98%;
-    --sidebar-primary: 217 45% 62%;
-    --sidebar-accent: 0 0% 14%;
-    --sidebar-border: 0 0% 16%;
+    --sidebar-background: 0 50% 8%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 48 96% 53%;
+    --sidebar-accent: 0 40% 14%;
+    --sidebar-border: 0 30% 16%;
   }
 
   .dark[data-school='jean-piaget'],
@@ -330,11 +327,11 @@
   /* Dashboard: grilla unificada de gráficos (2+1 arriba, ancho completo abajo) */
   .app-analytics-grid,
   .app-dashboard-charts {
-    @apply grid grid-cols-1 items-stretch gap-4 xl:grid-cols-3;
+    @apply grid grid-cols-1 items-start gap-4 xl:grid-cols-3;
   }
 
   .app-chart-wrap {
-    @apply h-[300px] w-full min-w-0 overflow-hidden;
+    @apply relative h-[340px] w-full min-w-0 overflow-hidden px-1 pb-1 pt-1;
   }
 
   .app-chart-surface {
@@ -725,20 +722,20 @@
   }
 
   .login-hero-visual-stage {
-    @apply relative z-10 flex w-full flex-1 flex-col items-center justify-center py-2 min-h-[240px] xl:min-h-[300px];
+    @apply relative z-10 flex min-h-0 w-full flex-1 flex-col items-center justify-center py-1;
     overflow: visible;
   }
 
   .login-hero-visual,
   .login-carnet-scene {
-    @apply relative w-full mx-auto;
-    width: min(100%, 380px);
-    filter: drop-shadow(0 24px 48px hsl(var(--login-deep) / 0.55));
+    @apply relative mx-auto w-full;
+    width: min(100%, 18.75rem);
+    filter: drop-shadow(0 18px 36px hsl(var(--login-deep) / 0.5));
   }
 
   .login-carnet-scene__halo {
     position: absolute;
-    inset: 8% 12%;
+    inset: 4% 2%;
     border-radius: 50%;
     background: radial-gradient(
       circle,
@@ -753,8 +750,8 @@
 
   .login-carnet-scene__glow-ring {
     position: absolute;
-    inset: 14% 10%;
-    border-radius: 1.25rem;
+    inset: 1.5% 0.5%;
+    border-radius: 1.35rem;
     border: 1px solid hsl(var(--login-glow) / 0.18);
     box-shadow: 0 0 32px hsl(var(--login-glow) / 0.08);
     pointer-events: none;
@@ -763,19 +760,28 @@
 
   .login-carnet-scene__frame {
     @apply relative w-full;
-    min-height: 360px;
+    min-height: 0;
     will-change: transform, opacity;
   }
 
   .login-carnet-scanner {
     @apply relative mx-auto flex flex-col items-center;
-    width: min(100%, 272px);
+    width: min(100%, 18.75rem);
     padding: 0.75rem 0.5rem 0.25rem;
     perspective: 1100px;
   }
 
+  .login-carnet-scanner--photo {
+    width: 100%;
+    padding: 0.4rem;
+  }
+
   .login-carnet-scanner__frame {
     @apply pointer-events-none absolute inset-x-1 top-1 bottom-14;
+  }
+
+  .login-carnet-scanner--photo .login-carnet-scanner__frame {
+    inset: 0.15rem;
   }
 
   .login-carnet-scanner__corner {
@@ -820,8 +826,8 @@
 
   .login-carnet-scene__pulse {
     position: absolute;
-    inset: 6% 8%;
-    border-radius: 1.5rem;
+    inset: 0.5% 0;
+    border-radius: 1.4rem;
     border: 1px solid hsl(var(--login-glow) / 0.15);
     box-shadow: 0 0 60px hsl(var(--login-accent) / 0.12);
     pointer-events: none;
@@ -1064,6 +1070,59 @@
     min-height: 372px;
     transform-style: preserve-3d;
     transform-origin: center center;
+  }
+
+  /* PNG de carnet Sofía: la imagen ya trae forma y esquinas; no duplicar marco */
+  .login-carnet-replica--photo {
+    min-height: 0;
+    max-width: none;
+    width: 100%;
+    border: none;
+    background: transparent;
+    overflow: visible;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .login-carnet-replica--photo .login-carnet-replica__edge-glow {
+    inset: 2% 3%;
+    border-radius: 1.15rem;
+  }
+
+  .login-carnet-replica__photo-card {
+    display: block;
+    width: 100%;
+    line-height: 0;
+  }
+
+  .login-carnet-replica__photo-card-img {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 995 / 1581;
+    object-fit: contain;
+    object-position: center;
+    user-select: none;
+    filter: drop-shadow(0 22px 28px hsl(var(--login-deep) / 0.55));
+  }
+
+  @media (max-height: 840px) {
+    .login-brand__logo-clip {
+      width: 7.25rem;
+      height: 7.25rem;
+    }
+
+    .login-hero-visual,
+    .login-carnet-scene {
+      width: min(100%, 15.75rem);
+    }
+  }
+
+  @media (min-width: 1280px) and (min-height: 920px) {
+    .login-hero-visual,
+    .login-carnet-scene {
+      width: min(100%, 20.5rem);
+    }
   }
 
   .login-carnet-replica__flip {
@@ -2075,43 +2134,26 @@
   }
 
   .login-brand__logo-clip {
-    @apply relative z-[1] shrink-0 overflow-hidden;
-    width: 7.75rem;
-    height: 7.75rem;
-    -webkit-mask-image: radial-gradient(
-      circle at 50% 40%,
-      #000 64%,
-      rgb(0 0 0 / 0.75) 76%,
-      rgb(0 0 0 / 0.22) 88%,
-      transparent 98%
-    );
-    mask-image: radial-gradient(
-      circle at 50% 40%,
-      #000 64%,
-      rgb(0 0 0 / 0.75) 76%,
-      rgb(0 0 0 / 0.22) 88%,
-      transparent 98%
-    );
-    filter: drop-shadow(0 14px 30px hsl(var(--login-deep) / 0.38));
+    @apply relative z-[1] shrink-0 overflow-visible;
+    width: 9.5rem;
+    height: 9.5rem;
+    background: transparent;
     will-change: transform, opacity;
   }
 
   .login-brand--compact .login-brand__logo-clip {
-    width: 5.5rem;
-    height: 5.5rem;
+    width: 6.5rem;
+    height: 6.5rem;
   }
 
   .login-brand__logo {
     @apply block h-full w-full select-none;
-    object-fit: cover;
-    object-position: center 26%;
-    transform: scale(1.18);
-    transform-origin: center 36%;
+    object-fit: contain;
+    object-position: center;
   }
 
   .login-brand--compact .login-brand__logo {
-    transform: scale(1.15);
-    object-position: center 26%;
+    object-fit: contain;
   }
 
   .login-brand__caption {
@@ -2130,7 +2172,7 @@
   }
 
   .login-hero__inner {
-    @apply flex flex-1 flex-col items-center gap-5 px-8 py-8 xl:gap-6 xl:px-10 xl:py-10;
+    @apply flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-8 py-6 xl:gap-5 xl:px-10 xl:py-8;
   }
 
   .login-hero__brand {
@@ -2138,7 +2180,7 @@
   }
 
   .login-hero__copy {
-    @apply flex w-full max-w-xl flex-col items-center gap-5 text-center;
+    @apply flex w-full max-w-xl shrink-0 flex-col items-center gap-3 text-center;
   }
 
   .login-hero__footer {
@@ -2179,7 +2221,7 @@
     @apply flex flex-wrap justify-center gap-2;
     list-style: none;
     padding: 0;
-    margin: 0.75rem 0 0;
+    margin: 0;
   }
 
   .login-module-row__item {
@@ -2332,19 +2374,19 @@
   }
 
   .login-form-card__header {
-    @apply mb-4;
+    @apply mb-4 text-center;
   }
 
   .login-form-card__footer {
-    @apply mt-4 flex items-center justify-center opacity-55;
+    @apply mt-4 flex flex-col items-center justify-center gap-2 text-center opacity-55;
   }
 
   .login-form-card__footer-logo {
     display: block;
-    width: 5.5rem;
-    height: 1.35rem;
-    object-fit: cover;
-    object-position: center 93%;
+    width: 4.25rem;
+    height: 4.25rem;
+    object-fit: contain;
+    object-position: center;
   }
 
   .login-form-card__shine {
@@ -3229,10 +3271,10 @@
   }
 
   .tutor-header__shield {
-    @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-xl;
-    background: hsl(var(--primary) / 0.15);
+    @apply flex h-12 w-12 shrink-0 items-center justify-center rounded-xl;
+    background: transparent;
     color: var(--tutor-starlight);
-    border: 1px solid hsl(var(--primary) / 0.35);
+    border: none;
   }
 
   .tutor-header__title {

@@ -37,7 +37,7 @@ export const Layout = ({ children, requiredRole }: LayoutProps) => {
         </div>
         <footer className="hidden border-t border-border/70 bg-card/55 px-6 py-2 md:flex items-center justify-end gap-1.5 text-[10px] text-muted-foreground/70 backdrop-blur">
           <GuardyMark size="xs" />
-          <span>Guardy</span>
+          <span>Asis Academy</span>
         </footer>
       </main>
     </div>

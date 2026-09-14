@@ -64,14 +64,14 @@ export function usePageMeta() {
     upsertMeta('og:title', meta.title, 'property');
     upsertMeta('og:description', meta.description, 'property');
     upsertMeta('og:url', pageUrl, 'property');
-    upsertMeta('og:site_name', 'Asiscole', 'property');
+    upsertMeta('og:site_name', 'SIE Asis Academy', 'property');
     upsertMeta('og:type', 'website', 'property');
     upsertMeta('og:image', WHATSAPP_PREVIEW_IMAGE, 'property');
     upsertMeta('og:image:secure_url', WHATSAPP_PREVIEW_IMAGE, 'property');
     upsertMeta('og:image:type', 'image/jpeg', 'property');
     upsertMeta('og:image:width', '1200', 'property');
     upsertMeta('og:image:height', '630', 'property');
-    upsertMeta('og:image:alt', 'SIE Asiscole — Sistema de Incidencias Escolares, Asis Academy', 'property');
+    upsertMeta('og:image:alt', 'SIE Asis Academy — Academia Sofía', 'property');
     upsertMeta('twitter:card', 'summary_large_image');
     upsertMeta('twitter:title', meta.title);
     upsertMeta('twitter:description', meta.description);

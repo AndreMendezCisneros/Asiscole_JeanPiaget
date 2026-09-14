@@ -47,10 +47,10 @@ export function ParentLayout({ children }: ParentLayoutProps) {
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-2.5 sm:px-6">
           <div className="flex min-w-0 flex-1 items-center gap-3" data-parent-shell-anim>
             <div
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/15"
+              className="flex h-10 w-10 shrink-0 items-center justify-center"
               aria-hidden
             >
-              <GuardyMark size="sm" />
+              <GuardyMark size="md" />
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-foreground">

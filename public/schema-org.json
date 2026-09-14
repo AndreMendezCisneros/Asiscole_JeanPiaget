@@ -3,32 +3,32 @@
   "@graph": [
     {
       "@type": "WebApplication",
-      "name": "SIE Asiscole",
+      "name": "SIE Asis Academy",
       "alternateName": "Sistema de Incidencias Escolares",
       "url": "https://demostracion.asisacademy.com/",
       "applicationCategory": "EducationalApplication",
       "operatingSystem": "Web",
       "inLanguage": "es-PE",
-      "description": "Plataforma de incidencias, asistencia escolar y reportes para Asis Academy.",
+      "description": "Plataforma de incidencias, asistencia escolar y reportes — Academia Sofía, Ayacucho.",
       "provider": {
         "@type": "EducationalOrganization",
-        "name": "Asis Academy",
+        "name": "Academia Sofía",
         "url": "https://demostracion.asisacademy.com/"
       }
     },
     {
       "@type": "EducationalOrganization",
       "@id": "https://demostracion.asisacademy.com/#organization",
-      "name": "Asis Academy",
+      "name": "Academia Sofía",
       "url": "https://demostracion.asisacademy.com/",
-      "sameAs": ["https://demostracion.asisacademy.com/"]
+      "sameAs": ["https://www.facebook.com/sofiaayacucho2018/"]
     },
     {
       "@type": "WebSite",
       "@id": "https://demostracion.asisacademy.com/#website",
       "url": "https://demostracion.asisacademy.com/",
-      "name": "SIE Asiscole",
-      "description": "Sistema de incidencias y asistencia escolar",
+      "name": "SIE Asis Academy",
+      "description": "Sistema de incidencias y asistencia escolar — Academia Sofía",
       "publisher": { "@id": "https://demostracion.asisacademy.com/#organization" },
       "inLanguage": "es-PE"
     }

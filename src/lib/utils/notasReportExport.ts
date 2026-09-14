@@ -24,7 +24,7 @@ function schoolName(meta?: NotasReportMeta): string {
   return (
     meta?.escuela?.trim() ||
     (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() ||
-    'Asis Academy'
+    'Academia Sofía'
   );
 }
 

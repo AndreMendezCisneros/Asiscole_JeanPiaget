@@ -7,8 +7,8 @@ import { drawPdfReportLogo, drawPdfWatermark } from '@/lib/utils/reportLogo';
 
 /** Paleta corporativa SIE (RGB) */
 export const PDF_THEME = {
-  primary: [30, 74, 122] as [number, number, number],
-  primaryLight: [219, 228, 240] as [number, number, number],
+  primary: [227, 6, 19] as [number, number, number],
+  primaryLight: [254, 226, 226] as [number, number, number],
   text: [15, 23, 42] as [number, number, number],
   textMuted: [100, 116, 139] as [number, number, number],
   border: [226, 232, 240] as [number, number, number],
@@ -17,10 +17,10 @@ export const PDF_THEME = {
   successBg: [220, 252, 231] as [number, number, number],
   warning: [180, 95, 6] as [number, number, number],
   warningBg: [254, 243, 199] as [number, number, number],
-  error: [185, 28, 28] as [number, number, number],
+  error: [139, 31, 31] as [number, number, number],
   errorBg: [254, 226, 226] as [number, number, number],
-  info: [37, 99, 168] as [number, number, number],
-  infoBg: [219, 234, 254] as [number, number, number],
+  info: [234, 88, 12] as [number, number, number],
+  infoBg: [255, 237, 213] as [number, number, number],
 };
 
 export type PdfOrientation = 'portrait' | 'landscape';
@@ -88,7 +88,7 @@ export class PdfReportDocument {
 
     this.pdf.setFontSize(8);
     const school =
-      (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() || 'Asiscole';
+      (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() || 'Academia Sofía';
     this.pdf.text(school, this.pageWidth - this.margin, 30, {
       align: 'right',
     });
@@ -310,7 +310,7 @@ export class PdfReportDocument {
     this.pdf.setFontSize(7.5);
     this.pdf.setTextColor(...PDF_THEME.textMuted);
     const school =
-      (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() || 'Asiscole';
+      (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() || 'Academia Sofía';
     this.pdf.text(`${school} · Informe de notas`, this.margin, y);
     this.pdf.text(`Página ${page} de ${total}`, this.pageWidth - this.margin, y, { align: 'right' });
     this.pdf.text(

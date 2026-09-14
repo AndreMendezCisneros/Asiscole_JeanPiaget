@@ -6,7 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, Eye, EyeOff, ArrowRight, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { BRAND_LOGIN_LOGO } from '@/config/brandAssets';
-import { SCHOOL_NAME } from '@/config/siteSeo';
+import { SCHOOL_NAME, SITE_NAME } from '@/config/siteSeo';
 import type { useLoginForm } from '@/hooks/useLoginForm';
 
 type LoginFormState = ReturnType<typeof useLoginForm>;
@@ -116,17 +116,16 @@ export function LoginFormFields({ form, lite = false }: LoginFormFieldsProps) {
         <ArrowRight className="h-3.5 w-3.5 ml-auto" aria-hidden />
       </Link>
 
-      <p className="login-form-card__footer text-center text-[11px] leading-relaxed text-muted-foreground">
-        <span className="block mb-2">
-          SIE Asiscole — plataforma de incidencias disciplinarias y control de asistencia del{' '}
-          {SCHOOL_NAME}.
+      <p className="login-form-card__footer text-[11px] leading-relaxed text-muted-foreground">
+        <span>
+          {SITE_NAME} — plataforma de incidencias y asistencia de {SCHOOL_NAME}.
         </span>
         <img
           src={BRAND_LOGIN_LOGO}
-          alt="Guardy — software educativo"
-          className="login-form-card__footer-logo mx-auto"
+          alt="Asis Academy — software educativo"
+          className="login-form-card__footer-logo"
           width={96}
-          height={32}
+          height={96}
           draggable={false}
         />
       </p>

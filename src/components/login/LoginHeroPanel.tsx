@@ -27,7 +27,7 @@ export function LoginHeroPanel() {
 
         <div className="login-hero__copy" data-login-copy data-login-anim>
           <h2 className="login-hero__title" data-login-hero-title>
-            Tu colegio,
+            Tu academia,
             <span className="login-hero__title-accent"> bajo control</span>
           </h2>
 

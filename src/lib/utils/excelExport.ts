@@ -89,7 +89,7 @@ export async function addExcelWatermark(
 
   const footRow = sheet.lastRow?.number ? sheet.lastRow.number + 2 : centerRow + 22;
   const foot = sheet.getRow(footRow);
-  foot.getCell(1).value = 'Documento generado con SIE — Sistema Guardy';
+  foot.getCell(1).value = 'Documento generado con SIE Asis Academy';
   foot.getCell(1).font = {
     size: 9,
     italic: true,

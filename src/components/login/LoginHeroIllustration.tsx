@@ -2,7 +2,7 @@ import { SCHOOL_NAME } from '@/config/siteSeo';
 import { BRAND_LOGIN_CARNET } from '@/config/brandAssets';
 
 /**
- * Carnet Asiscole en la escena de login
+ * Carnet Academia Sofía en la escena de login
  * (marco + animaciones GSAP sobre el wrapper de la imagen).
  */
 export function LoginHeroIllustration() {
@@ -13,7 +13,7 @@ export function LoginHeroIllustration() {
       <div className="login-carnet-scene__pulse" data-login-visual-pulse-ring aria-hidden />
 
       <div className="login-carnet-scene__frame" data-login-visual-inner>
-        <div className="login-carnet-scanner" data-login-visual-scanner>
+        <div className="login-carnet-scanner login-carnet-scanner--photo" data-login-visual-scanner>
           <div className="login-carnet-scanner__frame" aria-hidden>
             <span className="login-carnet-scanner__corner login-carnet-scanner__corner--tl" />
             <span className="login-carnet-scanner__corner login-carnet-scanner__corner--tr" />
@@ -36,10 +36,10 @@ export function LoginHeroIllustration() {
             >
               <img
                 src={BRAND_LOGIN_CARNET}
-                alt={`Carnet escolar de ejemplo — ${SCHOOL_NAME}`}
+                alt={`Carnet de ejemplo — ${SCHOOL_NAME}`}
                 className="login-carnet-replica__photo-card-img"
-                width={420}
-                height={640}
+                width={995}
+                height={1581}
                 draggable={false}
               />
             </div>

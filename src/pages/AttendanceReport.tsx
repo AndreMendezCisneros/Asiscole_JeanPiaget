@@ -510,7 +510,7 @@ export const AttendanceReport = () => {
   return (
     <div className="relative">
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-5 print:opacity-15">
-        <img src={REPORT_LOGO_PATH} alt="Guardy" className="max-w-[50%] rounded-2xl opacity-10" />
+        <img src={REPORT_LOGO_PATH} alt="Asis Academy" className="max-w-[50%] rounded-2xl opacity-10" />
       </div>
       <style>
         {`@media print {

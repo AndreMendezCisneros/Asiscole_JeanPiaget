@@ -1,20 +1,19 @@
 /**
- * Colores de marca SIE — reflejan tokens en src/index.css (:root).
- * Fuente canónica: variables CSS (--primary, --success, etc.).
- * Paleta Asiscole: morado (#5B21E6) + celeste (#22C7F2).
+ * Colores de marca SIE Asis Academy — reflejan tokens en src/index.css (:root).
+ * Paleta Academia Sofía: rojo #E30613 + naranja #F97316.
  */
 export const COLORS = {
-  primary: 'hsl(258, 80%, 52%)',
-  secondary: 'hsl(262, 83%, 58%)',
-  accent: 'hsl(280, 91%, 65%)',
+  primary: 'hsl(355, 95%, 45%)',
+  secondary: 'hsl(0, 74%, 42%)',
+  accent: 'hsl(25, 95%, 53%)',
 
-  primaryLight: 'hsl(270, 90%, 96%)',
-  primaryDark: 'hsl(258, 75%, 40%)',
-  secondaryLight: 'hsl(262, 70%, 70%)',
-  secondaryDark: 'hsl(262, 75%, 45%)',
+  primaryLight: 'hsl(0, 86%, 95%)',
+  primaryDark: 'hsl(0, 74%, 32%)',
+  secondaryLight: 'hsl(0, 70%, 55%)',
+  secondaryDark: 'hsl(0, 75%, 28%)',
 
-  accentLight: 'hsl(280, 85%, 78%)',
-  accentDark: 'hsl(280, 80%, 50%)',
+  accentLight: 'hsl(25, 95%, 72%)',
+  accentDark: 'hsl(25, 90%, 42%)',
 
   white: 'hsl(0, 0%, 100%)',
   offWhite: 'hsl(210, 40%, 98%)',
@@ -30,8 +29,8 @@ export const COLORS = {
 
   success: 'hsl(152, 48%, 38%)',
   warning: 'hsl(32, 85%, 46%)',
-  error: 'hsl(0, 65%, 48%)',
-  info: 'hsl(191, 89%, 54%)',
+  error: 'hsl(0, 72%, 38%)',
+  info: 'hsl(25, 90%, 42%)',
 
   background: 'hsl(210, 40%, 98%)',
   backgroundAlt: 'hsl(214, 32%, 96%)',
@@ -54,16 +53,16 @@ export const COLORS = {
   shadowMd: 'none',
   shadowLg: 'none',
 
-  gradientPrimary: 'linear-gradient(135deg, hsl(258, 80%, 52%) 0%, hsl(262, 83%, 58%) 100%)',
-  gradientSecondary: 'linear-gradient(135deg, hsl(262, 83%, 58%) 0%, hsl(280, 91%, 65%) 100%)',
-  gradientAccent: 'linear-gradient(135deg, hsl(191, 89%, 54%) 0%, hsl(258, 80%, 52%) 100%)',
+  gradientPrimary: 'linear-gradient(135deg, hsl(355, 95%, 45%) 0%, hsl(0, 74%, 32%) 100%)',
+  gradientSecondary: 'linear-gradient(135deg, hsl(0, 74%, 42%) 0%, hsl(25, 95%, 53%) 100%)',
+  gradientAccent: 'linear-gradient(135deg, hsl(25, 95%, 53%) 0%, hsl(48, 96%, 53%) 100%)',
   gradientWarm: 'linear-gradient(135deg, hsl(210, 40%, 98%) 0%, hsl(214, 32%, 96%) 100%)',
-  gradientHero: 'linear-gradient(135deg, hsl(258, 45%, 6%) 0%, hsl(258, 35%, 14%) 100%)',
+  gradientHero: 'linear-gradient(135deg, hsl(0, 70%, 6%) 0%, hsl(0, 55%, 14%) 100%)',
 
   overlay: 'rgba(15, 23, 42, 0.5)',
-  primary10: 'hsla(258, 80%, 52%, 0.1)',
-  secondary10: 'hsla(262, 83%, 58%, 0.1)',
-  accent10: 'hsla(280, 91%, 65%, 0.12)',
+  primary10: 'hsla(355, 95%, 45%, 0.1)',
+  secondary10: 'hsla(0, 74%, 42%, 0.1)',
+  accent10: 'hsla(25, 95%, 53%, 0.12)',
 } as const;
 
 export const THEME = {

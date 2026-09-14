@@ -57,7 +57,7 @@ const WPPCONNECT_NOTIFY_KEY = import.meta.env.VITE_WPPCONNECT_NOTIFY_KEY || '';
 
 /** Nombre del colegio en textos WhatsApp (JP: Colegio Jean Piaget). */
 const SCHOOL_NAME =
-  (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() || 'I.E. San Ramón';
+  (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() || 'Academia Sofía';
 
 const GREETING_VARIANTS = [
   'Hola,',

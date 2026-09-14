@@ -472,7 +472,7 @@ function TodayItem({
       <p
         className={cn(
           'mt-1 text-lg font-bold',
-          ok && 'text-[#5B21E6]',
+          ok && 'text-primary',
           warn && 'text-amber-600'
         )}
       >
@@ -497,7 +497,7 @@ function ParentStat({
     <div
       className={cn(
         'parent-stat border',
-        tone === 'ok' && 'border-[#DDD6FE]/90 bg-[#EDE9FE]/90',
+        tone === 'ok' && 'border-primary/25 bg-primary/10',
         tone === 'warn' && 'border-amber-200/90 bg-amber-50/90',
         tone === 'alert' && value > 0 && 'border-[#E8B4B8]/90 bg-[#FCEEEF]/90',
         !tone && 'border-border/80 bg-card'

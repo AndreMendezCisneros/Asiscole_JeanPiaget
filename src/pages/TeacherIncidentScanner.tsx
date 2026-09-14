@@ -325,11 +325,11 @@ export const TeacherIncidentScanner = () => {
         <div className="tutor-header__inner">
           <div className="tutor-header__brand">
             <div className="tutor-header__shield p-1" aria-hidden>
-              <GuardyMark size="sm" />
+              <GuardyMark size="md" />
             </div>
             <div className="min-w-0">
               <p className="tutor-header__title">Registro de incidencias</p>
-              <p className="tutor-header__subtitle hidden sm:block">SIE — Docente</p>
+              <p className="tutor-header__subtitle hidden sm:block">SIE Asis Academy — Docente</p>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">

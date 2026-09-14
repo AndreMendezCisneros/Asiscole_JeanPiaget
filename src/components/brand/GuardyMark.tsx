@@ -15,11 +15,11 @@ interface GuardyMarkProps {
   className?: string;
   /** Solo el escudo (recomendado en UI compacta) */
   iconOnly?: boolean;
-  /** Muestra “Guardy” al lado — solo en cabeceras amplias */
+  /** Muestra “Asis Academy” al lado — solo en cabeceras amplias */
   showWordmark?: boolean;
 }
 
-/** Marca Guardy — escudo recortado del logo oficial */
+/** Marca Asis Academy — logo oficial (escudo A) */
 export const GuardyMark = ({
   size = 'md',
   className,
@@ -27,7 +27,6 @@ export const GuardyMark = ({
   showWordmark = false,
 }: GuardyMarkProps) => {
   const s = sizeMap[size];
-  /** Escudo SIE (SVG en la UI) */
   const src = BRAND_ICON_SVG;
 
   return (
@@ -44,7 +43,7 @@ export const GuardyMark = ({
         draggable={false}
       />
       {showWordmark && (
-        <span className="text-sm font-semibold tracking-tight text-inherit">Guardy</span>
+        <span className="text-sm font-semibold tracking-tight text-inherit">Asis Academy</span>
       )}
     </span>
   );
