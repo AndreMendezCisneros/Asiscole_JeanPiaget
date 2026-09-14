@@ -71,6 +71,7 @@ import { useHardwareBarcodeCapture } from '@/hooks/useHardwareBarcodeCapture';
 import { useTallerScan } from '@/hooks/useTallerScan';
 import { buildStudentLookupVariants } from '@/lib/services/studentsService';
 import { cn } from '@/lib/utils';
+import { ensureSupabaseReady } from '@/lib/supabaseWarmup';
 import { isPensionesEnabled } from '@/config/features';
 import {
   playPensionMorosoBeep,
@@ -234,6 +235,10 @@ export const TutorScanner = () => {
 
   useEffect(() => {
     isMountedRef.current = true;
+    // Calienta Supabase/Postgres al abrir el escáner (evita 1er escaneo lento / “no reconoce”)
+    void ensureSupabaseReady().catch(() => {
+      /* silencioso: el primer RPC reintentará */
+    });
     loadFaults();
     arrivalService.prefetchArrivalConfig();
     void scheduleService.getConfig();
@@ -961,7 +966,8 @@ export const TutorScanner = () => {
   useHardwareBarcodeCapture({
     enabled: !showIncidentDialog,
     onScan: startScan,
-    maxGapMs: 200,
+    // Pistolas lentas: más margen entre teclas (JP default 120; Academy 220)
+    maxGapMs: 220,
   });
 
   const handleNameSearchSelect = async (selected: Student) => {

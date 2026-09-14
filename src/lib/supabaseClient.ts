@@ -19,7 +19,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
  * Usa AbortController + setTimeout en lugar de AbortSignal.timeout para garantizar
  * compatibilidad con TODOS los browsers (incluyendo iOS Safari < 16).
  */
-const REQUEST_TIMEOUT_MS = 10_000;
+const REQUEST_TIMEOUT_MS = 12_000;
 
 /**
  * Wrapper de fetch con timeout garantizado.

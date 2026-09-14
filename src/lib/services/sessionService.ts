@@ -7,10 +7,10 @@ interface SessionData {
   lastActivity: number;
 }
 
-const DEFAULT_SESSION_MS = 30 * 60 * 1000;
-const TUTOR_SESSION_MS = 15 * 60 * 1000;
-const DOCENTE_SESSION_MS = 15 * 60 * 1000;
-const PARENT_SESSION_MS = 15 * 60 * 1000;
+const DEFAULT_SESSION_MS = 12 * 60 * 60 * 1000; // Admin / Supervisor: 12 h
+const TUTOR_SESSION_MS = 12 * 60 * 60 * 1000; // Tutor: 12 h (escaneo largo sin cortes)
+const DOCENTE_SESSION_MS = 12 * 60 * 60 * 1000;
+const PARENT_SESSION_MS = 15 * 60 * 1000; // Padre: se mantiene corto
 
 /**
  * Servicio de gestión de sesiones con expiración por inactividad

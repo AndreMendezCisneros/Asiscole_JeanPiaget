@@ -81,6 +81,7 @@ import {
 } from '@/components/ui/pagination';
 
 import { CLASSROOM_FIELD_LABELS, CLASSROOM_GRADES, CLASSROOM_LEVELS, CLASSROOM_SECTIONS } from '@/lib/constants/classrooms';
+import { isDniLikeQuery } from '@/lib/utils/studentSearch';
 
 const studentFormSchema = z.object({
   codigo_barras: z.string()
@@ -107,7 +108,7 @@ type StudentFormValues = z.infer<typeof studentFormSchema>;
 export const StudentsList = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('Pre-universitario');
+  const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('all');
   const [gradeFilter, setGradeFilter] = useState<'all' | string>('all');
   const [sectionFilter, setSectionFilter] = useState<'all' | string>('all');
   const [currentPage, setCurrentPage] = useState(1);
@@ -168,16 +169,18 @@ export const StudentsList = () => {
     setCurrentPage(1);
   }, [debouncedSearch, levelFilter, gradeFilter, sectionFilter]);
 
-  const studentFilters = useMemo(
-    () => ({
+  const studentFilters = useMemo(() => {
+    // Búsqueda por DNI/carnet: no filtrar por nivel (el alumno puede ser Secundaria
+    // aunque el filtro esté en Pre-universitario).
+    const dniSearch = Boolean(debouncedSearch && isDniLikeQuery(debouncedSearch));
+    return {
       search: debouncedSearch || undefined,
-      level: levelFilter === 'all' ? undefined : levelFilter,
+      level: dniSearch || levelFilter === 'all' ? undefined : levelFilter,
       grade: gradeFilter === 'all' ? undefined : gradeFilter,
       section: sectionFilter === 'all' ? undefined : sectionFilter,
       page: currentPage,
-    }),
-    [debouncedSearch, levelFilter, gradeFilter, sectionFilter, currentPage]
-  );
+    };
+  }, [debouncedSearch, levelFilter, gradeFilter, sectionFilter, currentPage]);
 
   const {
     data,
@@ -390,11 +393,12 @@ export const StudentsList = () => {
     if (sectionFilter !== 'all') filterParts.push(`${CLASSROOM_FIELD_LABELS.section}: ${sectionFilter}`);
     if (searchTerm) filterParts.push(`Búsqueda: ${searchTerm}`);
     const filters = filterParts.length > 0 ? filterParts.join(' · ') : undefined;
+    const dniSearch = Boolean(debouncedSearch && isDniLikeQuery(debouncedSearch));
     const { students: allRows, error } = await studentsService.getAll({
       active: true,
       fetchAll: true,
       search: debouncedSearch || undefined,
-      level: levelFilter === 'all' ? undefined : levelFilter,
+      level: dniSearch || levelFilter === 'all' ? undefined : levelFilter,
       grade: gradeFilter === 'all' ? undefined : gradeFilter,
       section: sectionFilter === 'all' ? undefined : sectionFilter,
     });

@@ -1,0 +1,9 @@
+-- Asis Academy: ventana de inactividad larga para staff (escáner / admin).
+-- Tutor / Docente / Admin / Supervisor: 12 horas. Padre: 15 minutos.
+-- Alineado con src/lib/services/sessionService.ts
+--
+-- En sie_iniciar_sesion / sie_renovar_sesion usar:
+--   WHEN 'Tutor' THEN interval '12 hours'
+--   WHEN 'Docente' THEN interval '12 hours'
+--   WHEN 'Padre' THEN interval '15 minutes'
+--   ELSE interval '12 hours'

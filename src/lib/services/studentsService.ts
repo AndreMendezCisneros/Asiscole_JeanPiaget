@@ -48,6 +48,61 @@ function mapRpcStudents(rows: unknown): Student[] {
   return rows.map((row) => mapRpcStudent(row as Record<string, unknown>));
 }
 
+/** Caché corta de carnets del escáner (misma lógica JP + TTL). */
+const SCANNER_LOOKUP_TTL_MS = 20 * 60 * 1000;
+const SCANNER_LOOKUP_MAX = 1000;
+const scannerLookupCache = new Map<string, { student: Student; at: number }>();
+
+function readScannerCache(code: string): Student | null {
+  const now = Date.now();
+  for (const variant of buildStudentLookupVariants(code)) {
+    const hit = scannerLookupCache.get(variant);
+    if (!hit) continue;
+    if (now - hit.at > SCANNER_LOOKUP_TTL_MS) {
+      scannerLookupCache.delete(variant);
+      continue;
+    }
+    return hit.student;
+  }
+  return null;
+}
+
+function writeScannerCache(student: Student, scannedCode?: string): void {
+  const now = Date.now();
+  const keys = new Set<string>();
+  if (scannedCode?.trim()) {
+    for (const v of buildStudentLookupVariants(scannedCode)) keys.add(v);
+  }
+  if (student.barcode?.trim()) {
+    for (const v of buildStudentLookupVariants(student.barcode)) keys.add(v);
+  }
+  for (const key of keys) {
+    scannerLookupCache.set(key, { student, at: now });
+  }
+  if (scannerLookupCache.size <= SCANNER_LOOKUP_MAX) return;
+  const oldest = [...scannerLookupCache.entries()].sort((a, b) => a[1].at - b[1].at);
+  const drop = Math.max(1, Math.floor(oldest.length / 3));
+  for (let i = 0; i < drop; i++) {
+    scannerLookupCache.delete(oldest[i][0]);
+  }
+}
+
+function isTransientLookupError(error: unknown): boolean {
+  if (!error) return false;
+  if (error instanceof DOMException && error.name === 'TimeoutError') return true;
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    return (
+      msg.includes('timed out') ||
+      msg.includes('timeout') ||
+      msg.includes('abort') ||
+      msg.includes('network') ||
+      msg.includes('failed to fetch')
+    );
+  }
+  return false;
+}
+
 /** Variantes de DNI/código para tolerar ceros a la izquierda y espacios. */
 export function buildStudentLookupVariants(code: string): string[] {
   const trimmed = code.trim();
@@ -102,11 +157,12 @@ export const studentsService = {
   },
 
   invalidateScannerBarcodeIndex(): void {
-    /* sin índice global */
+    scannerLookupCache.clear();
   },
 
   /**
    * Busca estudiante por carnet/DNI probando variantes (espacios, ceros a la izquierda).
+   * Mejora vs JP: caché TTL + variante principal primero + resto en paralelo.
    */
   async lookupByBarcodeOrDni(
     code: string,
@@ -117,11 +173,36 @@ export const studentsService = {
       return { student: null, error: 'Ingrese un DNI o código de barras' };
     }
 
+    const cached = readScannerCache(code);
+    if (cached) {
+      return { student: cached, error: null };
+    }
+
     let lastError = 'Estudiante no encontrado con ese DNI o código';
-    for (const variant of variants) {
-      const { student, error } = await this.getByBarcode(variant, options);
-      if (student) return { student, error: null };
-      if (error) lastError = error;
+
+    // 1) Variante más probable (texto tal cual) — evita N RPCs en el caso común
+    const primary = await this.getByBarcode(variants[0], options);
+    if (primary.student) {
+      writeScannerCache(primary.student, code);
+      return { student: primary.student, error: null };
+    }
+    if (primary.error) lastError = primary.error;
+
+    const rest = variants.slice(1);
+    if (rest.length === 0) {
+      return { student: null, error: lastError };
+    }
+
+    // 2) Resto en paralelo (máx. ~4) — más rápido que JP secuencial
+    const results = await Promise.all(
+      rest.map((variant) => this.getByBarcode(variant, options)),
+    );
+    for (const result of results) {
+      if (result.student) {
+        writeScannerCache(result.student, code);
+        return { student: result.student, error: null };
+      }
+      if (result.error) lastError = result.error;
     }
 
     return { student: null, error: lastError };
@@ -136,7 +217,7 @@ export const studentsService = {
       return { student: null, error: 'Sesión expirada. Vuelva a iniciar sesión.' };
     }
 
-    try {
+    const runOnce = async () => {
       const { data, error } = await supabase.rpc('sie_buscar_estudiante_carnet', {
         p_token: token,
         p_codigo: barcode.trim(),
@@ -155,8 +236,24 @@ export const studentsService = {
         return { student: null, error: 'Estudiante no encontrado' };
       }
 
-      return { student: mapRpcStudent(payload.student), error: null };
+      const student = mapRpcStudent(payload.student);
+      writeScannerCache(student, barcode);
+      return { student, error: null };
+    };
+
+    try {
+      return await runOnce();
     } catch (error: unknown) {
+      if (isTransientLookupError(error)) {
+        try {
+          return await runOnce();
+        } catch (retryError: unknown) {
+          console.error('Error en getByBarcode (reintento):', retryError);
+          const message =
+            retryError instanceof Error ? retryError.message : 'Error al buscar estudiante';
+          return { student: null, error: message };
+        }
+      }
       console.error('Error en getByBarcode:', error);
       const message = error instanceof Error ? error.message : 'Error al buscar estudiante';
       return { student: null, error: message };
