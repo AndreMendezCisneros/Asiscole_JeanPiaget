@@ -333,15 +333,19 @@ export const ParentMeetings = () => {
           contactPhone: null,
           emergencyPhone: null,
         } satisfies Student);
-      const app = await whatsappService.notifyParentCita(target, {
-        citaId: row.citaId,
-        motivo: params.motivo,
-        fecha: params.fecha,
-        hora: params.hora,
-        alcance,
-      });
-      if (app.ok && !app.skipped) sent += 1;
-      else if (!app.ok) failed += 1;
+      try {
+        const app = await whatsappService.notifyParentCita(target, {
+          citaId: row.citaId,
+          motivo: params.motivo,
+          fecha: params.fecha,
+          hora: params.hora,
+          alcance,
+        });
+        if (app.ok && !app.skipped) sent += 1;
+        else if (!app.ok) failed += 1;
+      } catch {
+        failed += 1;
+      }
     }
 
     if (sent > 0) {

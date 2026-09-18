@@ -2,10 +2,12 @@ import type { ArrivalRecord, FaultType, Incident, Student } from '@/types';
 import { toWhatsAppChatId, toWhatsAppPhone } from '@/lib/utils/phoneUtils';
 import {
   buildArrivalIngestBody,
+  buildCitaIngestBody,
   buildDepartureIngestBody,
   buildIncidentIngestBody,
   buildNotaIngestBody,
   buildPensionIngestBody,
+  type CitaIngestAlcance,
   type MobileIngestEventBody,
 } from '@/lib/services/mobileIngest';
 
@@ -1016,6 +1018,42 @@ export async function notifyParentNota(
   return { ...result, chatId: toWhatsAppChatId(apoderadoPhone) || undefined };
 }
 
+/**
+ * Aviso de citación vía app móvil (canal / mobile ingest). No usa WhatsApp.
+ * Las citas no tienen trigger de outbox: el SIE debe POST tipo aviso + contexto cita.
+ */
+export async function notifyParentCita(
+  student: Student,
+  input: {
+    citaId: number;
+    motivo: string;
+    fecha: string;
+    hora: string;
+    alcance: CitaIngestAlcance;
+  },
+): Promise<{ ok: boolean; error: string | null; chatId?: string; skipped?: boolean }> {
+  if (!MOBILE_INGEST_ENABLED) {
+    return { ok: false, error: 'Notificaciones por aplicación no habilitadas' };
+  }
+
+  const apoderadoPhone = student.contactPhone?.trim() || student.emergencyPhone?.trim() || '';
+  const dedupKey = buildNotifyDedupKey('cita', student.id, String(input.citaId));
+
+  if (shouldSkipDuplicateNotify(dedupKey)) {
+    return {
+      ok: true,
+      error: null,
+      skipped: true,
+      chatId: toWhatsAppChatId(apoderadoPhone) || undefined,
+    };
+  }
+
+  const result = await sendViaMobileIngest(
+    buildCitaIngestBody(MOBILE_INGEST_TENANT, student, input),
+  );
+  return { ...result, chatId: toWhatsAppChatId(apoderadoPhone) || undefined };
+}
+
 async function notifyParentEvent(
   student: Student,
   record: ArrivalRecord,
@@ -1124,5 +1162,6 @@ export const whatsappService = {
   notifyParentIncident,
   notifyParentPensionPending,
   notifyParentNota,
+  notifyParentCita,
   buildPensionPendingMessage,
 };
