@@ -85,8 +85,19 @@ import {
   shouldAlertDebtFromCounts,
 } from '@/lib/utils/debtAlarm';
 import { pensionesService } from '@/lib/services/pensionesService';
+import { compromisosAlarmService } from '@/lib/services/compromisosAlarmService';
+import {
+  enqueuePendingScan,
+  loadPendingScans,
+  loadTodayArrivals,
+  removePendingScan,
+  saveTodayArrivals,
+  updatePendingScan,
+} from '@/lib/utils/tutorScannerStorage';
 
 const NAME_SEARCH_SCROLL_AFTER = 8;
+/** Libera inFlight si la red cuelga (evita “Registrando…” eterno). */
+const IN_FLIGHT_SAFETY_MS = 20_000;
 
 export const TutorScanner = () => {
   const navigate = useNavigate();
@@ -247,6 +258,15 @@ export const TutorScanner = () => {
     arrivalService.prefetchArrivalConfig();
     void scheduleService.getConfig();
     loadArrivalLimit();
+    try {
+      const today = getLimaTodayDate();
+      const persisted = loadTodayArrivals(today);
+      if (persisted.size > 0) {
+        todayArrivalsRef.current = persisted;
+      }
+    } catch {
+      /* silencioso */
+    }
     if (pensionesEnabled) {
       void pensionesService.getConfig().then(({ config }) => {
         if (config) avisoPensionRef.current = config.avisoSonoroActivo && config.activo;
@@ -274,6 +294,68 @@ export const TutorScanner = () => {
       stopClock?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /**
+   * Reintenta escaneos encolados (fallos de red) al montar, cada 30 s y al volver online.
+   */
+  useEffect(() => {
+    const flushingRef = { current: false };
+
+    const flushPending = async () => {
+      if (flushingRef.current) return;
+      const queue = loadPendingScans();
+      if (queue.length === 0) return;
+      flushingRef.current = true;
+      try {
+        for (const item of queue) {
+          if (!isMountedRef.current) return;
+          const { record, error, alreadyRegistered } = await arrivalService.createArrivalRecord(
+            item.studentId,
+            item.registeredBy ?? undefined,
+            {
+              date: item.date,
+              arrivalTime: item.arrivalTime,
+              studentLevel: item.studentLevel,
+            },
+          );
+          if (record) {
+            todayArrivalsRef.current.set(item.studentId, record);
+            saveTodayArrivals(record.date, todayArrivalsRef.current);
+            removePendingScan(item.id);
+            if (!alreadyRegistered && isMountedRef.current) {
+              toast.success(`Sincronizado: ${item.studentSnapshot.fullName}`, {
+                duration: 2200,
+              });
+            }
+          } else if (error) {
+            const nextAttempts = item.attempts + 1;
+            updatePendingScan(item.id, { attempts: nextAttempts });
+            if (nextAttempts >= 8) {
+              removePendingScan(item.id);
+              if (isMountedRef.current) {
+                toast.error(
+                  `No se pudo sincronizar la llegada de ${item.studentSnapshot.fullName}`,
+                  { duration: 4000 },
+                );
+              }
+            }
+            break;
+          }
+        }
+      } finally {
+        flushingRef.current = false;
+      }
+    };
+
+    void flushPending();
+    const id = window.setInterval(() => void flushPending(), 30_000);
+    const onOnline = () => void flushPending();
+    window.addEventListener('online', onOnline);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener('online', onOnline);
+    };
   }, []);
 
   useEffect(() => {
@@ -544,30 +626,52 @@ export const TutorScanner = () => {
       showedOptimisticUi: boolean
     ) => {
       const currentUser = authService.getCurrentUser();
+      const pendingId = `${studentToShow.id}-${arrivalOpts.date ?? ''}-${Date.now()}`;
+      const enqueueFailed = () => {
+        enqueuePendingScan({
+          id: pendingId,
+          studentId: studentToShow.id,
+          studentSnapshot: {
+            id: studentToShow.id,
+            fullName: studentToShow.fullName,
+            grade: studentToShow.grade,
+            section: studentToShow.section,
+            level: studentToShow.level,
+            barcode: studentToShow.barcode,
+            profilePhoto: studentToShow.profilePhoto,
+          },
+          date: arrivalOpts.date ?? '',
+          arrivalTime: arrivalOpts.arrivalTime ?? '',
+          studentLevel: arrivalOpts.studentLevel ?? null,
+          registeredBy: currentUser?.id ?? null,
+          createdAt: Date.now(),
+          attempts: 1,
+        });
+      };
+
       void arrivalService
         .createArrivalRecord(studentToShow.id, currentUser?.id, arrivalOpts)
         .then(({ record, error: arrivalError, alreadyRegistered }) => {
-          if (!isMountedRef.current) return;
-
           inFlightStudentIdsRef.current.delete(studentToShow.id);
-
-          const isLatestProfile = scanSeq === latestProfileScanRef.current;
 
           if (arrivalError || !record) {
             console.error('Error al registrar llegada:', arrivalError);
-            if (isLatestProfile && showedOptimisticUi) {
-              revertOptimisticSessionCount(optimisticStatus);
-              setShowStudentProfile(false);
-              setStudent(null);
-              setArrivalRecord(null);
+            enqueueFailed();
+            if (isMountedRef.current) {
+              toast.warning('Sin conexión: la llegada se guardará cuando vuelva la red.', {
+                duration: 3200,
+              });
+              focusBarcodeInput();
             }
-            toast.error('No se guardó la llegada en el servidor. Vuelva a escanear.');
-            focusBarcodeInput();
             return;
           }
 
-          // El estado viene de la BD (trigger por nivel); no recalcular en el cliente.
           todayArrivalsRef.current.set(studentToShow.id, record);
+          saveTodayArrivals(record.date, todayArrivalsRef.current);
+
+          if (!isMountedRef.current) return;
+
+          const isLatestProfile = scanSeq === latestProfileScanRef.current;
 
           if (alreadyRegistered) {
             if (isLatestProfile) {
@@ -628,7 +732,15 @@ export const TutorScanner = () => {
           }
         })
         .catch((err: unknown) => {
+          console.error('Error al registrar llegada:', err);
           inFlightStudentIdsRef.current.delete(studentToShow.id);
+          enqueueFailed();
+          if (isMountedRef.current) {
+            toast.warning('Sin conexión: la llegada se guardará cuando vuelva la red.', {
+              duration: 3200,
+            });
+            focusBarcodeInput();
+          }
         });
     },
     [
@@ -682,33 +794,62 @@ export const TutorScanner = () => {
         });
       }
 
-      // Alarma deuda (solo local): faltas / carnet / ≥3 tardanzas — no bloquea registro
+      // Alarma deuda: faltas / carnet / ≥3 tardanzas / pensión — no bloquea registro.
+      // Se reinicia solo con compromiso firmado del apoderado (/compromisos-alarma).
       if (isDebtAlarmEnabled()) {
-        void incidentsService.countDebtTriggerFaults(foundStudent.id).then((debt) => {
+        void (async () => {
+          if (pensionesEnabled) {
+            await compromisosAlarmService.syncPagoBaselinesForPension(
+              foundStudent.id,
+              foundStudent.estadoPension === 'moroso',
+            );
+          }
+          const [debt, base] = await Promise.all([
+            incidentsService.countDebtTriggerFaults(foundStudent.id),
+            compromisosAlarmService.getBaselines(foundStudent.id),
+          ]);
           if (!isMountedRef.current || debt.error) return;
           if (scanSeq !== latestProfileScanRef.current) return;
-          const { alertFalta, alertCarnet, alertTarde } = shouldAlertDebtFromCounts(debt);
-          if (!alertFalta && !alertCarnet && !alertTarde) return;
+          const alertPago =
+            pensionesEnabled &&
+            foundStudent.estadoPension === 'moroso' &&
+            !base.baselines.pago;
+          const { alertFalta, alertCarnet, alertTarde, alertPago: pagoFlag } =
+            shouldAlertDebtFromCounts({ ...debt, alertPago });
+          if (!alertFalta && !alertCarnet && !alertTarde && !pagoFlag) return;
           playPensionMorosoBeep();
+          const goCompromiso = () => {
+            window.open(`/compromisos-alarma?student=${foundStudent.id}`, '_blank', 'noopener');
+          };
           if (alertFalta) {
-            toast.warning('Deuda por faltas', {
-              description: `${foundStudent.fullName}: ${debt.faltaCount} inasistencias (Falta)`,
-              duration: 3500,
+            toast.warning('Inasistencias reiteradas — citar apoderado', {
+              description: `${foundStudent.fullName}: ${debt.faltaCount} inasistencias. Se requiere compromiso familiar.`,
+              duration: 4500,
+              action: { label: 'Compromiso', onClick: goCompromiso },
             });
           }
           if (alertCarnet) {
-            toast.warning('Deuda por carnet', {
-              description: `${foundStudent.fullName}: ${debt.carnetCount} sin carné institucional`,
-              duration: 3500,
+            toast.warning('Sin carné reiterado — citar apoderado', {
+              description: `${foundStudent.fullName}: ${debt.carnetCount} registros sin carné. Se requiere compromiso familiar.`,
+              duration: 4500,
+              action: { label: 'Compromiso', onClick: goCompromiso },
             });
           }
           if (alertTarde) {
-            toast.warning('Deuda por tardanzas', {
-              description: `${foundStudent.fullName}: ${debt.tardeCount} tardanzas`,
-              duration: 3500,
+            toast.warning('Tardanzas reiteradas — citar apoderado', {
+              description: `${foundStudent.fullName}: ${debt.tardeCount} tardanzas. La justificación (TJ) no sustituye el compromiso firmado.`,
+              duration: 4500,
+              action: { label: 'Compromiso', onClick: goCompromiso },
             });
           }
-        });
+          if (pagoFlag) {
+            toast.warning('Pensión pendiente — citar apoderado', {
+              description: `${foundStudent.fullName}. Se requiere compromiso de pago.`,
+              duration: 4500,
+              action: { label: 'Compromiso', onClick: goCompromiso },
+            });
+          }
+        })();
       }
 
       const isLatestProfile = scanSeq === latestProfileScanRef.current;
@@ -754,7 +895,10 @@ export const TutorScanner = () => {
             return;
           }
           todayRecord = record;
-          if (record) todayArrivalsRef.current.set(foundStudent.id, record);
+          if (record) {
+            todayArrivalsRef.current.set(foundStudent.id, record);
+            saveTodayArrivals(record.date, todayArrivalsRef.current);
+          }
         }
 
         if (!todayRecord) {
@@ -816,6 +960,7 @@ export const TutorScanner = () => {
           departureRegisteredBy: user?.id ?? null,
         };
         todayArrivalsRef.current.set(foundStudent.id, updated);
+        saveTodayArrivals(updated.date, todayArrivalsRef.current);
 
         if (shouldUpdateProfile) {
           applyScanSuccess(foundStudent, updated, {
@@ -889,6 +1034,14 @@ export const TutorScanner = () => {
       };
 
       inFlightStudentIdsRef.current.add(foundStudent.id);
+      window.setTimeout(() => {
+        if (inFlightStudentIdsRef.current.delete(foundStudent.id) && isMountedRef.current) {
+          toast.warning(
+            `La llegada de ${foundStudent.fullName} tarda más de lo normal; se reintentará sola.`,
+            { duration: 3500 },
+          );
+        }
+      }, IN_FLIGHT_SAFETY_MS);
 
       const showedOptimisticUi = shouldUpdateProfile;
       if (showedOptimisticUi) {
@@ -1216,14 +1369,14 @@ export const TutorScanner = () => {
         if (!alertFalta && !alertCarnet) return;
         playPensionMorosoBeep();
         if (alertFalta) {
-          toast.warning('Deuda por faltas', {
-            description: `${studentForWa.fullName}: ${debt.faltaCount} inasistencias (Falta)`,
+          toast.warning('Inasistencias reiteradas', {
+            description: `${studentForWa.fullName}: ${debt.faltaCount} inasistencias. Citar al apoderado.`,
             duration: 3500,
           });
         }
         if (alertCarnet) {
-          toast.warning('Deuda por carnet', {
-            description: `${studentForWa.fullName}: ${debt.carnetCount} sin carné institucional`,
+          toast.warning('Sin carné reiterado', {
+            description: `${studentForWa.fullName}: ${debt.carnetCount} registros sin carné institucional.`,
             duration: 3500,
           });
         }

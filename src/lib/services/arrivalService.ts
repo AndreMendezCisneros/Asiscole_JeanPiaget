@@ -322,7 +322,24 @@ export async function getTodayArrivalForStudent(
   }
 }
 
-async function createArrivalRecordInner(
+const CREATE_ARRIVAL_TIMEOUT_MS = 12_000;
+const CREATE_ARRIVAL_RETRY_DELAY_MS = 400;
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label}: tiempo agotado (${ms} ms)`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+async function createArrivalRecordInnerOnce(
   studentId: number,
   registeredBy?: number,
   options?: CreateArrivalOptions
@@ -395,10 +412,47 @@ async function createArrivalRecordInner(
 
     const record = await resolveRecordStatus(mapArrivalRow(data), level, false);
     return { record, error: null };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Error al registrar llegada';
     console.error('Error al registrar llegada:', error);
-    return { record: null, error: error.message };
+    return { record: null, error: message };
   }
+}
+
+async function createArrivalRecordInner(
+  studentId: number,
+  registeredBy?: number,
+  options?: CreateArrivalOptions
+): Promise<CreateArrivalResult> {
+  const run = () =>
+    withTimeout(
+      createArrivalRecordInnerOnce(studentId, registeredBy, options),
+      CREATE_ARRIVAL_TIMEOUT_MS,
+      'createArrivalRecord',
+    );
+
+  const first = await run().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : 'Error de red';
+    return { record: null, error: message } satisfies CreateArrivalResult;
+  });
+
+  if (
+    first.record ||
+    (first.error &&
+      /duplicate|unique|23505|not authorized|permission|no autorizado/i.test(first.error))
+  ) {
+    return first;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, CREATE_ARRIVAL_RETRY_DELAY_MS));
+  const second = await run().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : 'Error de red';
+    return { record: null, error: message } satisfies CreateArrivalResult;
+  });
+  if (!second.record && second.error) {
+    console.error('Error al registrar llegada (2 intentos):', second.error);
+  }
+  return second;
 }
 
 /**

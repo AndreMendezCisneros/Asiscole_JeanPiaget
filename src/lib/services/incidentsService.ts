@@ -22,8 +22,10 @@ import {
 import { gradeFilterValues } from '@/lib/utils/gradeAliases';
 import {
   isCarnetFaultName,
+  isEventAfterBaseline,
   isFaltaInasistenciaName,
 } from '@/lib/utils/debtAlarm';
+import { compromisosAlarmService } from './compromisosAlarmService';
 
 export interface IncidentsListFilters {
   estudianteId?: number;
@@ -522,32 +524,39 @@ export const incidentsService = {
 
   /**
    * Conteo ligero de faltas / carnet / tardanzas que disparan alarma de deuda.
+   * Solo cuenta eventos posteriores al último compromiso firmado (por tipo).
    * Falta / Falta académica; carnet = "No porta carnet institucional"; Tarde en llegadas.
    */
   async countDebtTriggerFaults(studentId: number): Promise<{
     faltaCount: number;
     carnetCount: number;
     tardeCount: number;
+    alertPago: boolean;
     error: string | null;
   }> {
     try {
       await ensureSupabaseReady();
+      const { baselines } = await compromisosAlarmService.getBaselines(studentId);
+
       const [incRes, faltaArrivalRes, tardeArrivalRes] = await Promise.all([
         supabase
           .from('incidencias')
-          .select('id_incidencia, catalogos_faltas:id_falta ( nombre_falta )')
+          .select(
+            'id_incidencia, fecha_hora_registro, catalogos_faltas:id_falta ( nombre_falta )',
+          )
           .eq('id_estudiante', studentId)
           .neq('estado', 'Anulada'),
         supabase
           .from('registros_llegada')
-          .select('id_registro')
+          .select('id_registro, fecha')
           .eq('id_estudiante', studentId)
           .eq('estado', 'Falta'),
         supabase
           .from('registros_llegada')
-          .select('id_registro')
+          .select('id_registro, fecha')
           .eq('id_estudiante', studentId)
-          .eq('estado', 'Tarde'),
+          // TJ no apaga la alarma: cuenta Tarde y Tarde justificada.
+          .in('estado', ['Tarde', 'Tarde justificada']),
       ]);
 
       if (incRes.error) {
@@ -555,6 +564,7 @@ export const incidentsService = {
           faltaCount: 0,
           carnetCount: 0,
           tardeCount: 0,
+          alertPago: false,
           error: incRes.error.message,
         };
       }
@@ -562,24 +572,50 @@ export const incidentsService = {
       let faltaCount = 0;
       let carnetCount = 0;
       for (const row of incRes.data ?? []) {
-        const falta = (row as { catalogos_faltas?: { nombre_falta?: string } | null })
-          .catalogos_faltas;
-        const name = falta?.nombre_falta;
-        if (isFaltaInasistenciaName(name)) faltaCount += 1;
-        else if (isCarnetFaultName(name)) carnetCount += 1;
+        const typed = row as {
+          fecha_hora_registro?: string | null;
+          catalogos_faltas?: { nombre_falta?: string } | null;
+        };
+        const name = typed.catalogos_faltas?.nombre_falta;
+        const at = typed.fecha_hora_registro;
+        if (isFaltaInasistenciaName(name)) {
+          if (isEventAfterBaseline(at, baselines.falta)) faltaCount += 1;
+        } else if (isCarnetFaultName(name)) {
+          // Carnet sigue el mismo ciclo de “falta de compromiso” vía tipo falta
+          // (documento de compromiso tipo falta cubre inasistencias; carnet usa baseline falta).
+          if (isEventAfterBaseline(at, baselines.falta)) carnetCount += 1;
+        }
       }
 
       if (!faltaArrivalRes.error) {
-        faltaCount += faltaArrivalRes.data?.length ?? 0;
+        for (const row of faltaArrivalRes.data ?? []) {
+          const fecha = (row as { fecha?: string }).fecha;
+          if (isEventAfterBaseline(fecha, baselines.falta)) faltaCount += 1;
+        }
       }
 
-      const tardeCount = tardeArrivalRes.error ? 0 : (tardeArrivalRes.data?.length ?? 0);
+      let tardeCount = 0;
+      if (!tardeArrivalRes.error) {
+        for (const row of tardeArrivalRes.data ?? []) {
+          const fecha = (row as { fecha?: string }).fecha;
+          if (isEventAfterBaseline(fecha, baselines.tardanza)) tardeCount += 1;
+        }
+      }
 
-      return { faltaCount, carnetCount, tardeCount, error: null };
+      // Pago: se calcula en el escáner con estadoPension + baseline pago.
+      const alertPago = false;
+
+      return { faltaCount, carnetCount, tardeCount, alertPago, error: null };
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : 'Error al contar faltas de deuda';
-      return { faltaCount: 0, carnetCount: 0, tardeCount: 0, error: message };
+      return {
+        faltaCount: 0,
+        carnetCount: 0,
+        tardeCount: 0,
+        alertPago: false,
+        error: message,
+      };
     }
   },
 

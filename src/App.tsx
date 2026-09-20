@@ -26,6 +26,7 @@ import { DepartureControl } from "./pages/DepartureControl";
 import { ParentMeetings } from "./pages/ParentMeetings";
 import { JustifyFaults } from "./pages/JustifyFaults";
 import { JustifyAttendance } from "./pages/JustifyAttendance";
+import { CompromisosAlarma } from "./pages/CompromisosAlarma";
 import { FaultsCatalog } from "./pages/FaultsCatalog";
 import { Reports } from "./pages/Reports";
 import { AuditLogs } from "./pages/AuditLogs";
@@ -127,6 +128,7 @@ const AppContent = () => {
         <Route path="/arrival-control" element={<ArrivalControl />} />
         <Route path="/departure-control" element={<DepartureControl />} />
         <Route path="/justify-attendance" element={<JustifyAttendance />} />
+        <Route path="/compromisos-alarma" element={<CompromisosAlarma />} />
         <Route path="/parent-meetings" element={<ParentMeetings />} />
         <Route path="/justify-faults" element={<JustifyFaults />} />
         <Route

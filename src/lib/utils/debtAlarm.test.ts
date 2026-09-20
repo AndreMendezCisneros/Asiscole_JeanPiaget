@@ -3,7 +3,9 @@ import {
   DEBT_CARNET_THRESHOLD,
   DEBT_FALTA_THRESHOLD,
   DEBT_TARDE_THRESHOLD,
+  countEventsAfterBaseline,
   isCarnetFaultName,
+  isEventAfterBaseline,
   isFaltaInasistenciaName,
   normalizeFaultName,
   shouldAlertDebtAfterIncident,
@@ -50,6 +52,7 @@ describe('shouldAlertDebtFromCounts', () => {
       alertFalta: false,
       alertCarnet: false,
       alertTarde: false,
+      alertPago: false,
     });
     expect(
       shouldAlertDebtFromCounts({
@@ -57,16 +60,85 @@ describe('shouldAlertDebtFromCounts', () => {
         carnetCount: DEBT_CARNET_THRESHOLD,
         tardeCount: DEBT_TARDE_THRESHOLD,
       }),
-    ).toEqual({ alertFalta: true, alertCarnet: true, alertTarde: true });
+    ).toEqual({
+      alertFalta: true,
+      alertCarnet: true,
+      alertTarde: true,
+      alertPago: false,
+    });
     expect(shouldAlertDebtFromCounts({ faltaCount: 5, carnetCount: 0, tardeCount: 0 })).toEqual({
       alertFalta: true,
       alertCarnet: false,
       alertTarde: false,
+      alertPago: false,
     });
     expect(shouldAlertDebtFromCounts({ faltaCount: 0, carnetCount: 0, tardeCount: 3 })).toEqual({
       alertFalta: false,
       alertCarnet: false,
       alertTarde: true,
+      alertPago: false,
+    });
+    expect(
+      shouldAlertDebtFromCounts({
+        faltaCount: 0,
+        carnetCount: 0,
+        tardeCount: 0,
+        alertPago: true,
+      }),
+    ).toEqual({
+      alertFalta: false,
+      alertCarnet: false,
+      alertTarde: false,
+      alertPago: true,
+    });
+  });
+});
+
+describe('isEventAfterBaseline / countEventsAfterBaseline', () => {
+  it('sin baseline cuenta todos; con baseline solo posteriores', () => {
+    expect(isEventAfterBaseline('2026-09-10', null)).toBe(true);
+    expect(isEventAfterBaseline('2026-09-10', '2026-09-14T12:00:00.000Z')).toBe(false);
+    expect(isEventAfterBaseline('2026-09-15', '2026-09-14T12:00:00.000Z')).toBe(true);
+
+    const days = [{ fecha: '2026-09-10' }, { fecha: '2026-09-15' }, { fecha: '2026-09-16' }];
+    expect(countEventsAfterBaseline(days, null, (d) => d.fecha)).toBe(3);
+    expect(
+      countEventsAfterBaseline(days, '2026-09-14T12:00:00.000Z', (d) => d.fecha),
+    ).toBe(2);
+  });
+
+  it('tras reset de 3 tardanzas, hace falta volver a juntar 3', () => {
+    const baseline = '2026-09-14T18:00:00.000Z';
+    const tardes = [
+      { fecha: '2026-09-12' },
+      { fecha: '2026-09-13' },
+      { fecha: '2026-09-14' },
+      { fecha: '2026-09-15' },
+      { fecha: '2026-09-16' },
+    ];
+    const after = countEventsAfterBaseline(tardes, baseline, (d) => d.fecha);
+    expect(after).toBe(2);
+    expect(
+      shouldAlertDebtFromCounts({ faltaCount: 0, carnetCount: 0, tardeCount: after }),
+    ).toEqual({
+      alertFalta: false,
+      alertCarnet: false,
+      alertTarde: false,
+      alertPago: false,
+    });
+    const withThird = countEventsAfterBaseline(
+      [...tardes, { fecha: '2026-09-17' }],
+      baseline,
+      (d) => d.fecha,
+    );
+    expect(withThird).toBe(3);
+    expect(
+      shouldAlertDebtFromCounts({ faltaCount: 0, carnetCount: 0, tardeCount: withThird }),
+    ).toEqual({
+      alertFalta: false,
+      alertCarnet: false,
+      alertTarde: true,
+      alertPago: false,
     });
   });
 });
@@ -79,7 +151,7 @@ describe('shouldAlertDebtAfterIncident', () => {
         faltaCount: 0,
         carnetCount: 4,
       }),
-    ).toEqual({ alertFalta: false, alertCarnet: true, alertTarde: false });
+    ).toEqual({ alertFalta: false, alertCarnet: true, alertTarde: false, alertPago: false });
 
     expect(
       shouldAlertDebtAfterIncident({
@@ -87,7 +159,7 @@ describe('shouldAlertDebtAfterIncident', () => {
         faltaCount: 0,
         carnetCount: 5,
       }),
-    ).toEqual({ alertFalta: false, alertCarnet: false, alertTarde: false });
+    ).toEqual({ alertFalta: false, alertCarnet: false, alertTarde: false, alertPago: false });
 
     expect(
       shouldAlertDebtAfterIncident({
@@ -95,7 +167,7 @@ describe('shouldAlertDebtAfterIncident', () => {
         faltaCount: 4,
         carnetCount: 0,
       }),
-    ).toEqual({ alertFalta: true, alertCarnet: false, alertTarde: false });
+    ).toEqual({ alertFalta: true, alertCarnet: false, alertTarde: false, alertPago: false });
 
     expect(
       shouldAlertDebtAfterIncident({
@@ -103,6 +175,6 @@ describe('shouldAlertDebtAfterIncident', () => {
         faltaCount: 10,
         carnetCount: 10,
       }),
-    ).toEqual({ alertFalta: false, alertCarnet: false, alertTarde: false });
+    ).toEqual({ alertFalta: false, alertCarnet: false, alertTarde: false, alertPago: false });
   });
 });

@@ -40,6 +40,7 @@ const ALL_STAFF_NAV_ITEMS: StaffNavItem[] = [
       { path: '/arrival-control', label: 'Control de Llegadas' },
       { path: '/departure-control', label: 'Registro de Salidas' },
       { path: '/justify-attendance', label: 'Justificar asistencia' },
+      { path: '/compromisos-alarma', label: 'Compromisos de alarma' },
     ],
   },
   {

@@ -47,12 +47,45 @@ export function shouldAlertDebtFromCounts(counts: {
   faltaCount: number;
   carnetCount: number;
   tardeCount?: number;
-}): { alertFalta: boolean; alertCarnet: boolean; alertTarde: boolean } {
+  /** true = pensión morosa sin compromiso de pago vigente */
+  alertPago?: boolean;
+}): {
+  alertFalta: boolean;
+  alertCarnet: boolean;
+  alertTarde: boolean;
+  alertPago: boolean;
+} {
   return {
     alertFalta: counts.faltaCount >= DEBT_FALTA_THRESHOLD,
     alertCarnet: counts.carnetCount >= DEBT_CARNET_THRESHOLD,
     alertTarde: (counts.tardeCount ?? 0) >= DEBT_TARDE_THRESHOLD,
+    alertPago: Boolean(counts.alertPago),
   };
+}
+
+/** ¿El evento (ISO o YYYY-MM-DD) ocurrió después del corte del compromiso? */
+export function isEventAfterBaseline(
+  eventAt: string | null | undefined,
+  baselineIso: string | null | undefined,
+): boolean {
+  if (!eventAt) return false;
+  if (!baselineIso) return true;
+  const eventMs = Date.parse(eventAt.length <= 10 ? `${eventAt}T00:00:00` : eventAt);
+  const baseMs = Date.parse(baselineIso);
+  if (Number.isNaN(eventMs) || Number.isNaN(baseMs)) return true;
+  return eventMs > baseMs;
+}
+
+/**
+ * Cuenta ítems con fecha posterior al baseline (null = contar todos).
+ * `getEventAt` debe devolver ISO o YYYY-MM-DD.
+ */
+export function countEventsAfterBaseline<T>(
+  items: T[],
+  baselineIso: string | null | undefined,
+  getEventAt: (item: T) => string | null | undefined,
+): number {
+  return items.filter((item) => isEventAfterBaseline(getEventAt(item), baselineIso)).length;
 }
 
 /**
@@ -64,7 +97,7 @@ export function shouldAlertDebtAfterIncident(opts: {
   faltaCount: number;
   carnetCount: number;
   tardeCount?: number;
-}): { alertFalta: boolean; alertCarnet: boolean; alertTarde: boolean } {
+}): { alertFalta: boolean; alertCarnet: boolean; alertTarde: boolean; alertPago: boolean } {
   const isFalta = isFaltaInasistenciaName(opts.faultName);
   const isCarnet = isCarnetFaultName(opts.faultName);
   const prevFalta = isFalta ? opts.faltaCount - 1 : opts.faltaCount;
@@ -80,5 +113,6 @@ export function shouldAlertDebtAfterIncident(opts: {
       opts.carnetCount >= DEBT_CARNET_THRESHOLD,
     // Las tardanzas no se crean como incidencia de catálogo aquí.
     alertTarde: false,
+    alertPago: false,
   };
 }
