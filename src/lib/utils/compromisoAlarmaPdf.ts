@@ -259,10 +259,6 @@ export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Pr
   pdf.text('I. DECLARACIÓN', margin, y);
   y += 7;
 
-  pdf.setDrawColor(...JP.beige);
-  pdf.setLineWidth(0.6);
-  pdf.line(margin, y - 3, margin + 32, y - 3);
-
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(10.5);
   pdf.setTextColor(...JP.text);
@@ -283,9 +279,6 @@ export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Pr
   pdf.setTextColor(...JP.navy);
   pdf.text('II. COMPROMISO', margin, y);
   y += 7;
-  pdf.setDrawColor(...JP.beige);
-  pdf.setLineWidth(0.6);
-  pdf.line(margin, y - 3, margin + 36, y - 3);
 
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(10.5);
@@ -294,7 +287,7 @@ export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Pr
   const body = [
     `En tal sentido, me comprometo a ${TIPO_COMPROMISO[input.tipo]}.`,
     'Asimismo, me comprometo a colaborar con la institución educativa en el seguimiento respectivo y a cumplir las orientaciones que se me indiquen.',
-    'Quedo enterado(a) de que, con la suscripción del presente documento, se reinicia el registro de control correspondiente; y que, de volver a presentarse la misma situación, la institución procederá a una nueva citación.',
+    'Quedo enterado(a) de que, con la firma del presente documento, se reinicia el registro de control correspondiente; y que, de volver a presentarse la misma situación, la institución procederá a una nueva citación.',
   ];
 
   for (const paragraph of body) {
