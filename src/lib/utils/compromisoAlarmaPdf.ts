@@ -18,20 +18,38 @@ const JP = {
   white: [255, 255, 255] as [number, number, number],
 };
 
-const TIPO_LABEL: Record<CompromisoAlarmaTipo, string> = {
-  tardanza: 'tardanzas reiteradas',
-  falta: 'inasistencias / faltas reiteradas',
-  pago: 'pendientes de pensión',
+const TIPO_MOTIVO: Record<CompromisoAlarmaTipo, string> = {
+  tardanza: 'llegadas tardías reiteradas del estudiante',
+  falta: 'inasistencias reiteradas del estudiante',
+  pago: 'obligaciones de pensión pendientes',
 };
 
-const TIPO_PROMESA: Record<CompromisoAlarmaTipo, string> = {
+const TIPO_COMPROMISO: Record<CompromisoAlarmaTipo, string> = {
   tardanza:
-    'garantizar la puntualidad de mi hijo(a) en el ingreso al colegio, evitando nuevas tardanzas',
+    'velar por la puntualidad del estudiante en el ingreso a la institución educativa, evitando nuevas llegadas fuera del horario establecido',
   falta:
-    'garantizar la asistencia regular de mi hijo(a) a clases, evitando nuevas inasistencias injustificadas',
+    'velar por la asistencia regular y oportuna del estudiante a clases, evitando nuevas inasistencias injustificadas',
   pago:
-    'ponerme al día con las pensiones pendientes y mantener los pagos al corriente según el cronograma del colegio',
+    'regularizar las pensiones pendientes y mantener al corriente los pagos conforme al cronograma institucional',
 };
+
+function formatCountsClause(tipo: CompromisoAlarmaTipo, hint?: string | null): string {
+  const raw = (hint || '').trim();
+  if (!raw) return '';
+  // Extrae el primer número del hint (ej. "5 llegadas tarde…")
+  const m = raw.match(/(\d+)/);
+  const n = m ? m[1] : null;
+  if (tipo === 'tardanza' && n) {
+    return `, habiéndose registrado ${n} llegada${n === '1' ? '' : 's'} tarde desde el último compromiso suscrito`;
+  }
+  if (tipo === 'falta' && n) {
+    return `, habiéndose registrado ${n} inasistencia${n === '1' ? '' : 's'} desde el último compromiso suscrito`;
+  }
+  if (tipo === 'pago') {
+    return ', conforme al estado de cuenta institucional';
+  }
+  return raw ? ` (${raw})` : '';
+}
 
 export type CompromisoPdfInput = {
   schoolName: string;
@@ -79,13 +97,14 @@ async function imageToJpegDataUrl(img: HTMLImageElement, maxPx = 360): Promise<s
 export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Promise<void> {
   const when = input.signedAt ?? new Date();
   const fechaTxt = format(when, "d 'de' MMMM 'de' yyyy", { locale: es });
-  const tipoTxt = TIPO_LABEL[input.tipo];
+  const motivoTxt = TIPO_MOTIVO[input.tipo];
   const school = (input.schoolName || 'Colegio Privado Jean Piaget').trim();
   const parent = (input.parentName || '').trim();
   const grade = (input.grade || '—').trim();
   const section = (input.section || '—').trim();
   const level = (input.level || '—').trim();
   const code = (input.barcode || '').trim();
+  const countsClause = formatCountsClause(input.tipo, input.countsHint);
 
   const pdf = new jsPDF('portrait', 'mm', 'a4');
   const pageW = pdf.internal.pageSize.getWidth();
@@ -155,8 +174,8 @@ export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Pr
   // Título
   pdf.setTextColor(...JP.text);
   pdf.setFont('helvetica', 'bold');
-  pdf.setFontSize(16);
-  pdf.text('ACTA DE COMPROMISO FAMILIAR', pageW / 2, y, { align: 'center' });
+  pdf.setFontSize(15);
+  pdf.text('ACTA DE COMPROMISO DEL APODERADO', pageW / 2, y, { align: 'center' });
   y += 8;
 
   // Fecha (derecha, estilo comunicado)
@@ -166,11 +185,11 @@ export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Pr
   pdf.text(`Ayacucho, ${fechaTxt}.`, pageW - margin, y, { align: 'right' });
   y += 10;
 
-  // Saludo
+  // Destinatario institucional
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(11);
   pdf.setTextColor(...JP.text);
-  pdf.text('Estimado(a) padre / madre / apoderado(a):', margin, y);
+  pdf.text('Estimado(a) apoderado(a):', margin, y);
   y += 8;
 
   // Ficha del estudiante (ordenada)
@@ -224,11 +243,10 @@ export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Pr
   const lineH = 5.4;
 
   const intro = [
-    `Yo, ${parent || '________________________________'}, apoderado(a) del(la) estudiante`,
-    `señalado(a) en la ficha precedente, me presento ante las autoridades del ${school}`,
-    `por motivo de ${tipoTxt}` +
-      (input.countsHint ? ` (${input.countsHint})` : '') +
-      `.`,
+    `Por el presente documento, yo, ${parent || '________________________________'},`,
+    `en calidad de apoderado(a) del(la) estudiante identificado(a) en la ficha precedente,`,
+    `me presento ante la dirección del ${school} a fin de dejar constancia del compromiso`,
+    `asumido con motivo de ${motivoTxt}${countsClause}.`,
   ].join(' ');
 
   let lines = pdf.splitTextToSize(intro, contentW);
@@ -238,21 +256,45 @@ export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Pr
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(11);
   pdf.setTextColor(...JP.navy);
-  pdf.text('DECLARACIÓN Y COMPROMISO', margin, y);
+  pdf.text('I. DECLARACIÓN', margin, y);
   y += 7;
 
   pdf.setDrawColor(...JP.beige);
   pdf.setLineWidth(0.6);
-  pdf.line(margin, y - 3, margin + 55, y - 3);
+  pdf.line(margin, y - 3, margin + 32, y - 3);
+
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(10.5);
+  pdf.setTextColor(...JP.text);
+
+  const declaracion = [
+    'Declaro haber sido debidamente informado(a) por la institución educativa acerca de la situación del estudiante a mi cargo y de las medidas de seguimiento correspondientes.',
+  ];
+
+  for (const paragraph of declaracion) {
+    lines = pdf.splitTextToSize(paragraph, contentW);
+    pdf.text(lines, margin, y);
+    y += lines.length * lineH + 4;
+  }
+
+  y += 2;
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(11);
+  pdf.setTextColor(...JP.navy);
+  pdf.text('II. COMPROMISO', margin, y);
+  y += 7;
+  pdf.setDrawColor(...JP.beige);
+  pdf.setLineWidth(0.6);
+  pdf.line(margin, y - 3, margin + 36, y - 3);
 
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(10.5);
   pdf.setTextColor(...JP.text);
 
   const body = [
-    `Declaro haber sido informado(a) de la situación de mi hijo(a) y asumo el compromiso de ${TIPO_PROMESA[input.tipo]}.`,
-    'Me comprometo a no reiterar esta conducta y a colaborar con el colegio en el seguimiento respectivo.',
-    'Entiendo que, tras la firma de este documento, el colegio reinicia el aviso sonoro correspondiente, y que si se vuelve a alcanzar el umbral establecido (tardanzas, faltas o deuda de pensión), se me citará nuevamente.',
+    `En tal sentido, me comprometo a ${TIPO_COMPROMISO[input.tipo]}.`,
+    'Asimismo, me comprometo a colaborar con la institución educativa en el seguimiento respectivo y a cumplir las orientaciones que se me indiquen.',
+    'Quedo enterado(a) de que, con la suscripción del presente documento, se reinicia el registro de control correspondiente; y que, de volver a presentarse la misma situación, la institución procederá a una nueva citación.',
   ];
 
   for (const paragraph of body) {
@@ -287,7 +329,7 @@ export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Pr
   pdf.setFontSize(8);
   pdf.setTextColor(...JP.muted);
   lines = pdf.splitTextToSize(
-    'Documento institucional del Colegio Privado Jean Piaget — Ayacucho. Conservar una copia firmada en el expediente del estudiante.',
+    'Documento oficial del Colegio Privado Jean Piaget — Ayacucho. Archivar una copia firmada en el expediente del estudiante.',
     contentW,
   );
   pdf.text(lines, margin, y);

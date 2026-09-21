@@ -1,6 +1,7 @@
 import { supabase } from '../supabaseClient';
 import { DashboardStats, EducationalLevel } from '@/types';
 import { gradeFilterValues } from '@/lib/utils/gradeAliases';
+import { fetchAllPages } from '@/lib/utils/supabasePagination';
 
 type IncidentCountFilters = {
   estado?: string;
@@ -18,7 +19,8 @@ const DASHBOARD_INCIDENT_LEAN_SELECT = `
   catalogos_faltas:id_falta (nombre_falta)
 `;
 
-const DASHBOARD_LEAN_LIMIT = 12_000;
+/** PostgREST suele limitar a ~1000 filas por request; paginamos. */
+const PAGE_SIZE = 1000;
 
 type LeanDashboardIncident = {
   nivel_reincidencia: number;
@@ -31,26 +33,29 @@ async function fetchLeanActiveIncidents(options?: {
   fechaDesde?: string;
   fechaHasta?: string;
 }): Promise<LeanDashboardIncident[]> {
-  let query = supabase
-    .from('incidencias')
-    .select(DASHBOARD_INCIDENT_LEAN_SELECT)
-    .eq('estado', 'Activa')
-    .order('fecha_hora_registro', { ascending: false })
-    .limit(DASHBOARD_LEAN_LIMIT);
+  const { data, error } = await fetchAllPages<LeanDashboardIncident>(async (from, to) => {
+    let query = supabase
+      .from('incidencias')
+      .select(DASHBOARD_INCIDENT_LEAN_SELECT)
+      .eq('estado', 'Activa')
+      .order('fecha_hora_registro', { ascending: false })
+      .range(from, to);
 
-  if (options?.fechaDesde) {
-    query = query.gte('fecha_hora_registro', options.fechaDesde);
-  }
-  if (options?.fechaHasta) {
-    query = query.lte('fecha_hora_registro', options.fechaHasta);
-  }
+    if (options?.fechaDesde) {
+      query = query.gte('fecha_hora_registro', options.fechaDesde);
+    }
+    if (options?.fechaHasta) {
+      query = query.lte('fecha_hora_registro', options.fechaHasta);
+    }
 
-  const { data, error } = await query;
+    return query;
+  }, PAGE_SIZE);
+
   if (error) {
     console.error('Error al cargar incidencias del dashboard:', error);
     return [];
   }
-  return (data ?? []) as LeanDashboardIncident[];
+  return data;
 }
 
 function aggregateDashboardIncidents(
@@ -190,10 +195,10 @@ export const dashboardService = {
       const inicioSemana = new Date(hoy);
       inicioSemana.setDate(hoy.getDate() - hoy.getDay());
 
-      // 2 consultas en red (vista ejecutiva + filas ligeras) en lugar de 12+ conteos
+      // Vista ejecutiva + filas ligeras (paginadas; PostgREST trunca ~1000/request)
       const [{ data: executiveData }, leanRows] = await Promise.all([
         supabase.from('v_dashboard_ejecutivo').select('*').single(),
-        fetchLeanActiveIncidents(),
+        fetchLeanActiveIncidents({ fechaDesde, fechaHasta }),
       ]);
 
       const aggregated = aggregateDashboardIncidents(leanRows, {
@@ -275,17 +280,22 @@ export const dashboardService = {
         999,
       );
 
-      let query = supabase
-        .from('incidencias')
-        .select('fecha_hora_registro, estudiantes:id_estudiante(grado, nivel_educativo)')
-        .eq('estado', 'Activa')
-        .gte('fecha_hora_registro', rangeStart.toISOString())
-        .lte('fecha_hora_registro', rangeEnd.toISOString())
-        .limit(DASHBOARD_LEAN_LIMIT);
+      const { data, error } = await fetchAllPages<{
+        fecha_hora_registro: string;
+        estudiantes?: { grado?: string; nivel_educativo?: string } | null;
+      }>(async (from, to) => {
+        return supabase
+          .from('incidencias')
+          .select('fecha_hora_registro, estudiantes:id_estudiante(grado, nivel_educativo)')
+          .eq('estado', 'Activa')
+          .gte('fecha_hora_registro', rangeStart.toISOString())
+          .lte('fecha_hora_registro', rangeEnd.toISOString())
+          .order('fecha_hora_registro', { ascending: true })
+          .range(from, to);
+      }, PAGE_SIZE);
 
-      const { data, error } = await query;
       if (error) {
-        return { monthlyTrend: [], error: error.message };
+        return { monthlyTrend: [], error };
       }
 
       const buckets = months.map(({ month, year, label }) => ({
@@ -294,13 +304,12 @@ export const dashboardService = {
         key: `${year}-${month}`,
       }));
 
-      for (const row of data ?? []) {
-        const estudiante = (row as { estudiantes?: { grado?: string; nivel_educativo?: string } })
-          .estudiantes;
+      for (const row of data) {
+        const estudiante = row.estudiantes;
         if (level && estudiante?.nivel_educativo !== level) continue;
         if (grade && estudiante?.grado !== grade) continue;
 
-        const d = new Date((row as { fecha_hora_registro: string }).fecha_hora_registro);
+        const d = new Date(row.fecha_hora_registro);
         const key = `${d.getFullYear()}-${d.getMonth()}`;
         const bucket = buckets.find((b) => b.key === key);
         if (bucket) bucket.incidents += 1;
@@ -353,29 +362,33 @@ export const dashboardService = {
       const rangeEnd = new Date(weekDays[weekDays.length - 1].date);
       rangeEnd.setHours(23, 59, 59, 999);
 
-      let query = supabase
-        .from('incidencias')
-        .select('fecha_hora_registro, estudiantes:id_estudiante(grado, nivel_educativo)')
-        .eq('estado', 'Activa')
-        .gte('fecha_hora_registro', rangeStart.toISOString())
-        .lte('fecha_hora_registro', rangeEnd.toISOString())
-        .limit(5000);
+      const { data, error } = await fetchAllPages<{
+        fecha_hora_registro: string;
+        estudiantes?: { grado?: string; nivel_educativo?: string } | null;
+      }>(async (from, to) => {
+        return supabase
+          .from('incidencias')
+          .select('fecha_hora_registro, estudiantes:id_estudiante(grado, nivel_educativo)')
+          .eq('estado', 'Activa')
+          .gte('fecha_hora_registro', rangeStart.toISOString())
+          .lte('fecha_hora_registro', rangeEnd.toISOString())
+          .order('fecha_hora_registro', { ascending: true })
+          .range(from, to);
+      }, PAGE_SIZE);
 
-      const { data, error } = await query;
       if (error) {
-        return { weeklyData: [], error: error.message };
+        return { weeklyData: [], error };
       }
 
       const weeklyData = weekDays.map(({ date, label }) => {
         const startMs = new Date(date).setHours(0, 0, 0, 0);
         const endMs = new Date(date).setHours(23, 59, 59, 999);
         let count = 0;
-        for (const row of data ?? []) {
-          const estudiante = (row as { estudiantes?: { grado?: string; nivel_educativo?: string } })
-            .estudiantes;
+        for (const row of data) {
+          const estudiante = row.estudiantes;
           if (level && estudiante?.nivel_educativo !== level) continue;
           if (grade && estudiante?.grado !== grade) continue;
-          const ts = new Date((row as { fecha_hora_registro: string }).fecha_hora_registro).getTime();
+          const ts = new Date(row.fecha_hora_registro).getTime();
           if (ts >= startMs && ts <= endMs) count += 1;
         }
         return { day: label, count };
@@ -439,43 +452,51 @@ export const dashboardService = {
         if (studentIds.length === 0) return { comparison: [], error: null };
       }
 
-      let query = supabase
-        .from('incidencias')
-        .select(`
-          id_incidencia,
-          nivel_reincidencia,
-          id_estudiante,
-          estudiantes:id_estudiante (grado, seccion, nivel_educativo)
-        `)
-        .eq('estado', 'Activa')
-        .limit(DASHBOARD_LEAN_LIMIT);
+      const { data: incidencias, error } = await fetchAllPages<{
+        id_incidencia: number;
+        nivel_reincidencia: number;
+        id_estudiante: number;
+        estudiantes: { grado: string | null; seccion: string | null; nivel_educativo: string | null } | null;
+      }>(async (from, to) => {
+        let query = supabase
+          .from('incidencias')
+          .select(`
+            id_incidencia,
+            nivel_reincidencia,
+            id_estudiante,
+            estudiantes:id_estudiante (grado, seccion, nivel_educativo)
+          `)
+          .eq('estado', 'Activa')
+          .order('id_incidencia', { ascending: true })
+          .range(from, to);
 
-      if (studentIds) {
-        query = query.in('id_estudiante', studentIds);
-      }
-      if (fechaDesde) {
-        query = query.gte('fecha_hora_registro', fechaDesde);
-      }
-      if (fechaHasta) {
-        query = query.lte('fecha_hora_registro', fechaHasta);
-      }
+        if (studentIds) {
+          query = query.in('id_estudiante', studentIds);
+        }
+        if (fechaDesde) {
+          query = query.gte('fecha_hora_registro', fechaDesde);
+        }
+        if (fechaHasta) {
+          query = query.lte('fecha_hora_registro', fechaHasta);
+        }
 
-      const { data: incidencias, error } = await query;
+        return query;
+      }, PAGE_SIZE);
 
       if (error) {
-        return { comparison: [], error: error.message };
+        return { comparison: [], error };
       }
 
       // Agrupar por grado y nivel educativo
       const gradeGroups: Record<string, {
         grade: string;
         level: EducationalLevel;
-        incidents: any[];
+        incidents: typeof incidencias;
         students: Set<number>;
         nivelReincidencia: number[];
       }> = {};
 
-      (incidencias || []).forEach((inc: any) => {
+      incidencias.forEach((inc) => {
         const estudiante = inc.estudiantes;
         if (!estudiante) return;
 
@@ -584,31 +605,39 @@ export const dashboardService = {
         if (studentIdsSection.length === 0) return { comparison: [], error: null };
       }
 
-      let query = supabase
-        .from('incidencias')
-        .select(`
-          id_incidencia,
-          nivel_reincidencia,
-          id_estudiante,
-          estudiantes:id_estudiante (grado, seccion, nivel_educativo)
-        `)
-        .eq('estado', 'Activa')
-        .limit(DASHBOARD_LEAN_LIMIT);
+      const { data: incidencias, error } = await fetchAllPages<{
+        id_incidencia: number;
+        nivel_reincidencia: number;
+        id_estudiante: number;
+        estudiantes: { grado: string | null; seccion: string | null; nivel_educativo: string | null } | null;
+      }>(async (from, to) => {
+        let query = supabase
+          .from('incidencias')
+          .select(`
+            id_incidencia,
+            nivel_reincidencia,
+            id_estudiante,
+            estudiantes:id_estudiante (grado, seccion, nivel_educativo)
+          `)
+          .eq('estado', 'Activa')
+          .order('id_incidencia', { ascending: true })
+          .range(from, to);
 
-      if (studentIdsSection) {
-        query = query.in('id_estudiante', studentIdsSection);
-      }
-      if (fechaDesde) {
-        query = query.gte('fecha_hora_registro', fechaDesde);
-      }
-      if (fechaHasta) {
-        query = query.lte('fecha_hora_registro', fechaHasta);
-      }
+        if (studentIdsSection) {
+          query = query.in('id_estudiante', studentIdsSection);
+        }
+        if (fechaDesde) {
+          query = query.gte('fecha_hora_registro', fechaDesde);
+        }
+        if (fechaHasta) {
+          query = query.lte('fecha_hora_registro', fechaHasta);
+        }
 
-      const { data: incidencias, error } = await query;
+        return query;
+      }, PAGE_SIZE);
 
       if (error) {
-        return { comparison: [], error: error.message };
+        return { comparison: [], error };
       }
 
       // Agrupar por sección, grado y nivel educativo
@@ -616,12 +645,12 @@ export const dashboardService = {
         section: string;
         grade: string;
         level: EducationalLevel;
-        incidents: any[];
+        incidents: typeof incidencias;
         students: Set<number>;
         nivelReincidencia: number[];
       }> = {};
 
-      (incidencias || []).forEach((inc: any) => {
+      incidencias.forEach((inc) => {
         const estudiante = inc.estudiantes;
         if (!estudiante) return;
 
