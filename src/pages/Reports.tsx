@@ -57,37 +57,21 @@ export const Reports = () => {
   const { data: reportsData, isLoading, isFetching, refetch } = useQuery({
     queryKey: queryKeys.reports.all(reportFilters),
     queryFn: async () => {
-      const statsFilters: { bimestre?: number; añoEscolar?: number } = {};
-      if (reportFilters.bimestre) {
-        statsFilters.bimestre = reportFilters.bimestre;
-        statsFilters.añoEscolar = reportFilters.añoEscolar;
-      }
+      const page = await dashboardService.getReportsPage({
+        añoEscolar: reportFilters.añoEscolar,
+        bimestre: reportFilters.bimestre,
+        level: reportFilters.level,
+        grade: reportFilters.grade,
+      });
 
-      const [statsResult, trendResult, weeklyResult, gradeResult, sectionResult] = await Promise.all([
-        dashboardService.getDashboardStats(statsFilters),
-        dashboardService.getMonthlyTrend(reportFilters.añoEscolar, reportFilters.level, reportFilters.grade),
-        dashboardService.getWeeklyData(reportFilters.level, reportFilters.grade),
-        dashboardService.getComparisonByGrade({
-          level: reportFilters.level,
-          bimestre: reportFilters.bimestre,
-          añoEscolar: reportFilters.bimestre ? reportFilters.añoEscolar : undefined,
-        }),
-        dashboardService.getComparisonBySection({
-          level: reportFilters.level,
-          grade: reportFilters.grade,
-          bimestre: reportFilters.bimestre,
-          añoEscolar: reportFilters.bimestre ? reportFilters.añoEscolar : undefined,
-        }),
-      ]);
-
-      if (statsResult.error) toast.error('Error al cargar estadísticas');
+      if (page.error) toast.error('Error al cargar estadísticas');
 
       return {
-        stats: statsResult.stats,
-        monthlyTrend: trendResult.monthlyTrend ?? [],
-        weeklyData: weeklyResult.weeklyData ?? [],
-        comparisonByGrade: gradeResult.comparison ?? [],
-        comparisonBySection: sectionResult.comparison ?? [],
+        stats: page.stats,
+        monthlyTrend: page.monthlyTrend ?? [],
+        weeklyData: page.weeklyData ?? [],
+        comparisonByGrade: page.byGrade ?? [],
+        comparisonBySection: page.bySection ?? [],
       };
     },
     staleTime: 5 * 60 * 1000,
