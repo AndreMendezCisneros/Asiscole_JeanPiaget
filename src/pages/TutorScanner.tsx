@@ -794,7 +794,7 @@ export const TutorScanner = () => {
         });
       }
 
-      // Alarma deuda: faltas / carnet / ≥3 tardanzas / pensión — no bloquea registro.
+      // Alarma deuda: faltas / carnet / ≥5 tardanzas / pensión — no bloquea registro.
       // Se reinicia solo con compromiso firmado del apoderado (/compromisos-alarma).
       if (isDebtAlarmEnabled()) {
         void (async () => {

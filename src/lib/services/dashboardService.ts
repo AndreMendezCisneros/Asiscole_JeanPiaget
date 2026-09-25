@@ -2,6 +2,12 @@ import { supabase } from '../supabaseClient';
 import { DashboardStats, EducationalLevel } from '@/types';
 import { gradeFilterValues } from '@/lib/utils/gradeAliases';
 import { getBimestreDates, getCurrentSchoolYear } from '@/lib/utils/bimestreUtils';
+import { fetchAllPages } from '@/lib/utils/supabasePagination';
+import {
+  getLimaDayRangeISO,
+  getLimaTodayDate,
+  getMonthBounds,
+} from '@/lib/utils/limaDateTime';
 
 /** PostgREST suele limitar a ~1000 filas por request; paginamos. */
 const PAGE_SIZE = 1000;
@@ -88,6 +94,68 @@ function emptyStats(): DashboardStats {
   };
 }
 
+const MONTH_LABELS_ES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+/** Meses del año escolar (marzo → mes actual Lima), máx. 8 barras. */
+function buildDashboardMonthWindow(): Array<{ year: number; month: number; label: string; key: string }> {
+  const todayKey = getLimaTodayDate();
+  const [cy, cm] = todayKey.split('-').map(Number);
+  const schoolYear = cm <= 2 ? cy - 1 : cy;
+
+  const months: Array<{ year: number; month: number; label: string; key: string }> = [];
+  let y = schoolYear;
+  let m = 3;
+  while (y < cy || (y === cy && m <= cm)) {
+    months.push({
+      year: y,
+      month: m,
+      label: MONTH_LABELS_ES[m - 1],
+      key: `${y}-${m}`,
+    });
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+    if (months.length > 12) break;
+  }
+
+  return months.length > 8 ? months.slice(-8) : months;
+}
+
+/** YYYY-MM desde timestamp DB (con o sin zona). */
+function registroMonthKey(fecha: string): string {
+  const raw = String(fecha ?? '').trim();
+  if (/^\d{4}-\d{2}/.test(raw)) {
+    return `${raw.slice(0, 4)}-${Number(raw.slice(5, 7))}`;
+  }
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Lima',
+    year: 'numeric',
+    month: 'numeric',
+  }).formatToParts(d);
+  const yy = parts.find((p) => p.type === 'year')?.value;
+  const mm = parts.find((p) => p.type === 'month')?.value;
+  return yy && mm ? `${yy}-${mm}` : '';
+}
+
+function bucketMonthlyTrend(
+  rows: FlatIncident[],
+  months: Array<{ label: string; key: string }>,
+): { month: string; incidents: number }[] {
+  const buckets = new Map(months.map((m) => [m.key, 0]));
+  for (const row of rows) {
+    const key = registroMonthKey(row.fecha_hora_registro);
+    if (buckets.has(key)) buckets.set(key, (buckets.get(key) || 0) + 1);
+  }
+  return months.map(({ label, key }) => ({
+    month: label,
+    incidents: buckets.get(key) || 0,
+  }));
+}
+
 function isMissingRpcError(message?: string | null): boolean {
   if (!message) return false;
   const m = message.toLowerCase();
@@ -129,7 +197,7 @@ function resolveReportDateRange(filters?: {
 }
 
 async function fetchFlatActiveIncidents(options?: DateRange & { studentIds?: number[] }): Promise<FlatIncident[]> {
-  const fetchPage = async (from: number, to: number) => {
+  const { data, error } = await fetchAllPages<FlatIncident>(async (from, to) => {
     let query = supabase
       .from('incidencias')
       .select('nivel_reincidencia, fecha_hora_registro, id_estudiante, id_falta')
@@ -142,47 +210,13 @@ async function fetchFlatActiveIncidents(options?: DateRange & { studentIds?: num
     if (options?.studentIds?.length) query = query.in('id_estudiante', options.studentIds);
 
     return query;
-  };
+  }, PAGE_SIZE);
 
-  // Primera página
-  const first = await fetchPage(0, PAGE_SIZE - 1);
-  if (first.error) {
-    console.error('Error al cargar incidencias del dashboard:', first.error);
+  if (error) {
+    console.error('Error al cargar incidencias del dashboard:', error);
     return [];
   }
-  const rows: FlatIncident[] = [...(first.data ?? [])];
-  if (rows.length < PAGE_SIZE) return rows;
-
-  // Siguientes páginas en lotes paralelos (4 a la vez) — corta latencia secuencial
-  let from = PAGE_SIZE;
-  const PARALLEL = 4;
-  while (true) {
-    const batch = await Promise.all(
-      Array.from({ length: PARALLEL }, (_, i) => {
-        const start = from + i * PAGE_SIZE;
-        return fetchPage(start, start + PAGE_SIZE - 1);
-      }),
-    );
-
-    let exhausted = false;
-    for (const page of batch) {
-      if (page.error) {
-        console.error('Error al paginar incidencias:', page.error);
-        exhausted = true;
-        break;
-      }
-      const data = page.data ?? [];
-      rows.push(...data);
-      if (data.length < PAGE_SIZE) {
-        exhausted = true;
-        break;
-      }
-    }
-    if (exhausted) break;
-    from += PARALLEL * PAGE_SIZE;
-  }
-
-  return rows;
+  return data;
 }
 
 async function fetchStudentsMap(ids: number[]): Promise<Map<number, StudentMeta>> {
@@ -238,12 +272,14 @@ async function fetchFaultNamesMap(ids: Array<number | null>): Promise<Map<number
 async function resolveStudentIds(filters?: {
   level?: EducationalLevel;
   grade?: string;
+  section?: string;
 }): Promise<number[] | undefined> {
-  if (!filters?.level && !filters?.grade) return undefined;
+  if (!filters?.level && !filters?.grade && !filters?.section) return undefined;
 
   let q = supabase.from('estudiantes').select('id_estudiante');
   if (filters.level) q = q.eq('nivel_educativo', filters.level);
   if (filters.grade) q = q.in('grado', gradeFilterValues(filters.grade));
+  if (filters.section) q = q.eq('seccion', filters.section);
 
   const { data, error } = await q;
   if (error) {
@@ -518,15 +554,28 @@ export const dashboardService = {
   }): Promise<{ stats: DashboardStats | null; error: string | null }> {
     try {
       const { fechaDesde, fechaHasta } = resolveReportDateRange(filters);
+      const todayKey = getLimaTodayDate();
+      const { desde: hoyDesde } = getLimaDayRangeISO(todayKey);
+      const hoy = new Date(hoyDesde);
 
-      const hoy = new Date();
-      hoy.setHours(0, 0, 0, 0);
-      const inicioSemana = new Date(hoy);
-      inicioSemana.setDate(hoy.getDate() - hoy.getDay());
+      const [y, m, d] = todayKey.split('-').map(Number);
+      // Día de la semana en Lima (0=domingo) usando mediodía local
+      const limaDow = new Date(`${todayKey}T12:00:00-05:00`).getDay();
+      const sundayDay = d - limaDow;
+      const sundayDate = new Date(Date.UTC(y, m - 1, sundayDay));
+      const sundayKey = `${sundayDate.getUTCFullYear()}-${String(sundayDate.getUTCMonth() + 1).padStart(2, '0')}-${String(sundayDate.getUTCDate()).padStart(2, '0')}`;
+      const { desde: weekDesde } = getLimaDayRangeISO(sundayKey);
+      const inicioSemana = new Date(weekDesde);
 
-      const [{ data: executiveData }, leanRows] = await Promise.all([
-        supabase.from('v_dashboard_ejecutivo').select('*').single(),
+      const { start: monthStart } = getMonthBounds(y, m);
+      const { desde: monthDesde } = getLimaDayRangeISO(monthStart);
+      const monthMs = new Date(monthDesde).getTime();
+
+      const [leanRows, exactTotal] = await Promise.all([
         fetchFlatActiveIncidents({ fechaDesde, fechaHasta }),
+        fechaDesde && fechaHasta
+          ? countActiveIncidents({ fechaDesde, fechaHasta })
+          : Promise.resolve(0),
       ]);
 
       const [students, faults] = await Promise.all([
@@ -539,12 +588,20 @@ export const dashboardService = {
         inicioSemana,
       });
 
+      let monthCount = 0;
+      const affectedStudents = new Set<number>();
+      for (const row of leanRows) {
+        affectedStudents.add(row.id_estudiante);
+        if (new Date(row.fecha_hora_registro).getTime() >= monthMs) monthCount += 1;
+      }
+
       const stats: DashboardStats = {
-        totalIncidents: aggregated.totalCount,
+        // Preferir COUNT exacto (sin tope de filas); fallback a filas paginadas
+        totalIncidents: exactTotal > 0 ? exactTotal : aggregated.totalCount,
         incidentsToday: aggregated.todayCount,
         incidentsThisWeek: aggregated.weekCount,
-        incidentsThisMonth: executiveData?.total_incidencias_mes || 0,
-        studentsWithIncidents: executiveData?.estudiantes_afectados_mes || 0,
+        incidentsThisMonth: monthCount,
+        studentsWithIncidents: affectedStudents.size,
         averageReincidenceLevel: Math.round(aggregated.avgLevel * 100) / 100,
         levelDistribution: aggregated.levelDistribution,
         topFaults: aggregated.topFaults,
@@ -552,9 +609,10 @@ export const dashboardService = {
       };
 
       return { stats, error: null };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error al obtener estadísticas';
       console.error('Error en getDashboardStats:', error);
-      return { stats: null, error: error.message || 'Error al obtener estadísticas' };
+      return { stats: null, error: message };
     }
   },
 
@@ -574,81 +632,76 @@ export const dashboardService = {
   },
 
   /**
-   * Tendencia mensual (últimos 5 meses).
-   * Sin filtro de aula: HEAD count por mes. Con filtro: una pasada flat del rango.
+   * Tendencia mensual del año escolar (marzo → hoy).
+   * Usa las mismas filas paginadas que el resto del dashboard (no HEAD count).
    */
   async getMonthlyTrend(
     year?: number,
     level?: EducationalLevel,
     grade?: string,
+    section?: string,
   ): Promise<{ monthlyTrend: { month: string; incidents: number }[]; error: string | null }> {
     try {
-      const now = new Date();
-      const currentYear = year || now.getFullYear();
-      const currentMonth = now.getMonth();
-
-      const monthLabels = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-      const months: { month: number; year: number; label: string; key: string }[] = [];
-      for (let i = 4; i >= 0; i--) {
-        const date = new Date(currentYear, currentMonth - i, 1);
-        months.push({
-          month: date.getMonth(),
-          year: date.getFullYear(),
-          label: monthLabels[date.getMonth()],
-          key: `${date.getFullYear()}-${date.getMonth()}`,
-        });
+      const months = buildDashboardMonthWindow();
+      if (months.length === 0) {
+        return { monthlyTrend: [], error: null };
       }
 
-      const studentIds = await resolveStudentIds({ level, grade });
+      // Si pasan año escolar explícito (reportes), anclar marzo→febrero de ese año o hasta hoy
+      let window = months;
+      if (year) {
+        const todayKey = getLimaTodayDate();
+        const [cy, cm] = todayKey.split('-').map(Number);
+        const endY = year === cy ? cy : year + 1;
+        const endM = year === cy ? cm : 2;
+        window = [];
+        let y = year;
+        let m = 3;
+        while (y < endY || (y === endY && m <= endM)) {
+          window.push({
+            year: y,
+            month: m,
+            label: MONTH_LABELS_ES[m - 1],
+            key: `${y}-${m}`,
+          });
+          m += 1;
+          if (m > 12) {
+            m = 1;
+            y += 1;
+          }
+          if (window.length > 12) break;
+        }
+        if (window.length > 8) window = window.slice(-8);
+      }
+
+      const studentIds = await resolveStudentIds({ level, grade, section });
       if (studentIds && studentIds.length === 0) {
         return {
-          monthlyTrend: months.map(({ label }) => ({ month: label, incidents: 0 })),
+          monthlyTrend: window.map(({ label }) => ({ month: label, incidents: 0 })),
           error: null,
         };
       }
 
-      // Vista global: 5 HEAD counts en paralelo (sin transferir filas).
-      if (!studentIds) {
-        const monthlyTrend = await Promise.all(
-          months.map(async ({ month, year: y, label }) => {
-            const start = new Date(y, month, 1, 0, 0, 0, 0);
-            const end = new Date(y, month + 1, 0, 23, 59, 59, 999);
-            const incidents = await countActiveIncidents({
-              fechaDesde: start.toISOString(),
-              fechaHasta: end.toISOString(),
-            });
-            return { month: label, incidents };
-          }),
-        );
-        return { monthlyTrend, error: null };
-      }
+      const first = window[0];
+      const last = window[window.length - 1];
+      // Mismo formato de fechas que resolveReportDateRange / schoolYearRange (probado con datos reales)
+      const fechaDesde = new Date(first.year, first.month - 1, 1, 0, 0, 0, 0).toISOString();
+      const fechaHasta = new Date(last.year, last.month, 0, 23, 59, 59, 999).toISOString();
 
-      const rangeStart = new Date(months[0].year, months[0].month, 1, 0, 0, 0, 0);
-      const last = months[months.length - 1];
-      const rangeEnd = new Date(last.year, last.month + 1, 0, 23, 59, 59, 999);
       const rows = await fetchFlatActiveIncidents({
-        fechaDesde: rangeStart.toISOString(),
-        fechaHasta: rangeEnd.toISOString(),
+        fechaDesde,
+        fechaHasta,
         studentIds,
       });
 
-      const buckets = new Map(months.map((m) => [m.key, 0]));
-      for (const row of rows) {
-        const d = new Date(row.fecha_hora_registro);
-        const key = `${d.getFullYear()}-${d.getMonth()}`;
-        if (buckets.has(key)) buckets.set(key, (buckets.get(key) || 0) + 1);
-      }
-
       return {
-        monthlyTrend: months.map(({ label, key }) => ({
-          month: label,
-          incidents: buckets.get(key) || 0,
-        })),
+        monthlyTrend: bucketMonthlyTrend(rows, window),
         error: null,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error al obtener tendencia mensual';
       console.error('Error en getMonthlyTrend:', error);
-      return { monthlyTrend: [], error: error.message || 'Error al obtener tendencia mensual' };
+      return { monthlyTrend: [], error: message };
     }
   },
 
@@ -658,6 +711,7 @@ export const dashboardService = {
   async getWeeklyData(
     level?: EducationalLevel,
     grade?: string,
+    section?: string,
   ): Promise<{ weeklyData: { day: string; count: number }[]; error: string | null }> {
     try {
       const now = new Date();
@@ -683,7 +737,7 @@ export const dashboardService = {
       }
       weekDays.sort((a, b) => a.date.getTime() - b.date.getTime());
 
-      const studentIds = await resolveStudentIds({ level, grade });
+      const studentIds = await resolveStudentIds({ level, grade, section });
       if (studentIds && studentIds.length === 0) {
         return {
           weeklyData: weekDays.map(({ label }) => ({ day: label, count: 0 })),
@@ -731,9 +785,12 @@ export const dashboardService = {
         })),
         error: null,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error en getWeeklyData:', error);
-      return { weeklyData: [], error: error.message || 'Error al obtener datos semanales' };
+      return {
+        weeklyData: [],
+        error: error instanceof Error ? error.message : 'Error al obtener datos semanales',
+      };
     }
   },
 
@@ -745,6 +802,7 @@ export const dashboardService = {
     añoEscolar?: number;
     level?: EducationalLevel;
     grade?: string;
+    section?: string;
   }): Promise<ReportsPageResult> {
     const range = resolveReportDateRange({
       bimestre: filters?.bimestre,
@@ -758,66 +816,72 @@ export const dashboardService = {
     inicioSemana.setDate(hoy.getDate() - hoy.getDay());
     const grados = filters?.grade ? gradeFilterValues(filters.grade) : null;
 
+    // RPC actual no filtra por sección → usar cliente cuando hay sección
+    const canUseRpc = !filters?.section;
+
     // 1) Intentar RPC (1 round-trip + agregación en DB)
-    try {
-      const { data, error } = await supabase.rpc('sie_reportes_bundle', {
-        p_fecha_desde: range.fechaDesde,
-        p_fecha_hasta: range.fechaHasta,
-        p_nivel: filters?.level ?? null,
-        p_grados: grados,
-        p_hoy: hoy.toISOString(),
-        p_inicio_semana: inicioSemana.toISOString(),
-        p_meses: meses,
-        p_dias: dias,
-      });
+    if (canUseRpc) {
+      try {
+        const { data, error } = await supabase.rpc('sie_reportes_bundle', {
+          p_fecha_desde: range.fechaDesde,
+          p_fecha_hasta: range.fechaHasta,
+          p_nivel: filters?.level ?? null,
+          p_grados: grados,
+          p_hoy: hoy.toISOString(),
+          p_inicio_semana: inicioSemana.toISOString(),
+          p_meses: meses,
+          p_dias: dias,
+        });
 
-      if (!error && data && typeof data === 'object' && !(data as { error?: string }).error) {
-        const payload = data as Record<string, unknown>;
-        const ld = (payload.levelDistribution || {}) as Record<string, number>;
-        const stats: DashboardStats = {
-          totalIncidents: Number(payload.totalIncidents) || 0,
-          incidentsToday: Number(payload.incidentsToday) || 0,
-          incidentsThisWeek: Number(payload.incidentsThisWeek) || 0,
-          incidentsThisMonth: Number(payload.incidentsThisMonth) || 0,
-          studentsWithIncidents: Number(payload.studentsWithIncidents) || 0,
-          averageReincidenceLevel: Number(payload.averageReincidenceLevel) || 0,
-          levelDistribution: {
-            level0: Number(ld.level0) || 0,
-            level1: Number(ld.level1) || 0,
-            level2: Number(ld.level2) || 0,
-            level3: Number(ld.level3) || 0,
-            level4: Number(ld.level4) || 0,
-            level5: Number(ld.level5) || 0,
-          },
-          topFaults: (payload.topFaults as DashboardStats['topFaults']) || [],
-          incidentsByGrade: (payload.incidentsByGrade as DashboardStats['incidentsByGrade']) || [],
-        };
+        if (!error && data && typeof data === 'object' && !(data as { error?: string }).error) {
+          const payload = data as Record<string, unknown>;
+          const ld = (payload.levelDistribution || {}) as Record<string, number>;
+          const stats: DashboardStats = {
+            totalIncidents: Number(payload.totalIncidents) || 0,
+            incidentsToday: Number(payload.incidentsToday) || 0,
+            incidentsThisWeek: Number(payload.incidentsThisWeek) || 0,
+            incidentsThisMonth: Number(payload.incidentsThisMonth) || 0,
+            studentsWithIncidents: Number(payload.studentsWithIncidents) || 0,
+            averageReincidenceLevel: Number(payload.averageReincidenceLevel) || 0,
+            levelDistribution: {
+              level0: Number(ld.level0) || 0,
+              level1: Number(ld.level1) || 0,
+              level2: Number(ld.level2) || 0,
+              level3: Number(ld.level3) || 0,
+              level4: Number(ld.level4) || 0,
+              level5: Number(ld.level5) || 0,
+            },
+            topFaults: (payload.topFaults as DashboardStats['topFaults']) || [],
+            incidentsByGrade: (payload.incidentsByGrade as DashboardStats['incidentsByGrade']) || [],
+          };
 
-        return {
-          stats,
-          byGrade: (payload.byGrade as GradeComparisonRow[]) || [],
-          bySection: (payload.bySection as SectionComparisonRow[]) || [],
-          monthlyTrend: (payload.monthlyTrend as { month: string; incidents: number }[]) || [],
-          weeklyData: (payload.weeklyData as { day: string; count: number }[]) || [],
-          error: null,
-          source: 'rpc',
-        };
-      }
+          return {
+            stats,
+            byGrade: (payload.byGrade as GradeComparisonRow[]) || [],
+            bySection: (payload.bySection as SectionComparisonRow[]) || [],
+            monthlyTrend: (payload.monthlyTrend as { month: string; incidents: number }[]) || [],
+            weeklyData: (payload.weeklyData as { day: string; count: number }[]) || [],
+            error: null,
+            source: 'rpc',
+          };
+        }
 
-      if (error && !isMissingRpcError(error.message)) {
-        console.warn('[reportes] RPC falló, usando fallback cliente:', error.message);
-      }
-    } catch (err: any) {
-      if (!isMissingRpcError(err?.message)) {
-        console.warn('[reportes] RPC no disponible, fallback cliente:', err?.message);
+        if (error && !isMissingRpcError(error.message)) {
+          console.warn('[reportes] RPC falló, usando fallback cliente:', error.message);
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (!isMissingRpcError(message)) {
+          console.warn('[reportes] RPC no disponible, fallback cliente:', message);
+        }
       }
     }
 
     // 2) Fallback: una pasada flat + head counts (más lento)
     const [bundle, trendResult, weeklyResult] = await Promise.all([
       this.getReportsBundleClient(filters),
-      this.getMonthlyTrend(filters?.añoEscolar, filters?.level, filters?.grade),
-      this.getWeeklyData(filters?.level, filters?.grade),
+      this.getMonthlyTrend(filters?.añoEscolar, filters?.level, filters?.grade, filters?.section),
+      this.getWeeklyData(filters?.level, filters?.grade, filters?.section),
     ]);
 
     return {
@@ -839,6 +903,7 @@ export const dashboardService = {
     añoEscolar?: number;
     level?: EducationalLevel;
     grade?: string;
+    section?: string;
   }): Promise<{
     stats: DashboardStats | null;
     byGrade: GradeComparisonRow[];
@@ -859,6 +924,7 @@ export const dashboardService = {
     añoEscolar?: number;
     level?: EducationalLevel;
     grade?: string;
+    section?: string;
   }): Promise<{
     stats: DashboardStats | null;
     byGrade: GradeComparisonRow[];
@@ -874,6 +940,7 @@ export const dashboardService = {
       const studentIds = await resolveStudentIds({
         level: filters?.level,
         grade: filters?.grade,
+        section: filters?.section,
       });
       if (studentIds && studentIds.length === 0) {
         return { stats: emptyStats(), byGrade: [], bySection: [], error: null };
@@ -884,10 +951,7 @@ export const dashboardService = {
       const inicioSemana = new Date(hoy);
       inicioSemana.setDate(hoy.getDate() - hoy.getDay());
 
-      const [{ data: executiveData }, leanRows] = await Promise.all([
-        supabase.from('v_dashboard_ejecutivo').select('*').single(),
-        fetchFlatActiveIncidents({ ...range, studentIds }),
-      ]);
+      const leanRows = await fetchFlatActiveIncidents({ ...range, studentIds });
 
       const [students, faults] = await Promise.all([
         fetchStudentsMap(leanRows.map((r) => r.id_estudiante)),
@@ -900,12 +964,22 @@ export const dashboardService = {
       });
       const { byGrade, bySection } = buildComparisons(leanRows, students);
 
+      const todayKey = getLimaTodayDate();
+      const [yy, mm] = todayKey.split('-').map(Number);
+      const monthMs = new Date(getLimaDayRangeISO(getMonthBounds(yy, mm).start).desde).getTime();
+      let monthCount = 0;
+      const affectedStudents = new Set<number>();
+      for (const row of leanRows) {
+        affectedStudents.add(row.id_estudiante);
+        if (new Date(row.fecha_hora_registro).getTime() >= monthMs) monthCount += 1;
+      }
+
       const stats: DashboardStats = {
         totalIncidents: aggregated.totalCount,
         incidentsToday: aggregated.todayCount,
         incidentsThisWeek: aggregated.weekCount,
-        incidentsThisMonth: executiveData?.total_incidencias_mes || 0,
-        studentsWithIncidents: executiveData?.estudiantes_afectados_mes || 0,
+        incidentsThisMonth: monthCount,
+        studentsWithIncidents: affectedStudents.size,
         averageReincidenceLevel: Math.round(aggregated.avgLevel * 100) / 100,
         levelDistribution: aggregated.levelDistribution,
         topFaults: aggregated.topFaults,
@@ -913,13 +987,13 @@ export const dashboardService = {
       };
 
       return { stats, byGrade, bySection, error: null };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error en getReportsBundleClient:', error);
       return {
         stats: null,
         byGrade: [],
         bySection: [],
-        error: error.message || 'Error al obtener reportes',
+        error: error instanceof Error ? error.message : 'Error al obtener reportes',
       };
     }
   },
@@ -930,6 +1004,7 @@ export const dashboardService = {
   async getComparisons(filters?: {
     level?: EducationalLevel;
     grade?: string;
+    section?: string;
     bimestre?: number;
     añoEscolar?: number;
   }): Promise<{
@@ -946,6 +1021,7 @@ export const dashboardService = {
       const studentIds = await resolveStudentIds({
         level: filters?.level,
         grade: filters?.grade,
+        section: filters?.section,
       });
       if (studentIds && studentIds.length === 0) {
         return { byGrade: [], bySection: [], error: null };
@@ -958,12 +1034,12 @@ export const dashboardService = {
       const students = await fetchStudentsMap(rows.map((r) => r.id_estudiante));
       const { byGrade, bySection } = buildComparisons(rows, students);
       return { byGrade, bySection, error: null };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error en getComparisons:', error);
       return {
         byGrade: [],
         bySection: [],
-        error: error.message || 'Error al obtener comparaciones',
+        error: error instanceof Error ? error.message : 'Error al obtener comparaciones',
       };
     }
   },

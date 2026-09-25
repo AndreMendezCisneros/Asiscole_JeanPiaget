@@ -19,25 +19,35 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Clock, Search, Users, CheckCircle, AlertCircle, Loader2, LogOut, LogIn } from 'lucide-react';
+import { Clock, Search, Users, CheckCircle, AlertCircle, Loader2, LogIn, LogOut, Pencil } from 'lucide-react';
 import {
   StaffKpiStat,
   StaffToolbar,
   StaffDataPanel,
   StaffDataPanelHeader,
   StaffEmptyState,
+  StaffTablePagination,
 } from '@/components/staff';
 import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { arrivalService, authService, studentsService, whatsappService } from '@/lib/services';
 import type { ArrivalRecord, EducationalLevel, EstudianteEstadoPension, Student } from '@/types';
 import { toast } from 'sonner';
 import { staffNotify } from '@/lib/utils/staffNotify';
 import { isPensionesEnabled } from '@/config/features';
 import { playPensionMorosoBeep } from '@/lib/utils/pensionBeep';
+import { useTablePagination } from '@/hooks/useTablePagination';
+import { TABLE_PAGE_SIZE } from '@/lib/constants/tablePagination';
 
 const GRADES = ['1ro', '2do', '3ro', '4to', '5to', '6to'];
 const SECTIONS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-const PAGE_SIZE = 15;
 
 type ArrivalStatusFilter = 'all' | 'A tiempo' | 'Tarde' | 'Sin registrar';
 
@@ -73,8 +83,11 @@ export const ArrivalControl = () => {
   const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('all');
   const [gradeFilter, setGradeFilter] = useState<'all' | string>('all');
   const [sectionFilter, setSectionFilter] = useState<'all' | string>('all');
-  const [currentPage, setCurrentPage] = useState(1);
   const [registeringStudentId, setRegisteringStudentId] = useState<number | null>(null);
+  const [editRecord, setEditRecord] = useState<ArrivalRecord | null>(null);
+  const [editStep, setEditStep] = useState<'ask' | 'edit'>('ask');
+  const [editTime, setEditTime] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
   const isMountedRef = useRef(true);
   const pensionesEnabled = isPensionesEnabled();
 
@@ -146,10 +159,8 @@ export const ArrivalControl = () => {
 
     setLoading(true);
     try {
-      const [{ records: arrivals, error }, studentsResult] = await Promise.all([
-        arrivalService.getArrivals({ date: selectedDate }),
-        loadActiveStudents(),
-      ]);
+      // Primero llegadas del día (rápido) → pintar tabla; estudiantes en paralelo después.
+      const { records: arrivals, error } = await arrivalService.getArrivals({ date: selectedDate });
 
       if (!isMountedRef.current) return;
 
@@ -159,6 +170,10 @@ export const ArrivalControl = () => {
       } else {
         setRecords(arrivals);
       }
+      setLoading(false);
+
+      const studentsResult = await loadActiveStudents();
+      if (!isMountedRef.current) return;
 
       if (studentsResult.error) {
         toast.error(`Error al cargar estudiantes activos: ${studentsResult.error}`);
@@ -172,10 +187,7 @@ export const ArrivalControl = () => {
       toast.error('Error al procesar las llegadas');
       setRecords([]);
       setActiveStudents([]);
-    } finally {
-      if (isMountedRef.current) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
   };
 
@@ -236,41 +248,47 @@ export const ArrivalControl = () => {
     }
   };
 
-  const handleRegisterDeparture = async (recordId: number) => {
-    if (!isMountedRef.current) return;
-    
-    const currentUser = authService.getCurrentUser();
-    if (!currentUser) {
-      toast.error('Debe estar autenticado para registrar salidas');
+  const closeEditArrival = () => {
+    if (savingEdit) return;
+    setEditRecord(null);
+    setEditStep('ask');
+    setEditTime('');
+  };
+
+  const openEditArrival = (record: ArrivalRecord) => {
+    const raw = (record.arrivalTime || '').slice(0, 5);
+    setEditTime(raw);
+    setEditStep('ask');
+    setEditRecord(record);
+  };
+
+  const handleConfirmEditArrival = async () => {
+    if (!editRecord || !isMountedRef.current) return;
+    if (!/^\d{2}:\d{2}$/.test(editTime)) {
+      toast.error('Ingrese una hora válida (HH:MM)');
       return;
     }
 
-    const existing = records.find((r) => r.id === recordId);
-
-    const { successCount, error, updatedIds, departureTime } =
-      await arrivalService.createBulkDepartureRecords([recordId], currentUser.id, 'Normal');
-
-    if (!isMountedRef.current) return;
-
-    if (error || successCount === 0) {
-      toast.error(error || 'No se pudo registrar la salida');
-    } else {
-      if (whatsappService.isEnabled() && existing?.student && updatedIds.includes(recordId)) {
-        void whatsappService
-          .notifyParentDeparture(existing.student, {
-            ...existing,
-            departureTime: departureTime || existing.departureTime,
-            departureType: 'Normal',
-          })
-          .then((wa) => {
-            if (!isMountedRef.current) return;
-            if (!wa.ok && wa.error) {
-              toast.warning(`WhatsApp: ${wa.error}`, { duration: 4500 });
-            }
-          });
+    setSavingEdit(true);
+    try {
+      const { record, error } = await arrivalService.updateArrivalTime(
+        editRecord.id,
+        editTime,
+        editRecord.student?.level,
+      );
+      if (!isMountedRef.current) return;
+      if (error || !record) {
+        toast.error(error || 'No se pudo editar la entrada');
+        return;
       }
-      staffNotify.success('¡Salida registrada!', 'El registro de asistencia quedó actualizado');
-      loadArrivals(); // Recargar los registros
+      staffNotify.success(
+        'Entrada actualizada',
+        `${editRecord.student?.fullName || 'Estudiante'}: ${editTime}`,
+      );
+      closeEditArrival();
+      loadArrivals();
+    } finally {
+      if (isMountedRef.current) setSavingEdit(false);
     }
   };
 
@@ -321,22 +339,28 @@ export const ArrivalControl = () => {
     return { total: registered.length, pending, onTime, late };
   }, [filteredRows]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const {
+    page: currentPage,
+    pageSize,
+    totalPages,
+    goToPage,
+    nextPage,
+    prevPage,
+    changePageSize,
+    resetPage,
+    sliceRange,
+  } = useTablePagination({
+    totalItems: filteredRows.length,
+    initialPageSize: TABLE_PAGE_SIZE,
+  });
 
   useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
-  }, [currentPage, totalPages]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, statusFilter, levelFilter, gradeFilter, sectionFilter, selectedDate]);
+    resetPage();
+  }, [searchTerm, statusFilter, levelFilter, gradeFilter, sectionFilter, selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const paginatedRows = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    return filteredRows.slice(start, start + PAGE_SIZE);
-  }, [filteredRows, currentPage]);
+    return filteredRows.slice(sliceRange.start, sliceRange.end);
+  }, [filteredRows, sliceRange.start, sliceRange.end]);
 
   const onTimePct =
     filteredStats.total > 0
@@ -344,9 +368,9 @@ export const ArrivalControl = () => {
       : 0;
 
   const visibleSummary =
-    filteredRows.length > PAGE_SIZE
-      ? `${filteredRows.length} visibles · página ${currentPage} de ${totalPages} · ${PAGE_SIZE} por página`
-      : `${filteredRows.length} visibles · ${PAGE_SIZE} por página`;
+    filteredRows.length > pageSize
+      ? `${filteredRows.length} visibles · página ${currentPage} de ${totalPages} · ${pageSize} por página`
+      : `${filteredRows.length} visibles · ${pageSize} por página`;
 
   return (
     <div className="app-page app-page-shell">
@@ -639,51 +663,114 @@ export const ArrivalControl = () => {
                       {record.registeredByUser?.fullName || 'Sistema'}
                     </TableCell>
                     <TableCell>
-                      {/* Con llegada y sin salida → Registrar Salida; con salida → vacío */}
-                      {!hasDeparture ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void handleRegisterDeparture(record.id)}
-                          className="gap-2"
-                        >
-                          <LogOut className="h-4 w-4" />
-                          Registrar Salida
-                        </Button>
-                      ) : null}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openEditArrival(record)}
+                        className="gap-2"
+                      >
+                        <Pencil className="h-4 w-4" />
+                        Editar entrada
+                      </Button>
                     </TableCell>
                   </TableRow>
                   );
                 })}
               </TableBody>
             </Table>
-            {totalPages > 1 && (
-              <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage <= 1}
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                >
-                  Anterior
-                </Button>
-                <span className="text-sm text-muted-foreground px-2">
-                  Página {currentPage} de {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage >= totalPages}
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                >
-                  Siguiente
-                </Button>
-              </div>
+            {filteredRows.length > pageSize && (
+              <StaffTablePagination
+                page={currentPage}
+                totalPages={totalPages}
+                pageSize={pageSize}
+                totalItems={filteredRows.length}
+                onPrev={prevPage}
+                onNext={nextPage}
+                onGoToPage={goToPage}
+                onPageSizeChange={changePageSize}
+              />
             )}
             </div>
           )}
         </div>
       </StaffDataPanel>
+
+      <Dialog
+        open={editRecord != null}
+        onOpenChange={(open) => {
+          if (!open) closeEditArrival();
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          {editStep === 'ask' ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>¿Editar esta entrada?</DialogTitle>
+                <DialogDescription>
+                  Confirme que va a modificar la hora de llegada del estudiante indicado.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="rounded-md border bg-muted/40 px-4 py-3 space-y-1">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Estudiante</p>
+                <p className="text-base font-semibold leading-snug">
+                  {editRecord?.student?.fullName || 'Estudiante sin nombre'}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {[editRecord?.student?.level, editRecord?.student?.grade, editRecord?.student?.section]
+                    .filter(Boolean)
+                    .join(' · ')}
+                  {editRecord?.arrivalTime ? ` · Hora actual: ${editRecord.arrivalTime}` : null}
+                </p>
+              </div>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button type="button" variant="outline" onClick={closeEditArrival}>
+                  Cancelar
+                </Button>
+                <Button type="button" onClick={() => setEditStep('edit')}>
+                  Sí, editar a este niño
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle>Confirmar nueva hora</DialogTitle>
+                <DialogDescription>
+                  Segunda confirmación: guarde la hora solo si corresponde a{' '}
+                  <span className="font-medium text-foreground">
+                    {editRecord?.student?.fullName || 'este estudiante'}
+                  </span>
+                  .
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2 py-2">
+                <Label htmlFor="edit-arrival-time">Nueva hora de llegada</Label>
+                <Input
+                  id="edit-arrival-time"
+                  type="time"
+                  value={editTime}
+                  onChange={(e) => setEditTime(e.target.value)}
+                  disabled={savingEdit}
+                />
+              </div>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setEditStep('ask')}
+                  disabled={savingEdit}
+                >
+                  Volver
+                </Button>
+                <Button type="button" onClick={() => void handleConfirmEditArrival()} disabled={savingEdit}>
+                  {savingEdit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Confirmar cambio
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

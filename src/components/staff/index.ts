@@ -15,3 +15,4 @@ export { StaffQuickActions, type StaffQuickAction } from './StaffQuickActions';
 export { StaffActivityItem } from './StaffActivityItem';
 export { StaffEmptyState } from './StaffEmptyState';
 export { StaffWorkflowSteps, type StaffWorkflowStep } from './StaffWorkflowSteps';
+export { StaffTablePagination } from './StaffTablePagination';

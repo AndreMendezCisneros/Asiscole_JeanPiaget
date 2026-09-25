@@ -5,6 +5,7 @@ import {
   isEventAfterBaseline,
 } from '@/lib/utils/debtAlarm';
 import { gradeFilterValues } from '@/lib/utils/gradeAliases';
+import { fetchAllPages } from '@/lib/utils/supabasePagination';
 import type { EducationalLevel } from '@/types';
 import type {
   CompromisoAlarma,
@@ -110,35 +111,6 @@ export const compromisosAlarmService = {
       const page = Math.max(1, filters?.page ?? 1);
       const pageSize = Math.max(5, Math.min(50, filters?.pageSize ?? 10));
 
-      let arrivalQ = supabase
-        .from('registros_llegada')
-        .select(
-          `
-          id_registro,
-          id_estudiante,
-          fecha,
-          estado,
-          estudiantes:id_estudiante (
-            id_estudiante,
-            codigo_barras,
-            nombre_completo,
-            grado,
-            seccion,
-            nivel_educativo,
-            activo,
-            nombre_responsable
-          )
-        `,
-        )
-        .in('estado', ['Tarde', 'Tarde justificada']);
-
-      if (filters?.date) arrivalQ = arrivalQ.eq('fecha', filters.date);
-
-      const { data: arrivals, error: arrErr } = await arrivalQ.limit(8000);
-      if (arrErr) {
-        return { rows: [], total: 0, citationCount: 0, error: arrErr.message };
-      }
-
       type EstJoin = {
         id_estudiante: number;
         codigo_barras: string | null;
@@ -155,6 +127,39 @@ export const compromisosAlarmService = {
         fecha: string;
         estudiantes?: EstJoin | EstJoin[] | null;
       };
+
+      const { data: arrivals, error: arrErr } = await fetchAllPages<ArrivalJoin>((from, to) => {
+        let arrivalQ = supabase
+          .from('registros_llegada')
+          .select(
+            `
+          id_registro,
+          id_estudiante,
+          fecha,
+          estado,
+          estudiantes:id_estudiante (
+            id_estudiante,
+            codigo_barras,
+            nombre_completo,
+            grado,
+            seccion,
+            nivel_educativo,
+            activo,
+            nombre_responsable
+          )
+        `,
+          )
+          .in('estado', ['Tarde', 'Tarde justificada'])
+          .order('fecha', { ascending: false })
+          .range(from, to);
+
+        if (filters?.date) arrivalQ = arrivalQ.eq('fecha', filters.date);
+        return arrivalQ;
+      });
+
+      if (arrErr) {
+        return { rows: [], total: 0, citationCount: 0, error: arrErr };
+      }
 
       const byStudent = new Map<number, { est: EstJoin; dates: string[] }>();
       const gradeValues = filters?.grade ? gradeFilterValues(filters.grade) : null;

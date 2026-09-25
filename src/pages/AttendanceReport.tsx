@@ -29,6 +29,7 @@ import {
   StaffDataPanel,
   StaffDataPanelHeader,
   StaffEmptyState,
+  StaffTablePagination,
 } from '@/components/staff';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -48,16 +49,8 @@ import { REPORT_LOGO_PATH } from '@/lib/utils/reportLogo';
 import { getCurrentSchoolYear, getAllBimestres, formatBimestreLabel, type Bimestre } from '@/lib/utils/bimestreUtils';
 import { CLASSROOM_FIELD_LABELS, CLASSROOM_GRADES, CLASSROOM_SECTIONS, CLASSROOM_LEVELS } from '@/lib/constants/classrooms';
 import { StudentSearchCombobox } from '@/components/students/StudentSearchCombobox';
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from '@/components/ui/pagination';
-
-const TABLE_PAGE_SIZE = 25;
+import { useTablePagination } from '@/hooks/useTablePagination';
+import { TABLE_PAGE_SIZE } from '@/lib/constants/tablePagination';
 
 const statusMap: Record<string, { label: string; className: string; description: string }> = {
   A_tiempo: { label: 'A', className: 'bg-emerald-100 text-emerald-700', description: 'A tiempo' },
@@ -113,7 +106,6 @@ export const AttendanceReport = () => {
   const [daysInMonth, setDaysInMonth] = useState<number>(new Date().getDate());
   const [loading, setLoading] = useState(false);
   const [hasQueried, setHasQueried] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
   const isMountedRef = useRef(true);
 
   const filtersReady = filtersAreComplete(
@@ -183,7 +175,6 @@ export const AttendanceReport = () => {
           setRows(narrowAttendanceToStudent(reportRows, selectedStudent?.id ?? null));
           setDaysInMonth(totalDays);
           setHasQueried(true);
-          setCurrentPage(1);
         }
       } else {
         const [yearStr, monthStr] = monthValue.split('-');
@@ -213,7 +204,6 @@ export const AttendanceReport = () => {
           setRows(narrowAttendanceToStudent(reportRows, selectedStudent?.id ?? null));
           setDaysInMonth(totalDays);
           setHasQueried(true);
-          setCurrentPage(1);
         }
       }
     } catch (error: any) {
@@ -239,23 +229,32 @@ export const AttendanceReport = () => {
   useEffect(() => {
     setHasQueried(false);
     setRows([]);
-    setCurrentPage(1);
   }, [reportType, monthValue, bimestre, añoEscolar, levelFilter, gradeFilter, sectionFilter, selectedStudent?.id]);
 
   const daysArray = useMemo(() => Array.from({ length: daysInMonth }, (_, idx) => idx + 1), [daysInMonth]);
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / TABLE_PAGE_SIZE));
-
-  const paginatedRows = useMemo(() => {
-    const start = (currentPage - 1) * TABLE_PAGE_SIZE;
-    return rows.slice(start, start + TABLE_PAGE_SIZE);
-  }, [rows, currentPage]);
+  const {
+    page: currentPage,
+    pageSize,
+    totalPages,
+    goToPage,
+    nextPage,
+    prevPage,
+    changePageSize,
+    resetPage,
+    sliceRange,
+  } = useTablePagination({
+    totalItems: rows.length,
+    initialPageSize: TABLE_PAGE_SIZE,
+  });
 
   useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
-  }, [currentPage, totalPages]);
+    resetPage();
+  }, [reportType, monthValue, bimestre, añoEscolar, levelFilter, gradeFilter, sectionFilter, selectedStudent?.id, hasQueried]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const paginatedRows = useMemo(() => {
+    return rows.slice(sliceRange.start, sliceRange.end);
+  }, [rows, sliceRange.start, sliceRange.end]);
 
   const totalsGlobal = useMemo(() => {
     return rows.reduce(
@@ -778,8 +777,8 @@ export const AttendanceReport = () => {
             description={
               !hasQueried
                 ? 'Configure los filtros y pulse Consultar'
-                : rows.length > TABLE_PAGE_SIZE
-                  ? `${rows.length} estudiantes · página ${currentPage} de ${totalPages} · ${TABLE_PAGE_SIZE} por página · ${daysInMonth} días`
+                : rows.length > pageSize
+                  ? `${rows.length} estudiantes · página ${currentPage} de ${totalPages} · ${pageSize} por página · ${daysInMonth} días`
                   : `${rows.length} estudiantes · ${daysInMonth} días en el período`
             }
           />
@@ -867,62 +866,17 @@ export const AttendanceReport = () => {
                   </tbody>
                 </table>
               </div>
-              {rows.length > TABLE_PAGE_SIZE && (
-                <Pagination className="mt-4">
-                  <PaginationContent>
-                    <PaginationItem>
-                      <PaginationPrevious
-                        href="#"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setCurrentPage((p) => Math.max(1, p - 1));
-                        }}
-                        className={currentPage <= 1 ? 'pointer-events-none opacity-50' : ''}
-                      />
-                    </PaginationItem>
-                    {Array.from({ length: totalPages }, (_, i) => i + 1)
-                      .filter(
-                        (p) =>
-                          p === 1 ||
-                          p === totalPages ||
-                          Math.abs(p - currentPage) <= 1,
-                      )
-                      .map((page, idx, arr) => {
-                        const prev = arr[idx - 1];
-                        return (
-                          <span key={page} className="contents">
-                            {prev !== undefined && page - prev > 1 && (
-                              <PaginationItem>
-                                <span className="px-2 text-muted-foreground">…</span>
-                              </PaginationItem>
-                            )}
-                            <PaginationItem>
-                              <PaginationLink
-                                href="#"
-                                isActive={page === currentPage}
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  setCurrentPage(page);
-                                }}
-                              >
-                                {page}
-                              </PaginationLink>
-                            </PaginationItem>
-                          </span>
-                        );
-                      })}
-                    <PaginationItem>
-                      <PaginationNext
-                        href="#"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setCurrentPage((p) => Math.min(totalPages, p + 1));
-                        }}
-                        className={currentPage >= totalPages ? 'pointer-events-none opacity-50' : ''}
-                      />
-                    </PaginationItem>
-                  </PaginationContent>
-                </Pagination>
+              {rows.length > pageSize && (
+                <StaffTablePagination
+                  page={currentPage}
+                  totalPages={totalPages}
+                  pageSize={pageSize}
+                  totalItems={rows.length}
+                  onPrev={prevPage}
+                  onNext={nextPage}
+                  onGoToPage={goToPage}
+                  onPageSizeChange={changePageSize}
+                />
               )}
               </>
             )}

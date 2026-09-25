@@ -9,6 +9,7 @@ import {
   StaffEmptyState,
   StaffKpiStat,
   StaffToolbar,
+  StaffTablePagination,
 } from '@/components/staff';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -39,14 +40,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from '@/components/ui/pagination';
-import {
   authService,
   compromisosAlarmService,
   incidentsService,
@@ -74,8 +67,8 @@ import type {
 } from '@/types/compromisoAlarma';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-
-const PAGE_SIZE = 10;
+import { useTablePagination } from '@/hooks/useTablePagination';
+import { TABLE_PAGE_SIZE } from '@/lib/constants/tablePagination';
 
 const TIPO_OPTIONS: { value: CompromisoAlarmaTipo; label: string; hint: string }[] = [
   {
@@ -118,12 +111,25 @@ export const CompromisosAlarma = () => {
   const [gradeFilter, setGradeFilter] = useState<'all' | string>('all');
   const [sectionFilter, setSectionFilter] = useState<'all' | string>('all');
   const [dateFilter, setDateFilter] = useState('');
-  const [page, setPage] = useState(1);
 
   const [listRows, setListRows] = useState<CompromisoTardanzaListRow[]>([]);
   const [listTotal, setListTotal] = useState(0);
   const [citationCount, setCitationCount] = useState(0);
   const [listLoading, setListLoading] = useState(true);
+
+  const {
+    page,
+    pageSize,
+    totalPages,
+    goToPage,
+    nextPage,
+    prevPage,
+    changePageSize,
+    resetPage,
+  } = useTablePagination({
+    totalItems: listTotal,
+    initialPageSize: TABLE_PAGE_SIZE,
+  });
 
   const [selected, setSelected] = useState<Student | null>(null);
   const [pagoMuted, setPagoMuted] = useState(false);
@@ -143,8 +149,6 @@ export const CompromisosAlarma = () => {
   const user = authService.getCurrentUser();
   const schoolName =
     (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() || 'Colegio Jean Piaget';
-
-  const totalPages = Math.max(1, Math.ceil(listTotal / PAGE_SIZE));
 
   const alerts = useMemo(
     () =>
@@ -173,7 +177,7 @@ export const CompromisosAlarma = () => {
           section: sectionFilter === 'all' ? undefined : sectionFilter,
           date: dateFilter || undefined,
           page,
-          pageSize: PAGE_SIZE,
+          pageSize,
         });
       if (error) toast.error(error);
       setListRows(rows);
@@ -182,15 +186,15 @@ export const CompromisosAlarma = () => {
     } finally {
       setListLoading(false);
     }
-  }, [debouncedSearch, levelFilter, gradeFilter, sectionFilter, dateFilter, page]);
+  }, [debouncedSearch, levelFilter, gradeFilter, sectionFilter, dateFilter, page, pageSize]);
 
   useEffect(() => {
     void loadList();
   }, [loadList]);
 
   useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, levelFilter, gradeFilter, sectionFilter, dateFilter]);
+    resetPage();
+  }, [debouncedSearch, levelFilter, gradeFilter, sectionFilter, dateFilter, resetPage]);
 
   const loadStudentData = useCallback(async (student: Student) => {
     setLoadingStudent(true);
@@ -259,7 +263,7 @@ export const CompromisosAlarma = () => {
     setLevelFilter('all');
     setGradeFilter('all');
     setSectionFilter('all');
-    setPage(1);
+    resetPage();
   };
 
   const countsHintForTipo = (t: CompromisoAlarmaTipo): string => {
@@ -318,17 +322,8 @@ export const CompromisosAlarma = () => {
     }
   };
 
-  const pageNumbers = useMemo(() => {
-    const maxButtons = 5;
-    if (totalPages <= maxButtons) {
-      return Array.from({ length: totalPages }, (_, i) => i + 1);
-    }
-    const start = Math.max(1, Math.min(page - 2, totalPages - maxButtons + 1));
-    return Array.from({ length: maxButtons }, (_, i) => start + i);
-  }, [page, totalPages]);
-
   return (
-    <div className="space-y-6">
+    <div className="app-page app-page-shell">
       <PageHeader
         title="Compromisos de alarma"
         description="Liste alumnos con llegadas tarde, imprima el acta para la firma del apoderado y registre el compromiso para reiniciar el aviso."
@@ -352,7 +347,7 @@ export const CompromisosAlarma = () => {
         <StaffKpiStat
           label="Página"
           value={`${page}/${totalPages}`}
-          hint={`${PAGE_SIZE} por página`}
+          hint={`${pageSize} por página`}
           icon={Search}
           tone="info"
         />
@@ -536,49 +531,17 @@ export const CompromisosAlarma = () => {
                   </TableBody>
                 </Table>
 
-                {totalPages > 1 && (
-                  <Pagination className="mt-4">
-                    <PaginationContent>
-                      <PaginationItem>
-                        <PaginationPrevious
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setPage((p) => Math.max(1, p - 1));
-                          }}
-                          aria-disabled={page <= 1}
-                          className={page <= 1 ? 'pointer-events-none opacity-50' : undefined}
-                        />
-                      </PaginationItem>
-                      {pageNumbers.map((n) => (
-                        <PaginationItem key={n}>
-                          <PaginationLink
-                            href="#"
-                            isActive={n === page}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              setPage(n);
-                            }}
-                          >
-                            {n}
-                          </PaginationLink>
-                        </PaginationItem>
-                      ))}
-                      <PaginationItem>
-                        <PaginationNext
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setPage((p) => Math.min(totalPages, p + 1));
-                          }}
-                          aria-disabled={page >= totalPages}
-                          className={
-                            page >= totalPages ? 'pointer-events-none opacity-50' : undefined
-                          }
-                        />
-                      </PaginationItem>
-                    </PaginationContent>
-                  </Pagination>
+                {listTotal > pageSize && (
+                  <StaffTablePagination
+                    page={page}
+                    totalPages={totalPages}
+                    pageSize={pageSize}
+                    totalItems={listTotal}
+                    onPrev={prevPage}
+                    onNext={nextPage}
+                    onGoToPage={goToPage}
+                    onPageSizeChange={changePageSize}
+                  />
                 )}
               </>
             )}

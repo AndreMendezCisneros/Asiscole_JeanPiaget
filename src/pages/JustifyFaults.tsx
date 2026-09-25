@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   useInvalidateIncidents,
   useJustifyIncidentsQuery,
-  JUSTIFY_INCIDENTS_PAGE_SIZE,
 } from '@/hooks/queries/useIncidentsQuery';
 import { useInvalidateStudents } from '@/hooks/queries/useStudentsQuery';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -45,6 +44,7 @@ import {
   StaffDataPanel,
   StaffDataPanelHeader,
   StaffEmptyState,
+  StaffTablePagination,
 } from '@/components/staff';
 import { getLimaDayRangeISO } from '@/lib/utils/limaDateTime';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -56,19 +56,12 @@ import { es } from 'date-fns/locale';
 import { ReincidenceBadge } from '@/components/shared/ReincidenceBadge';
 import { SeverityBadge } from '@/components/shared/SeverityBadge';
 import { PageLoader } from '@/components/ui/page-loader';
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from '@/components/ui/pagination';
+import { useTablePagination } from '@/hooks/useTablePagination';
+import { TABLE_PAGE_SIZE } from '@/lib/constants/tablePagination';
 
 export const JustifyFaults = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearch = useDebouncedValue(searchTerm, 350);
-  const [currentPage, setCurrentPage] = useState(1);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [justificationReason, setJustificationReason] = useState('');
   const [justifying, setJustifying] = useState(false);
@@ -79,10 +72,26 @@ export const JustifyFaults = () => {
   const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'Activa' | 'Justificada'>('Activa');
   const [dateFilter, setDateFilter] = useState<string>('');
+  const [listTotal, setListTotal] = useState(0);
+
+  const {
+    page: currentPage,
+    pageSize,
+    totalPages,
+    goToPage,
+    nextPage,
+    prevPage,
+    changePageSize,
+    resetPage,
+  } = useTablePagination({
+    totalItems: listTotal,
+    initialPageSize: TABLE_PAGE_SIZE,
+  });
 
   const incidentFilters = useMemo(() => {
     const filters: {
       page: number;
+      pageSize: number;
       search?: string;
       estado?: 'Activa' | 'Justificada';
       nivelEducativo?: EducationalLevel;
@@ -90,6 +99,7 @@ export const JustifyFaults = () => {
       fechaHasta?: string;
     } = {
       page: currentPage,
+      pageSize,
       search: debouncedSearch.trim() || undefined,
       estado: statusFilter === 'all' ? undefined : statusFilter,
       nivelEducativo: levelFilter === 'all' ? undefined : levelFilter,
@@ -102,7 +112,7 @@ export const JustifyFaults = () => {
     }
 
     return filters;
-  }, [currentPage, debouncedSearch, statusFilter, levelFilter, dateFilter]);
+  }, [currentPage, pageSize, debouncedSearch, statusFilter, levelFilter, dateFilter]);
 
   const {
     data: pageData,
@@ -116,8 +126,12 @@ export const JustifyFaults = () => {
   const totalRecords = pageData?.total ?? 0;
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [levelFilter, statusFilter, dateFilter, debouncedSearch]);
+    setListTotal(totalRecords);
+  }, [totalRecords]);
+
+  useEffect(() => {
+    resetPage();
+  }, [levelFilter, statusFilter, dateFilter, debouncedSearch]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (isError) {
@@ -171,7 +185,6 @@ export const JustifyFaults = () => {
     }
   };
 
-  const totalPages = Math.max(1, Math.ceil(totalRecords / JUSTIFY_INCIDENTS_PAGE_SIZE));
   const activeOnPage = incidents.filter((i) => i.status === 'Activa').length;
   const justifiedOnPage = incidents.filter((i) => i.status === 'Justificada').length;
 
@@ -503,36 +516,17 @@ export const JustifyFaults = () => {
             </Table>
             </div>
           )}
-          {totalRecords > JUSTIFY_INCIDENTS_PAGE_SIZE && (
-            <Pagination className="mt-4">
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setCurrentPage((p) => Math.max(1, p - 1));
-                    }}
-                    className={currentPage <= 1 ? 'pointer-events-none opacity-50' : ''}
-                  />
-                </PaginationItem>
-                <PaginationItem>
-                  <span className="px-3 text-sm text-muted-foreground">
-                    Página {currentPage} de {totalPages}
-                  </span>
-                </PaginationItem>
-                <PaginationItem>
-                  <PaginationNext
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setCurrentPage((p) => Math.min(totalPages, p + 1));
-                    }}
-                    className={currentPage >= totalPages ? 'pointer-events-none opacity-50' : ''}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
+          {totalRecords > pageSize && (
+            <StaffTablePagination
+              page={currentPage}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              totalItems={totalRecords}
+              onPrev={prevPage}
+              onNext={nextPage}
+              onGoToPage={goToPage}
+              onPageSizeChange={changePageSize}
+            />
           )}
         </div>
       </StaffDataPanel>

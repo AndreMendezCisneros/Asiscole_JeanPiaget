@@ -58,6 +58,7 @@ import {
   StaffDataPanel,
   StaffDataPanelHeader,
   StaffEmptyState,
+  StaffTablePagination,
 } from '@/components/staff';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { PageLoader } from '@/components/ui/page-loader';
@@ -70,15 +71,9 @@ import { toast } from 'sonner';
 import { studentsService } from '@/lib/services';
 import { prefetchSignedProfilePhotos } from '@/lib/utils/profilePhoto';
 import { Student, EducationalLevel } from '@/types';
-import { useStudentsQuery, useInvalidateStudents, STUDENTS_PAGE_SIZE } from '@/hooks/queries/useStudentsQuery';
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from '@/components/ui/pagination';
+import { useStudentsQuery, useInvalidateStudents } from '@/hooks/queries/useStudentsQuery';
+import { useTablePagination } from '@/hooks/useTablePagination';
+import { TABLE_PAGE_SIZE } from '@/lib/constants/tablePagination';
 
 import { CLASSROOM_GRADES, CLASSROOM_SECTIONS } from '@/lib/constants/classrooms';
 
@@ -112,7 +107,6 @@ export const StudentsList = () => {
   const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('all');
   const [gradeFilter, setGradeFilter] = useState<'all' | string>('all');
   const [sectionFilter, setSectionFilter] = useState<'all' | string>('all');
-  const [currentPage, setCurrentPage] = useState(1);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
@@ -166,9 +160,25 @@ export const StudentsList = () => {
     return () => clearTimeout(timeoutId);
   }, [searchTerm]);
 
+  const [listTotal, setListTotal] = useState(0);
+
+  const {
+    page: currentPage,
+    pageSize,
+    totalPages,
+    goToPage,
+    nextPage,
+    prevPage,
+    changePageSize,
+    resetPage,
+  } = useTablePagination({
+    totalItems: listTotal,
+    initialPageSize: TABLE_PAGE_SIZE,
+  });
+
   useEffect(() => {
-    setCurrentPage(1);
-  }, [debouncedSearch, levelFilter, gradeFilter, sectionFilter]);
+    resetPage();
+  }, [debouncedSearch, levelFilter, gradeFilter, sectionFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const studentFilters = useMemo(
     () => ({
@@ -177,8 +187,9 @@ export const StudentsList = () => {
       grade: gradeFilter === 'all' ? undefined : gradeFilter,
       section: sectionFilter === 'all' ? undefined : sectionFilter,
       page: currentPage,
+      pageSize,
     }),
-    [debouncedSearch, levelFilter, gradeFilter, sectionFilter, currentPage]
+    [debouncedSearch, levelFilter, gradeFilter, sectionFilter, currentPage, pageSize]
   );
 
   const {
@@ -192,7 +203,10 @@ export const StudentsList = () => {
   const students = data?.students ?? [];
   const totalStudents = data?.total ?? 0;
   const serverStats = data?.stats;
-  const totalPages = Math.max(1, Math.ceil(totalStudents / STUDENTS_PAGE_SIZE));
+
+  useEffect(() => {
+    setListTotal(totalStudents);
+  }, [totalStudents]);
 
   useEffect(() => {
     if (students.length > 0) {
@@ -212,12 +226,6 @@ export const StudentsList = () => {
       isMountedRef.current = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
-  }, [currentPage, totalPages]);
 
   const filteredStudents = students;
 
@@ -1165,8 +1173,8 @@ export const StudentsList = () => {
         <StaffDataPanelHeader
           title={`Estudiantes (${totalStudents})`}
           description={
-            totalStudents > STUDENTS_PAGE_SIZE
-              ? `Página ${currentPage} de ${totalPages} · ${STUDENTS_PAGE_SIZE} por página`
+            totalStudents > pageSize
+              ? `Página ${currentPage} de ${totalPages} · ${pageSize} por página`
               : 'Datos del alumno, contacto familiar y nivel de reincidencia'
           }
         />
@@ -1259,63 +1267,17 @@ export const StudentsList = () => {
               </TableBody>
             </Table>
             </div>
-            {totalStudents > STUDENTS_PAGE_SIZE && (
-              <Pagination className="mt-4">
-                <PaginationContent>
-                  <PaginationItem>
-                    <PaginationPrevious
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setCurrentPage((p) => Math.max(1, p - 1));
-                      }}
-                      className={currentPage <= 1 ? 'pointer-events-none opacity-50' : ''}
-                    />
-                  </PaginationItem>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1)
-                    .filter(
-                      (p) =>
-                        p === 1 ||
-                        p === totalPages ||
-                        Math.abs(p - currentPage) <= 1
-                    )
-                    .map((page, idx, arr) => {
-                      const prev = arr[idx - 1];
-                      const showEllipsis = prev !== undefined && page - prev > 1;
-                      return (
-                        <span key={page} className="contents">
-                          {showEllipsis && (
-                            <PaginationItem>
-                              <span className="px-2 text-muted-foreground">…</span>
-                            </PaginationItem>
-                          )}
-                          <PaginationItem>
-                            <PaginationLink
-                              href="#"
-                              isActive={page === currentPage}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                setCurrentPage(page);
-                              }}
-                            >
-                              {page}
-                            </PaginationLink>
-                          </PaginationItem>
-                        </span>
-                      );
-                    })}
-                  <PaginationItem>
-                    <PaginationNext
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setCurrentPage((p) => Math.min(totalPages, p + 1));
-                      }}
-                      className={currentPage >= totalPages ? 'pointer-events-none opacity-50' : ''}
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
+            {totalStudents > pageSize && (
+              <StaffTablePagination
+                page={currentPage}
+                totalPages={totalPages}
+                pageSize={pageSize}
+                totalItems={totalStudents}
+                onPrev={prevPage}
+                onNext={nextPage}
+                onGoToPage={goToPage}
+                onPageSizeChange={changePageSize}
+              />
             )}
             </>
           )}

@@ -6,13 +6,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Shield, ChevronLeft, ChevronRight, FileSpreadsheet, Plus, Pencil, Trash2, FileText, User, Clock3, Activity } from 'lucide-react';
+import { Shield, FileSpreadsheet, Plus, Pencil, Trash2, FileText, User, Clock3, Activity } from 'lucide-react';
 import {
   StaffKpiStat,
   StaffToolbar,
   StaffDataPanel,
   StaffDataPanelHeader,
   StaffEmptyState,
+  StaffTablePagination,
 } from '@/components/staff';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { auditService } from '@/lib/services';
@@ -20,6 +21,8 @@ import type { AuditLog } from '@/types';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useTablePagination } from '@/hooks/useTablePagination';
+import { TABLE_PAGE_SIZE } from '@/lib/constants/tablePagination';
 
 type ChangeRow = { field: string; before: string; after: string };
 
@@ -142,15 +145,34 @@ export const AuditLogs = () => {
   const [selectedOperation, setSelectedOperation] = useState<string>('');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
-  const [currentPage, setCurrentPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
-  const pageSize = 20;
+
+  const {
+    page: currentPage,
+    pageSize,
+    totalPages,
+    goToPage,
+    nextPage,
+    prevPage,
+    changePageSize,
+    resetPage,
+  } = useTablePagination({
+    totalItems: total,
+    initialPageSize: TABLE_PAGE_SIZE,
+  });
 
   useEffect(() => {
     void loadLogs();
+  }, [currentPage, pageSize, selectedTable, selectedOperation, startDate, endDate]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     loadStats();
-  }, [currentPage, selectedTable, selectedOperation, startDate, endDate]);
+  }, []);
+
+  useEffect(() => {
+    resetPage();
+  }, [selectedTable, selectedOperation, startDate, endDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadLogs = async (): Promise<void> => {
     setLoading(true);
@@ -200,7 +222,6 @@ export const AuditLogs = () => {
     }
   };
 
-  const totalPages = Math.ceil(total / pageSize);
   const selectedLogChanges = useMemo(() => (selectedLog ? getChangeRows(selectedLog) : []), [selectedLog]);
   const pageOperationCounts = useMemo(
     () => ({
@@ -276,7 +297,6 @@ export const AuditLogs = () => {
               <Label>Tabla</Label>
               <Select value={selectedTable} onValueChange={(value) => {
                 setSelectedTable(value === 'all' ? '' : value);
-                setCurrentPage(1);
               }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Todas las tablas" />
@@ -296,7 +316,6 @@ export const AuditLogs = () => {
               <Label>Operación</Label>
               <Select value={selectedOperation} onValueChange={(value) => {
                 setSelectedOperation(value === 'all' ? '' : value);
-                setCurrentPage(1);
               }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Todas las operaciones" />
@@ -317,7 +336,6 @@ export const AuditLogs = () => {
                 value={startDate}
                 onChange={(e) => {
                   setStartDate(e.target.value);
-                  setCurrentPage(1);
                 }}
               />
             </div>
@@ -329,7 +347,6 @@ export const AuditLogs = () => {
                 value={endDate}
                 onChange={(e) => {
                   setEndDate(e.target.value);
-                  setCurrentPage(1);
                 }}
               />
             </div>
@@ -368,7 +385,6 @@ export const AuditLogs = () => {
                   setSelectedOperation('');
                   setStartDate('');
                   setEndDate('');
-                  setCurrentPage(1);
                 }}
                 variant="outline"
                 className="w-full md:w-auto"
@@ -465,32 +481,17 @@ export const AuditLogs = () => {
           </div>
           )}
 
-          {totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
-              <p className="text-sm text-muted-foreground">
-                Página {currentPage} de {totalPages}
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                  Anterior
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                >
-                  Siguiente
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
+          {total > pageSize && (
+            <StaffTablePagination
+              page={currentPage}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              totalItems={total}
+              onPrev={prevPage}
+              onNext={nextPage}
+              onGoToPage={goToPage}
+              onPageSizeChange={changePageSize}
+            />
           )}
         </div>
       </StaffDataPanel>

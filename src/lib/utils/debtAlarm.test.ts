@@ -45,9 +45,9 @@ describe('isCarnetFaultName', () => {
 });
 
 describe('shouldAlertDebtFromCounts', () => {
-  it('alerta en umbrales ≥ 4 faltas/carnet y ≥ 3 tardes', () => {
+  it('alerta en umbrales ≥ 4 faltas/carnet y ≥ 5 tardes', () => {
     expect(
-      shouldAlertDebtFromCounts({ faltaCount: 3, carnetCount: 3, tardeCount: 2 }),
+      shouldAlertDebtFromCounts({ faltaCount: 3, carnetCount: 3, tardeCount: 4 }),
     ).toEqual({
       alertFalta: false,
       alertCarnet: false,
@@ -72,7 +72,7 @@ describe('shouldAlertDebtFromCounts', () => {
       alertTarde: false,
       alertPago: false,
     });
-    expect(shouldAlertDebtFromCounts({ faltaCount: 0, carnetCount: 0, tardeCount: 3 })).toEqual({
+    expect(shouldAlertDebtFromCounts({ faltaCount: 0, carnetCount: 0, tardeCount: 5 })).toEqual({
       alertFalta: false,
       alertCarnet: false,
       alertTarde: true,
@@ -107,7 +107,7 @@ describe('isEventAfterBaseline / countEventsAfterBaseline', () => {
     ).toBe(2);
   });
 
-  it('tras reset de 3 tardanzas, hace falta volver a juntar 3', () => {
+  it('tras reset de tardanzas, hace falta volver a juntar 5', () => {
     const baseline = '2026-09-14T18:00:00.000Z';
     const tardes = [
       { fecha: '2026-09-12' },
@@ -115,9 +115,11 @@ describe('isEventAfterBaseline / countEventsAfterBaseline', () => {
       { fecha: '2026-09-14' },
       { fecha: '2026-09-15' },
       { fecha: '2026-09-16' },
+      { fecha: '2026-09-17' },
+      { fecha: '2026-09-18' },
     ];
     const after = countEventsAfterBaseline(tardes, baseline, (d) => d.fecha);
-    expect(after).toBe(2);
+    expect(after).toBe(4);
     expect(
       shouldAlertDebtFromCounts({ faltaCount: 0, carnetCount: 0, tardeCount: after }),
     ).toEqual({
@@ -126,14 +128,14 @@ describe('isEventAfterBaseline / countEventsAfterBaseline', () => {
       alertTarde: false,
       alertPago: false,
     });
-    const withThird = countEventsAfterBaseline(
-      [...tardes, { fecha: '2026-09-17' }],
+    const withFifth = countEventsAfterBaseline(
+      [...tardes, { fecha: '2026-09-19' }],
       baseline,
       (d) => d.fecha,
     );
-    expect(withThird).toBe(3);
+    expect(withFifth).toBe(5);
     expect(
-      shouldAlertDebtFromCounts({ faltaCount: 0, carnetCount: 0, tardeCount: withThird }),
+      shouldAlertDebtFromCounts({ faltaCount: 0, carnetCount: 0, tardeCount: withFifth }),
     ).toEqual({
       alertFalta: false,
       alertCarnet: false,

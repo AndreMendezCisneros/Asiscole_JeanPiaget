@@ -10,6 +10,7 @@ export interface IncidentsListFilters {
   nivelEducativo?: EducationalLevel;
   search?: string;
   page?: number;
+  pageSize?: number;
   grado?: string;
   seccion?: string;
   estado?: EstadoIncidencia;
@@ -39,15 +40,16 @@ function toServiceFilters(filters: IncidentsListFilters) {
 
 export function useIncidentsQuery(filters: IncidentsListFilters = {}) {
   const page = filters.page ?? 1;
+  const pageSize = filters.pageSize ?? INCIDENTS_PAGE_SIZE;
   const serviceFilters = toServiceFilters(filters);
 
   return useQuery({
-    queryKey: queryKeys.incidents.list({ ...serviceFilters, page }),
+    queryKey: queryKeys.incidents.list({ ...serviceFilters, page, pageSize }),
     queryFn: async () => {
       const { incidents, total, error } = await incidentsService.getAll({
         ...serviceFilters,
         page,
-        pageSize: INCIDENTS_PAGE_SIZE,
+        pageSize,
       });
       if (error) throw new Error(error);
       return { incidents, total };
@@ -77,18 +79,20 @@ export interface JustifyIncidentsFilters {
   nivelEducativo?: EducationalLevel;
   search?: string;
   page?: number;
+  pageSize?: number;
   estado?: 'Activa' | 'Justificada';
   fechaDesde?: string;
   fechaHasta?: string;
 }
 
-export const JUSTIFY_INCIDENTS_PAGE_SIZE = 20;
+export const JUSTIFY_INCIDENTS_PAGE_SIZE = 10;
 
 export function useJustifyIncidentsQuery(filters: JustifyIncidentsFilters = {}) {
   const page = filters.page ?? 1;
+  const pageSize = filters.pageSize ?? JUSTIFY_INCIDENTS_PAGE_SIZE;
 
   return useQuery({
-    queryKey: queryKeys.incidents.justify({ ...filters, page }),
+    queryKey: queryKeys.incidents.justify({ ...filters, page, pageSize }),
     queryFn: async () => {
       const { incidents, total, error } = await incidentsService.getAll({
         nivelEducativo: filters.nivelEducativo,
@@ -97,7 +101,7 @@ export function useJustifyIncidentsQuery(filters: JustifyIncidentsFilters = {}) 
         fechaDesde: filters.fechaDesde,
         fechaHasta: filters.fechaHasta,
         page,
-        pageSize: JUSTIFY_INCIDENTS_PAGE_SIZE,
+        pageSize,
       });
       if (error) throw new Error(error);
       return { incidents, total };

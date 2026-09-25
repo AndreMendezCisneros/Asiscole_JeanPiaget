@@ -35,6 +35,7 @@ import {
   StaffDataPanel,
   StaffDataPanelHeader,
   StaffEmptyState,
+  StaffTablePagination,
 } from '@/components/staff';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { arrivalService, authService } from '@/lib/services';
@@ -56,16 +57,8 @@ import type { ArrivalRecord, EducationalLevel } from '@/types';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from '@/components/ui/pagination';
-
-const PAGE_SIZE = 15;
+import { useTablePagination } from '@/hooks/useTablePagination';
+import { TABLE_PAGE_SIZE } from '@/lib/constants/tablePagination';
 
 function formatArrivalDate(date: string, time?: string | null): { date: string; time: string } {
   try {
@@ -99,7 +92,6 @@ type ListMode = 'Activa' | 'Inasistencias';
 export const JustifyAttendance = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearch = useDebouncedValue(searchTerm, 250);
-  const [currentPage, setCurrentPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<ListMode>('Activa');
   const [dateFilter, setDateFilter] = useState('');
   const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('all');
@@ -190,17 +182,31 @@ export const JustifyAttendance = () => {
     void loadRecords();
   }, [loadRecords]);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [statusFilter, debouncedDateFilter, debouncedSearch, levelFilter, gradeFilter, sectionFilter]);
-
   const filtered = useMemo(() => {
     if (!debouncedSearch.trim()) return records;
     return records.filter((row) => studentMatchesNameOrClassroom(row.student, debouncedSearch));
   }, [records, debouncedSearch]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const {
+    page: currentPage,
+    pageSize,
+    totalPages,
+    goToPage,
+    nextPage,
+    prevPage,
+    changePageSize,
+    resetPage,
+    sliceRange,
+  } = useTablePagination({
+    totalItems: filtered.length,
+    initialPageSize: TABLE_PAGE_SIZE,
+  });
+
+  useEffect(() => {
+    resetPage();
+  }, [statusFilter, debouncedDateFilter, debouncedSearch, levelFilter, gradeFilter, sectionFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pageRows = filtered.slice(sliceRange.start, sliceRange.end);
 
   const handleJustify = async () => {
     if (!selectedRecord) return;
@@ -596,36 +602,17 @@ export const JustifyAttendance = () => {
               </Table>
             </div>
           )}
-          {filtered.length > PAGE_SIZE && (
-            <Pagination className="mt-4">
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setCurrentPage((p) => Math.max(1, p - 1));
-                    }}
-                    className={currentPage <= 1 ? 'pointer-events-none opacity-50' : ''}
-                  />
-                </PaginationItem>
-                <PaginationItem>
-                  <PaginationLink href="#" isActive>
-                    {currentPage} / {totalPages}
-                  </PaginationLink>
-                </PaginationItem>
-                <PaginationItem>
-                  <PaginationNext
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setCurrentPage((p) => Math.min(totalPages, p + 1));
-                    }}
-                    className={currentPage >= totalPages ? 'pointer-events-none opacity-50' : ''}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
+          {filtered.length > pageSize && (
+            <StaffTablePagination
+              page={currentPage}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              totalItems={filtered.length}
+              onPrev={prevPage}
+              onNext={nextPage}
+              onGoToPage={goToPage}
+              onPageSizeChange={changePageSize}
+            />
           )}
         </div>
       </StaffDataPanel>

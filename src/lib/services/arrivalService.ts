@@ -1,5 +1,5 @@
 import { supabase } from '../supabaseClient';
-import type { ArrivalRecord, RegistroLlegadaDB, Student, EducationalLevel, MonthlyAttendanceRow } from '@/types';
+import type { ArrivalRecord, RegistroLlegadaDB, Student, EducationalLevel, MonthlyAttendanceRow, UserRole } from '@/types';
 import { configService } from './configService';
 import { studentsService } from './studentsService';
 import { authService } from './authService';
@@ -27,6 +27,21 @@ import {
   studentRecordId,
   tallyAttendanceStatus,
 } from '@/lib/utils/attendanceJustification';
+import { fetchAllPages } from '@/lib/utils/supabasePagination';
+
+/** Select liviano para listados (sin contactos/usuario completos). */
+const ARRIVAL_LIST_SELECT = `
+  id_registro, id_estudiante, fecha, hora_llegada, hora_salida, tipo_salida, estado,
+  fecha_creacion, registrado_por, registrado_salida_por,
+  motivo_justificacion, justificado_por, fecha_justificacion,
+  estudiante:estudiantes!registros_llegada_id_estudiante_fkey(
+    id_estudiante, nombre_completo, grado, seccion, nivel_educativo, codigo_barras,
+    foto_perfil, activo, telefono_contacto
+  ),
+  usuario:usuarios!registros_llegada_registrado_por_fkey(
+    id_usuario, nombre_completo
+  )
+`;
 
 const ARRIVAL_LIMIT_CACHE_TTL = 15 * 60 * 1000;
 
@@ -72,11 +87,11 @@ function mapArrivalRecord(record: RegistroLlegadaDB & {
     registeredBy: record.registrado_por,
     registeredByUser: record.usuario ? {
       id: record.usuario.id_usuario,
-      username: record.usuario.username,
+      username: record.usuario.username ?? '',
       fullName: record.usuario.nombre_completo,
-      email: record.usuario.email,
-      role: record.usuario.rol,
-      active: record.usuario.activo,
+      email: record.usuario.email ?? '',
+      role: (record.usuario.rol as UserRole | undefined) ?? 'Tutor',
+      active: record.usuario.activo ?? true,
     } : undefined,
     createdAt: record.fecha_creacion,
     justificationReason: record.motivo_justificacion ?? null,
@@ -478,9 +493,71 @@ export async function createArrivalRecord(
       arrivalCreateLocks.delete(studentId);
     }
   });
-
   arrivalCreateLocks.set(studentId, task);
   return task;
+}
+
+/**
+ * Corrige la hora de entrada de un registro ya creado (y recalcula A tiempo / Tarde).
+ */
+export async function updateArrivalTime(
+  recordId: number,
+  arrivalTime: string,
+  studentLevel?: string | null,
+): Promise<{ record: ArrivalRecord | null; error: string | null }> {
+  try {
+    const time = normalizeTimeValue(arrivalTime, '');
+    if (!time || !/^\d{2}:\d{2}/.test(time)) {
+      return { record: null, error: 'Hora de entrada no válida' };
+    }
+    const formattedTime = time.length === 5 ? `${time}:00` : time.slice(0, 8);
+    const hhmm = formattedTime.slice(0, 5);
+
+    const { data: existing, error: existingError } = await supabase
+      .from('registros_llegada')
+      .select(ARRIVAL_ROW_SELECT)
+      .eq('id_registro', recordId)
+      .maybeSingle();
+
+    if (existingError) {
+      return { record: null, error: existingError.message };
+    }
+    if (!existing) {
+      return { record: null, error: 'Registro no encontrado' };
+    }
+
+    const current = mapArrivalRow(existing);
+    if (isProtectedArrivalStatus(current.status)) {
+      return {
+        record: null,
+        error: 'No se puede editar la hora de un registro justificado o de falta',
+      };
+    }
+
+    const limits = await fetchArrivalLimits();
+    const estado = resolveArrivalStatusForStudent(hhmm, limits, studentLevel ?? current.student?.level);
+
+    const { data, error } = await supabase
+      .from('registros_llegada')
+      .update({ hora_llegada: formattedTime, estado })
+      .eq('id_registro', recordId)
+      .select(ARRIVAL_ROW_SELECT)
+      .single();
+
+    if (error) {
+      console.error('Error al editar hora de entrada:', error);
+      return { record: null, error: error.message };
+    }
+
+    const record = mapArrivalRow(data);
+    return {
+      record: { ...record, arrivalTime: hhmm, status: estado },
+      error: null,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Error al editar la entrada';
+    return { record: null, error: message };
+  }
 }
 
 /**
@@ -495,89 +572,82 @@ export async function getArrivals(filters?: {
   limit?: number;
 }): Promise<{ records: ArrivalRecord[]; error: string | null }> {
   try {
-    // Nota: La relación usuario_salida se agregará después de ejecutar el script SQL
-    // Por ahora, hacemos la consulta sin esa relación para evitar errores
-    let query = supabase
-      .from('registros_llegada')
-      .select(`
-        *,
-        estudiante:estudiantes!registros_llegada_id_estudiante_fkey(*),
-        usuario:usuarios!registros_llegada_registrado_por_fkey(*)
-      `)
-      .order('fecha', { ascending: false })
-      .order('hora_llegada', { ascending: false });
-
-    if (filters?.date) {
-      try {
-        // Intentar parsear la fecha en diferentes formatos
-        let formattedDate = filters.date;
-        
-        // Si la fecha viene en formato YYYY-MM-DD, usarla directamente
-        if (/^\d{4}-\d{2}-\d{2}$/.test(filters.date)) {
-          formattedDate = filters.date;
-        } 
-        // Si viene en formato DD/MM/YYYY, convertir a YYYY-MM-DD
-        else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(filters.date)) {
-          const [dd, mm, yyyy] = filters.date.split('/');
-          formattedDate = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
-        }
-        // Si es una fecha ISO (de toISOString())
-        else if (filters.date.includes('T')) {
-          formattedDate = filters.date.split('T')[0];
-        }
-        
-        query = query.eq('fecha', formattedDate);
-      } catch (error) {
-        console.error('Error al formatear la fecha:', error);
-        // Si hay un error, intentar usar la fecha directamente
-        query = query.eq('fecha', filters.date);
+    const formatFilterDate = (raw: string): string => {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+      if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw)) {
+        const [dd, mm, yyyy] = raw.split('/');
+        return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
       }
-    }
+      if (raw.includes('T')) return raw.split('T')[0];
+      return raw;
+    };
 
-    if (filters?.dateFrom) {
-      query = query.gte('fecha', filters.dateFrom);
-    }
-    if (filters?.dateTo) {
-      query = query.lte('fecha', filters.dateTo);
-    }
+    const buildListQuery = (from: number, to: number) => {
+      let query = supabase
+        .from('registros_llegada')
+        .select(ARRIVAL_LIST_SELECT)
+        .order('fecha', { ascending: false })
+        .order('hora_llegada', { ascending: false })
+        .range(from, to);
 
-    if (filters?.studentId) {
-      query = query.eq('id_estudiante', filters.studentId);
-    }
-
-    if (filters?.status) {
-      if (Array.isArray(filters.status)) {
-        query = query.in('estado', filters.status);
-      } else {
-        query = query.eq('estado', filters.status);
+      if (filters?.date) {
+        try {
+          query = query.eq('fecha', formatFilterDate(filters.date));
+        } catch {
+          query = query.eq('fecha', filters.date);
+        }
       }
-    }
+      if (filters?.dateFrom) query = query.gte('fecha', filters.dateFrom);
+      if (filters?.dateTo) query = query.lte('fecha', filters.dateTo);
+      if (filters?.studentId) query = query.eq('id_estudiante', filters.studentId);
+      if (filters?.status) {
+        if (Array.isArray(filters.status)) {
+          query = query.in('estado', filters.status);
+        } else {
+          query = query.eq('estado', filters.status);
+        }
+      }
+      return query;
+    };
 
-    if (filters?.limit) {
-      query = query.limit(filters.limit);
-    }
+    let rawRows: RegistroLlegadaDB[];
 
-    const { data, error } = await query;
-
-    if (error) {
-      console.error('Error al obtener registros de llegada:', error);
-      return { records: [], error: error.message };
+    if (filters?.limit != null && filters.limit > 0) {
+      const { data, error } = await buildListQuery(0, filters.limit - 1);
+      if (error) {
+        console.error('Error al obtener registros de llegada:', error);
+        return { records: [], error: error.message };
+      }
+      rawRows = (data || []) as RegistroLlegadaDB[];
+    } else {
+      const { data, error } = await fetchAllPages<RegistroLlegadaDB>((from, to) =>
+        buildListQuery(from, to),
+      );
+      if (error) {
+        console.error('Error al obtener registros de llegada:', error);
+        return { records: [], error };
+      }
+      rawRows = data;
     }
 
     const limits = await fetchArrivalLimits();
-    const records = (data || []).map((row) => {
+    const records = rawRows.map((row) => {
       if (row.hora_llegada && row.hora_llegada.length > 5) {
         row.hora_llegada = row.hora_llegada.substring(0, 5);
       }
-      const mapped = mapArrivalRecord(row);
-      const nivel = mapped.student?.level ?? row.estudiante?.nivel_educativo ?? null;
+      const mapped = mapArrivalRecord(row as RegistroLlegadaDB & { estudiante?: unknown; usuario?: unknown });
+      const nivel =
+        mapped.student?.level ??
+        (row as { estudiante?: { nivel_educativo?: string } }).estudiante?.nivel_educativo ??
+        null;
       return applyScanStatus(mapped, limits, nivel);
     });
 
     return { records, error: null };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Error al obtener registros de llegada';
     console.error('Error al obtener registros de llegada:', error);
-    return { records: [], error: error.message };
+    return { records: [], error: message };
   }
 }
 
@@ -958,8 +1028,8 @@ function weekdayFromDateKey(dateKey: string): number {
 }
 
 /**
- * Obtener tendencia de asistencia (últimos 5 días hábiles).
- * Usa conteos `head` por día/estado para no truncar en el límite de 1000 filas de PostgREST.
+ * Tendencia de asistencia (últimos 5 días hábiles).
+ * Una sola pasada paginada del rango → agrega en cliente (evita 10 HEAD counts).
  */
 export async function getWeeklyAttendanceTrend(): Promise<{
   weeklyData: Array<{
@@ -996,35 +1066,46 @@ export async function getWeeklyAttendanceTrend(): Promise<{
       return { weeklyData: [], error: null };
     }
 
-    const weeklyData = await Promise.all(
-      weekDays.map(async ({ label, dateKey }) => {
-        const [onTimeRes, lateRes] = await Promise.all([
-          supabase
-            .from('registros_llegada')
-            .select('id_registro', { count: 'exact', head: true })
-            .eq('fecha', dateKey)
-            .eq('estado', ARRIVAL_ESTADO.ON_TIME),
-          supabase
-            .from('registros_llegada')
-            .select('id_registro', { count: 'exact', head: true })
-            .eq('fecha', dateKey)
-            .eq('estado', ARRIVAL_ESTADO.LATE),
-        ]);
-
-        if (onTimeRes.error) throw onTimeRes.error;
-        if (lateRes.error) throw lateRes.error;
-
-        const onTime = onTimeRes.count ?? 0;
-        const late = lateRes.count ?? 0;
-        return {
-          day: label,
-          date: dateKey,
-          total: onTime + late,
-          onTime,
-          late,
-        };
-      }),
+    const dateFrom = weekDays[0].dateKey;
+    const dateTo = weekDays[weekDays.length - 1].dateKey;
+    const buckets = new Map(
+      weekDays.map(({ dateKey }) => [dateKey, { onTime: 0, late: 0 }]),
     );
+
+    const { data: rows, error } = await fetchAllPages<{ fecha: string; estado: string }>(
+      (from, to) =>
+        supabase
+          .from('registros_llegada')
+          .select('fecha, estado')
+          .gte('fecha', dateFrom)
+          .lte('fecha', dateTo)
+          .in('estado', [ARRIVAL_ESTADO.ON_TIME, ARRIVAL_ESTADO.LATE])
+          .order('fecha', { ascending: true })
+          .range(from, to),
+    );
+
+    if (error) {
+      return { weeklyData: [], error };
+    }
+
+    for (const row of rows) {
+      const key = String(row.fecha).slice(0, 10);
+      const bucket = buckets.get(key);
+      if (!bucket) continue;
+      if (row.estado === ARRIVAL_ESTADO.ON_TIME) bucket.onTime += 1;
+      else if (row.estado === ARRIVAL_ESTADO.LATE) bucket.late += 1;
+    }
+
+    const weeklyData = weekDays.map(({ label, dateKey }) => {
+      const b = buckets.get(dateKey) ?? { onTime: 0, late: 0 };
+      return {
+        day: label,
+        date: dateKey,
+        onTime: b.onTime,
+        late: b.late,
+        total: b.onTime + b.late,
+      };
+    });
 
     return { weeklyData, error: null };
   } catch (error: unknown) {
@@ -1637,33 +1718,54 @@ export async function getPendingAbsencesForDate(filters: {
   }
 
   try {
-    let studentQuery = supabase
-      .from('estudiantes')
-      .select(
-        'id_estudiante, nombre_completo, grado, seccion, nivel_educativo, codigo_barras, foto_perfil, activo',
-      )
-      .eq('activo', true)
-      .order('nombre_completo', { ascending: true })
-      .range(0, 1999);
+    const [studentsResult, arrivalsResult] = await Promise.all([
+      fetchAllPages<{
+        id_estudiante: number;
+        nombre_completo: string;
+        grado: string;
+        seccion: string;
+        nivel_educativo: string;
+        codigo_barras: string;
+        foto_perfil: string | null;
+        activo: boolean;
+      }>((from, to) => {
+        let studentQuery = supabase
+          .from('estudiantes')
+          .select(
+            'id_estudiante, nombre_completo, grado, seccion, nivel_educativo, codigo_barras, foto_perfil, activo',
+          )
+          .eq('activo', true)
+          .order('nombre_completo', { ascending: true })
+          .range(from, to);
 
-    if (filters.level) studentQuery = studentQuery.eq('nivel_educativo', filters.level);
-    if (filters.grade) studentQuery = studentQuery.eq('grado', filters.grade);
-    if (filters.section) studentQuery = studentQuery.eq('seccion', filters.section);
+        if (filters.level) studentQuery = studentQuery.eq('nivel_educativo', filters.level);
+        if (filters.grade) studentQuery = studentQuery.eq('grado', filters.grade);
+        if (filters.section) studentQuery = studentQuery.eq('seccion', filters.section);
+        return studentQuery;
+      }),
+      fetchAllPages<{
+        id_registro: number;
+        id_estudiante: number;
+        estado: string;
+        hora_llegada: string | null;
+      }>((from, to) =>
+        supabase
+          .from('registros_llegada')
+          .select('id_registro, id_estudiante, estado, hora_llegada')
+          .eq('fecha', filters.date)
+          .range(from, to),
+      ),
+    ]);
 
-    const arrivalsQuery = supabase
-      .from('registros_llegada')
-      .select('id_registro, id_estudiante, estado, hora_llegada')
-      .eq('fecha', filters.date)
-      .range(0, 1999);
-
-    const [studentsRes, arrivalsRes] = await Promise.all([studentQuery, arrivalsQuery]);
-
-    if (studentsRes.error) {
-      return { records: [], error: studentsRes.error.message };
+    if (studentsResult.error) {
+      return { records: [], error: studentsResult.error };
     }
-    if (arrivalsRes.error) {
-      return { records: [], error: arrivalsRes.error.message };
+    if (arrivalsResult.error) {
+      return { records: [], error: arrivalsResult.error };
     }
+
+    const studentsRes = { data: studentsResult.data, error: null };
+    const arrivalsRes = { data: arrivalsResult.data, error: null };
 
     const todayKey = getLimaTodayDate();
     const inferFalto = isClosedFaltoEligibleDate(filters.date, todayKey);
@@ -1853,6 +1955,7 @@ export async function createJustifiedAbsence(input: {
 
 export const arrivalService = {
   createArrivalRecord,
+  updateArrivalTime,
   getTodayArrivalForStudent,
   getArrivals,
   getArrivalsForStudents,

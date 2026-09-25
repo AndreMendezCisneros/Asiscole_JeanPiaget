@@ -13,6 +13,7 @@ export interface StudentsListFilters {
   grade?: string;
   section?: string;
   page?: number;
+  pageSize?: number;
 }
 
 interface StudentsListStatsRow {
@@ -73,10 +74,11 @@ async function fetchStudentsStats(filters: Omit<StudentsListFilters, 'page'>): P
 
 export function useStudentsQuery(filters: StudentsListFilters = {}) {
   const page = filters.page ?? 1;
+  const pageSize = filters.pageSize ?? STUDENTS_PAGE_SIZE;
   const queryClient = useQueryClient();
 
   const listQuery = useQuery({
-    queryKey: queryKeys.students.list({ ...filters, page }),
+    queryKey: queryKeys.students.list({ ...filters, page, pageSize }),
     queryFn: async () => {
       const { students, total, error } = await studentsService.listLite({
         search: filters.search,
@@ -85,7 +87,7 @@ export function useStudentsQuery(filters: StudentsListFilters = {}) {
         section: filters.section,
         active: true,
         page,
-        pageSize: STUDENTS_PAGE_SIZE,
+        pageSize,
         withReincidence: true,
       });
       if (error) throw new Error(error);
@@ -102,6 +104,7 @@ export function useStudentsQuery(filters: StudentsListFilters = {}) {
     queryKey: queryKeys.students.list({
       ...filters,
       page: 'stats' as unknown as number,
+      pageSize: 'stats' as unknown as number,
     }),
     queryFn: () =>
       fetchStudentsStats({
@@ -117,12 +120,12 @@ export function useStudentsQuery(filters: StudentsListFilters = {}) {
 
   // Prefetch de la página siguiente para navegación instantánea
   const total = listQuery.data?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / STUDENTS_PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   useEffect(() => {
     if (!listQuery.data || page >= totalPages) return;
     const nextPage = page + 1;
     void queryClient.prefetchQuery({
-      queryKey: queryKeys.students.list({ ...filters, page: nextPage }),
+      queryKey: queryKeys.students.list({ ...filters, page: nextPage, pageSize }),
       queryFn: async () => {
         const { students, total: t, error } = await studentsService.listLite({
           search: filters.search,
@@ -131,7 +134,7 @@ export function useStudentsQuery(filters: StudentsListFilters = {}) {
           section: filters.section,
           active: true,
           page: nextPage,
-          pageSize: STUDENTS_PAGE_SIZE,
+          pageSize,
           withReincidence: true,
         });
         if (error) throw new Error(error);
@@ -140,7 +143,7 @@ export function useStudentsQuery(filters: StudentsListFilters = {}) {
       staleTime: 2 * 60 * 1000,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listQuery.data, page, totalPages, filters.search, filters.level, filters.grade, filters.section]);
+  }, [listQuery.data, page, pageSize, totalPages, filters.search, filters.level, filters.grade, filters.section]);
 
   return {
     ...listQuery,

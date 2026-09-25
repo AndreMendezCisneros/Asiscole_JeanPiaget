@@ -24,6 +24,7 @@ import {
   StaffDataPanel,
   StaffDataPanelHeader,
   StaffEmptyState,
+  StaffTablePagination,
 } from '@/components/staff';
 import { Label } from '@/components/ui/label';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -41,9 +42,10 @@ import {
   useIncidentsQuery,
   useIncidentsSummaryQuery,
   useInvalidateIncidents,
-  INCIDENTS_PAGE_SIZE,
 } from '@/hooks/queries/useIncidentsQuery';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useTablePagination } from '@/hooks/useTablePagination';
+import { TABLE_PAGE_SIZE } from '@/lib/constants/tablePagination';
 import { incidentsService, evidenceService, authService } from '@/lib/services';
 import { revisadoAppEstado, type RevisadoAppEstado } from '@/lib/utils/revisadoAppEstado';
 import { REINCIDENCE_LEVELS } from '@/lib/utils/reincidenceUtils';
@@ -53,21 +55,10 @@ import {
   CLASSROOM_GRADES,
   CLASSROOM_SECTIONS,
 } from '@/lib/constants/classrooms';
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from '@/components/ui/pagination';
-
-const PAGE_SIZE = INCIDENTS_PAGE_SIZE;
 
 export const IncidentsList = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearch = useDebouncedValue(searchTerm, 350);
-  const [currentPage, setCurrentPage] = useState(1);
   const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('all');
   const [gradeFilter, setGradeFilter] = useState<'all' | string>('all');
   const [sectionFilter, setSectionFilter] = useState<'all' | string>('all');
@@ -79,6 +70,21 @@ export const IncidentsList = () => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [listTotalState, setListTotalState] = useState(0);
+
+  const {
+    page: currentPage,
+    pageSize,
+    totalPages,
+    goToPage,
+    nextPage,
+    prevPage,
+    changePageSize,
+    resetPage,
+  } = useTablePagination({
+    totalItems: listTotalState,
+    initialPageSize: TABLE_PAGE_SIZE,
+  });
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailIncident, setDetailIncident] = useState<Incident | null>(null);
@@ -127,8 +133,9 @@ export const IncidentsList = () => {
     () => ({
       ...listFilters,
       page: currentPage,
+      pageSize,
     }),
-    [listFilters, currentPage],
+    [listFilters, currentPage, pageSize],
   );
 
   const {
@@ -141,8 +148,6 @@ export const IncidentsList = () => {
   const { data: summary } = useIncidentsSummaryQuery(listFilters);
 
   const incidents = pageData?.incidents ?? [];
-  const totalRecords = pageData?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(totalRecords / PAGE_SIZE));
 
   // Después de 12 s de carga ininterrumpida sin datos, mostramos un mensaje de
   // "tardando más de lo esperado" para que el usuario sepa que el servidor está
@@ -249,7 +254,7 @@ export const IncidentsList = () => {
   };
 
   useEffect(() => {
-    setCurrentPage(1);
+    resetPage();
   }, [
     debouncedSearch,
     levelFilter,
@@ -262,13 +267,8 @@ export const IncidentsList = () => {
     reviewedFilter,
     dateFrom,
     dateTo,
+    resetPage,
   ]);
-
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
-  }, [currentPage, totalPages]);
 
   const handleExportExcel = async () => {
     setExporting(true);
@@ -306,8 +306,25 @@ export const IncidentsList = () => {
 
   const activeCount = summary?.activas;
   const withEvidence = summary?.conEvidencia;
-  const listTotal = summary?.total ?? (pageData ? totalRecords : undefined);
+  // Si el resumen vino en 0 pero la página tiene filas/total, no ocultar el total real
+  const listTotal = (() => {
+    const s = summary?.total;
+    const p = pageData?.total;
+    if (typeof s === 'number' && s > 0) return s;
+    if (typeof p === 'number' && p > 0) return p;
+    if (incidents.length > 0) {
+      return Math.max(s ?? 0, p ?? 0, (currentPage - 1) * pageSize + incidents.length);
+    }
+    if (pageData || summary) return s ?? p ?? 0;
+    return undefined;
+  })();
+
+  useEffect(() => {
+    if (typeof listTotal === 'number') setListTotalState(listTotal);
+  }, [listTotal]);
+
   const tableLoading = isLoading && !pageData;
+  const tableRefreshing = isFetching && !!pageData;
 
   const hasActiveFilters =
     Boolean(searchTerm.trim()) ||
@@ -379,13 +396,19 @@ export const IncidentsList = () => {
         <StaffKpiStat
           label="En listado"
           value={listTotal ?? '…'}
-          hint={tableLoading ? 'Actualizando…' : `${PAGE_SIZE} por página`}
+          hint={tableLoading || tableRefreshing ? 'Actualizando…' : `${pageSize} por página`}
           icon={FileText}
           tone="primary"
         />
         <StaffKpiStat
           label="Activas"
-          value={activeCount ?? '…'}
+          value={
+            typeof activeCount === 'number' && (activeCount > 0 || listTotal === 0)
+              ? activeCount
+              : typeof listTotal === 'number' && listTotal > 0 && (activeCount == null || activeCount === 0)
+                ? '…'
+                : (activeCount ?? '…')
+          }
           hint="Pendientes de gestión"
           hintIcon={AlertCircle}
           icon={AlertCircle}
@@ -393,7 +416,11 @@ export const IncidentsList = () => {
         />
         <StaffKpiStat
           label="Con evidencia"
-          value={withEvidence ?? '…'}
+          value={
+            typeof withEvidence === 'number' && (withEvidence > 0 || listTotal === 0)
+              ? withEvidence
+              : (withEvidence ?? '…')
+          }
           hint="Registros documentados"
           hintIcon={CheckCircle2}
           icon={Camera}
@@ -586,14 +613,10 @@ export const IncidentsList = () => {
           </div>
         </StaffToolbar>
 
-        <StaffDataPanel className={cn('overflow-hidden border-l-[3px] border-l-primary/40', tableLoading && 'opacity-70')}>
+        <StaffDataPanel className={cn('overflow-hidden border-l-[3px] border-l-primary/40', (tableLoading || tableRefreshing) && 'opacity-70')}>
           <StaffDataPanelHeader
             title={`Registros (${listTotal ?? '…'})`}
-            description={
-              listTotal > PAGE_SIZE
-                ? `Página ${currentPage} de ${totalPages} · ${PAGE_SIZE} por página`
-                : 'Detalle, evidencia y estado de cada incidencia'
-            }
+            description="Detalle, evidencia y estado de cada incidencia"
           />
           <div className="p-4 pt-0 sm:p-5 sm:pt-0">
             {tableLoading && incidents.length === 0 ? (
@@ -629,7 +652,7 @@ export const IncidentsList = () => {
               <div className="app-table-wrap">
                 <Table role="table" aria-label="Lista de incidencias">
                   <TableHeader>
-                    <TableRow className="bg-gradient-to-r from-primary/5 via-transparent to-accent/5">
+                    <TableRow>
                       <TableHead scope="col">ID</TableHead>
                       <TableHead scope="col">Estudiante</TableHead>
                       <TableHead scope="col">Falta</TableHead>
@@ -642,13 +665,11 @@ export const IncidentsList = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {incidents.map((incident, idx) => (
-                      <TableRow 
+                    {incidents.map((incident) => (
+                      <TableRow
                         key={incident.id}
                         role="row"
                         aria-label={`Incidencia ${incident.id} - ${incident.student?.fullName || 'N/A'}`}
-                        className="animate-fade-in transition-colors hover:bg-primary/5"
-                        style={{ animationDelay: `${Math.min(idx * 30, 400)}ms` }}
                       >
                       <TableCell className="font-mono text-sm">{incident.id}</TableCell>
                       <TableCell className="max-w-[14rem]">
@@ -774,63 +795,17 @@ export const IncidentsList = () => {
                 </Table>
               </div>
             )}
-            {listTotal > PAGE_SIZE && (
-              <Pagination className="mt-4">
-                <PaginationContent>
-                  <PaginationItem>
-                    <PaginationPrevious
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setCurrentPage((p) => Math.max(1, p - 1));
-                      }}
-                      className={currentPage <= 1 ? 'pointer-events-none opacity-50' : ''}
-                    />
-                  </PaginationItem>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1)
-                    .filter(
-                      (p) =>
-                        p === 1 ||
-                        p === totalPages ||
-                        Math.abs(p - currentPage) <= 1
-                    )
-                    .map((page, idx, arr) => {
-                      const prev = arr[idx - 1];
-                      const showEllipsis = prev != null && page - prev > 1;
-                      return (
-                        <span key={page} className="contents">
-                          {showEllipsis && (
-                            <PaginationItem>
-                              <span className="px-2 text-muted-foreground">…</span>
-                            </PaginationItem>
-                          )}
-                          <PaginationItem>
-                            <PaginationLink
-                              href="#"
-                              isActive={page === currentPage}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                setCurrentPage(page);
-                              }}
-                            >
-                              {page}
-                            </PaginationLink>
-                          </PaginationItem>
-                        </span>
-                      );
-                    })}
-                  <PaginationItem>
-                    <PaginationNext
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setCurrentPage((p) => Math.min(totalPages, p + 1));
-                      }}
-                      className={currentPage >= totalPages ? 'pointer-events-none opacity-50' : ''}
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
+            {listTotal != null && listTotal > pageSize && (
+              <StaffTablePagination
+                page={currentPage}
+                totalPages={totalPages}
+                pageSize={pageSize}
+                totalItems={listTotal}
+                onPrev={prevPage}
+                onNext={nextPage}
+                onGoToPage={goToPage}
+                onPageSizeChange={changePageSize}
+              />
             )}
           </div>
         </StaffDataPanel>

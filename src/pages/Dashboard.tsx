@@ -81,10 +81,11 @@ const ATTENDANCE_CHART = {
 export const Dashboard = () => {
   const statsQuery = useDashboardStatsQuery();
   const statsReady = statsQuery.isSuccess || Boolean(statsQuery.data);
+  // Asistencia y tendencia en paralelo (no esperan al KPI pesado)
+  const weeklyAttendanceQuery = useWeeklyAttendanceTrendQuery(true);
+  const monthlyTrendQuery = useMonthlyTrendQuery(true);
   const alertsQuery = useDepartureAlertsQuery(statsReady);
   const recentIncidentsQuery = useRecentIncidentsQuery(statsReady);
-  const monthlyTrendQuery = useMonthlyTrendQuery(statsReady);
-  const weeklyAttendanceQuery = useWeeklyAttendanceTrendQuery(statsReady);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -172,7 +173,7 @@ export const Dashboard = () => {
     return `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`;
   };
 
-  const CHART_MARGIN = { top: 16, right: 12, left: 0, bottom: 8 };
+  const CHART_MARGIN = { top: 8, right: 8, left: 0, bottom: 4 };
 
   const maxTrend = Math.max(0, ...monthlyTrend.map((d) => d.incidents));
   const trendAxis = niceAxisScale(maxTrend);
@@ -286,7 +287,7 @@ export const Dashboard = () => {
             compact
             accent="primary"
             title="Tendencia de incidencias"
-            description="Últimos 5 meses"
+            description="Año escolar en curso (marzo → hoy)"
             action={
               <span className="inline-flex shrink-0 items-center rounded-md border border-primary/25 bg-primary/15 px-2 py-0.5 text-[11px] font-semibold text-primary shadow-sm">
                 <ArrowUpRight className="mr-1 h-3 w-3" />
@@ -295,10 +296,11 @@ export const Dashboard = () => {
               </span>
             }
           />
-          <StaffDataPanelBody compact className="app-chart-surface !p-0">
+          <StaffDataPanelBody compact className="app-chart-surface !flex !min-h-0 !flex-1 !flex-col !p-0">
             <div className="app-chart-wrap app-chart-wrap--fill">
+              <div className="absolute inset-0">
               <ResponsiveContainer width="100%" height="100%" debounce={50}>
-              <ComposedChart data={monthlyTrend} margin={CHART_MARGIN} barCategoryGap="32%">
+              <ComposedChart data={monthlyTrend} margin={CHART_MARGIN} barCategoryGap="28%">
                 <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} vertical={false} />
                 <XAxis
                   dataKey="month"
@@ -307,6 +309,7 @@ export const Dashboard = () => {
                   tickLine={false}
                   axisLine={{ stroke: CHART.grid }}
                   tickMargin={8}
+                  tick={{ fill: CHART.axis, fontSize: 12 }}
                 />
                 <YAxis
                   stroke={CHART.axis}
@@ -314,9 +317,10 @@ export const Dashboard = () => {
                   tickLine={false}
                   axisLine={false}
                   allowDecimals={false}
-                  width={36}
+                  width={40}
                   domain={[0, trendAxis.max]}
                   ticks={trendAxis.ticks}
+                  tick={{ fill: CHART.axis, fontSize: 12 }}
                 />
                 <Tooltip
                   contentStyle={{
@@ -326,18 +330,23 @@ export const Dashboard = () => {
                     boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
                     fontSize: '12px',
                   }}
+                  formatter={(value: number) => [value, 'Incidencias']}
                 />
                 <Bar
                   dataKey="incidents"
+                  name="Incidencias"
                   fill={CHART.bar}
                   radius={[6, 6, 0, 0]}
-                  maxBarSize={56}
+                  maxBarSize={48}
                 />
                 <Line
                   type="linear"
                   dataKey="incidents"
                   stroke={CHART.line}
                   strokeWidth={2}
+                  legendType="none"
+                  tooltipType="none"
+                  isAnimationActive={false}
                   dot={{
                     r: 4,
                     fill: 'hsl(var(--card))',
@@ -348,6 +357,7 @@ export const Dashboard = () => {
                 />
               </ComposedChart>
             </ResponsiveContainer>
+              </div>
             </div>
           </StaffDataPanelBody>
         </StaffDataPanel>
@@ -494,7 +504,7 @@ export const Dashboard = () => {
           />
           <StaffDataPanelBody
             compact
-            className="app-chart-surface app-chart-surface--success !p-0"
+            className="app-chart-surface app-chart-surface--success !flex !min-h-0 !flex-1 !flex-col !p-0"
           >
             {weeklyAttendance.length === 0 ? (
               <StaffEmptyState
@@ -503,9 +513,10 @@ export const Dashboard = () => {
                 description="Aún no hay llegadas en los últimos días hábiles."
               />
             ) : (
-              <div className="app-chart-wrap">
+              <div className="app-chart-wrap app-chart-wrap--fill !min-h-[340px]">
+                <div className="absolute inset-0">
                 <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={weeklyAttendance} margin={{ ...CHART_MARGIN, top: 28 }}>
+              <ComposedChart data={weeklyAttendance} margin={{ ...CHART_MARGIN, top: 12 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
                 <XAxis
                   dataKey="day"
@@ -513,6 +524,7 @@ export const Dashboard = () => {
                   fontSize={12}
                   tickLine={false}
                   axisLine={{ stroke: CHART.grid }}
+                  tick={{ fill: CHART.axis, fontSize: 12 }}
                 />
                 <YAxis
                   stroke={CHART.axis}
@@ -522,6 +534,8 @@ export const Dashboard = () => {
                   allowDecimals={false}
                   domain={[0, attendanceAxis.max]}
                   ticks={attendanceAxis.ticks}
+                  tick={{ fill: CHART.axis, fontSize: 12 }}
+                  width={40}
                 />
                 <Tooltip
                   contentStyle={{
@@ -546,7 +560,7 @@ export const Dashboard = () => {
                 />
                 <Legend
                   verticalAlign="top"
-                  height={28}
+                  height={22}
                   iconType="circle"
                   iconSize={8}
                   formatter={(value) => {
@@ -559,6 +573,7 @@ export const Dashboard = () => {
                 />
                 <Bar
                   dataKey="onTime"
+                  name="onTime"
                   stackId="attendance"
                   fill={ATTENDANCE_CHART.onTime}
                   radius={[0, 0, 0, 0]}
@@ -566,6 +581,7 @@ export const Dashboard = () => {
                 />
                 <Bar
                   dataKey="late"
+                  name="late"
                   stackId="attendance"
                   fill={ATTENDANCE_CHART.late}
                   radius={[8, 8, 0, 0]}
@@ -574,9 +590,12 @@ export const Dashboard = () => {
                 <Line
                   type="monotone"
                   dataKey="total"
+                  name="total"
                   stroke={ATTENDANCE_CHART.total}
                   strokeWidth={2}
                   legendType="none"
+                  tooltipType="none"
+                  isAnimationActive={false}
                   dot={{
                     r: 4,
                     fill: 'hsl(var(--card))',
@@ -587,6 +606,7 @@ export const Dashboard = () => {
                 />
               </ComposedChart>
             </ResponsiveContainer>
+                </div>
             </div>
           )}
         </StaffDataPanelBody>

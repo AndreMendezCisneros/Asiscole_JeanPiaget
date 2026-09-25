@@ -38,6 +38,7 @@ export const queryKeys = {
       añoEscolar: number;
       level?: EducationalLevel;
       grade?: string;
+      section?: string;
     }) => ['reports', filters] as const,
   },
 } as const;

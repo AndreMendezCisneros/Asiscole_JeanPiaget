@@ -4,8 +4,8 @@ export const DEBT_FALTA_THRESHOLD = 4;
 /** Umbral: ≥ 4 "No porta carnet institucional". */
 export const DEBT_CARNET_THRESHOLD = 4;
 
-/** Umbral colegio: ≥ 3 tardanzas (estado "Tarde"). */
-export const DEBT_TARDE_THRESHOLD = 3;
+/** Umbral colegio: ≥ 5 tardanzas (estado "Tarde"). */
+export const DEBT_TARDE_THRESHOLD = 5;
 
 /** Alarma de deuda siempre activa (faltas / carnet / tardanzas). */
 export function isDebtAlarmEnabled(): boolean {

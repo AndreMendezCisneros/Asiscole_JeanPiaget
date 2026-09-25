@@ -50,28 +50,30 @@ export function useRecentIncidentsQuery(enabled = true) {
 
 export function useMonthlyTrendQuery(enabled = true) {
   return useQuery({
-    queryKey: queryKeys.dashboard.monthlyTrend(),
+    queryKey: [...queryKeys.dashboard.monthlyTrend(), 'school-year-v2'] as const,
     queryFn: async () => {
       const { monthlyTrend, error } = await dashboardService.getMonthlyTrend();
       if (error) throw new Error(error);
       return monthlyTrend ?? [];
     },
     enabled,
-    staleTime: DASHBOARD_STALE_MS,
+    staleTime: 30 * 1000,
     placeholderData: keepPreviousData,
+    refetchOnMount: 'always',
   });
 }
 
 export function useWeeklyAttendanceTrendQuery(enabled = true) {
   return useQuery({
-    queryKey: queryKeys.dashboard.weeklyAttendance(),
+    queryKey: [...queryKeys.dashboard.weeklyAttendance(), 'range-v2'] as const,
     queryFn: async () => {
       const { weeklyData, error } = await arrivalService.getWeeklyAttendanceTrend();
       if (error) throw new Error(error);
       return weeklyData ?? [];
     },
     enabled,
-    staleTime: DASHBOARD_STALE_MS,
+    staleTime: 60 * 1000,
     placeholderData: keepPreviousData,
+    refetchOnMount: true,
   });
 }

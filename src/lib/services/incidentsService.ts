@@ -468,7 +468,31 @@ export const incidentsService = {
     }
 
     const incidents: Incident[] = (data || []).map((inc: any) => this.mapDBToIncident(inc));
-    return { incidents, total: count || 0, error: null };
+
+    // PostgREST a veces devuelve count=null o 0 incorrecto cuando hay embeds.
+    let total = typeof count === 'number' ? count : null;
+    if (total == null || (total === 0 && incidents.length > 0)) {
+      try {
+        let countQuery = supabase
+          .from('incidencias')
+          .select('id_incidencia', { count: 'exact', head: true });
+        countQuery = applyIncidentFilters(countQuery, filters, dateRange, scope);
+        const head = await countQuery;
+        if (!head.error && typeof head.count === 'number' && head.count >= 0) {
+          // Solo reemplazar si el head es coherente con las filas vistas
+          if (head.count > 0 || incidents.length === 0) {
+            total = head.count;
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    if (total == null || (total === 0 && incidents.length > 0)) {
+      total = (offset ?? 0) + incidents.length;
+    }
+
+    return { incidents, total, error: null };
   },
 
   /** Totales para KPIs del listado (consultas ligeras en paralelo). */
@@ -499,7 +523,30 @@ export const incidentsService = {
           query = query.eq('estado_evidencia', extra.estado_evidencia);
         }
         const { count, error } = await query;
-        if (error) throw new Error(error.message);
+        if (error) {
+          // Columnas revisado_app / confirmada_app pueden faltar en algunos entornos
+          const msg = error.message || '';
+          if (
+            /revisado_app|confirmada_app/i.test(msg) &&
+            filters?.revisado
+          ) {
+            throw new Error(msg);
+          }
+          if (/revisado_app|confirmada_app/i.test(msg)) {
+            // Reintentar sin filtros de revisado (no aplican si no hay columna)
+            let retry = supabase
+              .from('incidencias')
+              .select('id_incidencia', { count: 'exact', head: true });
+            const filtersWithoutRevisado = filters ? { ...filters, revisado: undefined } : filters;
+            retry = applyIncidentFilters(retry, filtersWithoutRevisado, dateRange, scope) as typeof retry;
+            if (extra?.estado) retry = retry.eq('estado', extra.estado);
+            if (extra?.estado_evidencia) retry = retry.eq('estado_evidencia', extra.estado_evidencia);
+            const second = await retry;
+            if (second.error) throw new Error(second.error.message);
+            return second.count ?? 0;
+          }
+          throw new Error(msg);
+        }
         return count ?? 0;
       };
 
@@ -508,6 +555,31 @@ export const incidentsService = {
         countFiltered({ estado: 'Activa' }),
         countFiltered({ estado_evidencia: 'Con evidencia' }),
       ]);
+
+      // Si el total salió 0, reintentar un COUNT mínimo sin filtros extra por si falló el scope
+      if (total === 0 && !scope.empty && !filters?.search && !filters?.grado && !filters?.seccion) {
+        const { count: rawTotal, error: rawErr } = await supabase
+          .from('incidencias')
+          .select('id_incidencia', { count: 'exact', head: true });
+        if (!rawErr && typeof rawTotal === 'number' && rawTotal > 0) {
+          const { count: rawActivas } = await supabase
+            .from('incidencias')
+            .select('id_incidencia', { count: 'exact', head: true })
+            .eq('estado', 'Activa');
+          const { count: rawEv } = await supabase
+            .from('incidencias')
+            .select('id_incidencia', { count: 'exact', head: true })
+            .eq('estado_evidencia', 'Con evidencia');
+          return {
+            summary: {
+              total: rawTotal,
+              activas: rawActivas ?? 0,
+              conEvidencia: rawEv ?? 0,
+            },
+            error: null,
+          };
+        }
+      }
 
       return {
         summary: { total, activas, conEvidencia },

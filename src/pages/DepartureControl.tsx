@@ -51,25 +51,19 @@ import {
   StaffDataPanel,
   StaffDataPanelHeader,
   StaffEmptyState,
+  StaffTablePagination,
 } from '@/components/staff';
 import { Label } from '@/components/ui/label';
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from '@/components/ui/pagination';
 import { arrivalService, authService, studentsService, whatsappService } from '@/lib/services';
 import type { ArrivalRecord, EducationalLevel } from '@/types';
 import { toast } from 'sonner';
 import { staffNotify } from '@/lib/utils/staffNotify';
 import { cn } from '@/lib/utils';
+import { useTablePagination } from '@/hooks/useTablePagination';
+import { TABLE_PAGE_SIZE } from '@/lib/constants/tablePagination';
 
 const GRADES = ['1ro', '2do', '3ro', '4to', '5to', '6to'];
 const SECTIONS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-const PAGE_SIZE = 15;
 
 function enqueueDepartureWhatsApp(
   records: ArrivalRecord[],
@@ -209,7 +203,6 @@ export const DepartureControl = () => {
   const [gradeFilter, setGradeFilter] = useState<'all' | string>('all');
   const [sectionFilter, setSectionFilter] = useState<'all' | string>('all');
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDate());
-  const [currentPage, setCurrentPage] = useState(1);
   const [confirmBulk, setConfirmBulk] = useState<BulkConfirmTarget | null>(null);
   const [individualOpen, setIndividualOpen] = useState(false);
   const [registeringId, setRegisteringId] = useState<number | null>(null);
@@ -469,27 +462,33 @@ export const DepartureControl = () => {
     [records, searchTerm, levelFilter, gradeFilter, sectionFilter, departureFilter],
   );
 
-  const totalPages = Math.max(1, Math.ceil(filteredRecords.length / PAGE_SIZE));
+  const {
+    page: currentPage,
+    pageSize,
+    totalPages,
+    goToPage,
+    nextPage,
+    prevPage,
+    changePageSize,
+    resetPage,
+    sliceRange,
+  } = useTablePagination({
+    totalItems: filteredRecords.length,
+    initialPageSize: TABLE_PAGE_SIZE,
+  });
 
   useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
-  }, [currentPage, totalPages]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, departureFilter, levelFilter, gradeFilter, sectionFilter, selectedDate]);
+    resetPage();
+  }, [searchTerm, departureFilter, levelFilter, gradeFilter, sectionFilter, selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const paginatedRecords = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    return filteredRecords.slice(start, start + PAGE_SIZE);
-  }, [filteredRecords, currentPage]);
+    return filteredRecords.slice(sliceRange.start, sliceRange.end);
+  }, [filteredRecords, sliceRange.start, sliceRange.end]);
 
   const listSummary =
-    filteredRecords.length > PAGE_SIZE
-      ? `${filteredRecords.length} visibles · página ${currentPage} de ${totalPages} · ${PAGE_SIZE} por página`
-      : `${filteredRecords.length} visibles`;
+    filteredRecords.length > pageSize
+      ? `${filteredRecords.length} visibles · página ${currentPage} de ${totalPages} · ${pageSize} por página`
+      : `${filteredRecords.length} visibles · ${pageSize} por página`;
 
   const stats = useMemo(() => {
     const pending = records.filter((r) => !r.departureTime).length;
@@ -1069,63 +1068,17 @@ export const DepartureControl = () => {
               </Table>
             </div>
           )}
-          {!loading && filteredRecords.length > PAGE_SIZE && (
-            <Pagination className="mt-4">
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setCurrentPage((p) => Math.max(1, p - 1));
-                    }}
-                    className={currentPage <= 1 ? 'pointer-events-none opacity-50' : ''}
-                  />
-                </PaginationItem>
-                {Array.from({ length: totalPages }, (_, i) => i + 1)
-                  .filter(
-                    (p) =>
-                      p === 1 ||
-                      p === totalPages ||
-                      Math.abs(p - currentPage) <= 1,
-                  )
-                  .map((page, idx, arr) => {
-                    const prev = arr[idx - 1];
-                    const showEllipsis = prev != null && page - prev > 1;
-                    return (
-                      <span key={page} className="contents">
-                        {showEllipsis && (
-                          <PaginationItem>
-                            <span className="px-2 text-muted-foreground">…</span>
-                          </PaginationItem>
-                        )}
-                        <PaginationItem>
-                          <PaginationLink
-                            href="#"
-                            isActive={page === currentPage}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              setCurrentPage(page);
-                            }}
-                          >
-                            {page}
-                          </PaginationLink>
-                        </PaginationItem>
-                      </span>
-                    );
-                  })}
-                <PaginationItem>
-                  <PaginationNext
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setCurrentPage((p) => Math.min(totalPages, p + 1));
-                    }}
-                    className={currentPage >= totalPages ? 'pointer-events-none opacity-50' : ''}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
+          {!loading && filteredRecords.length > pageSize && (
+            <StaffTablePagination
+              page={currentPage}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              totalItems={filteredRecords.length}
+              onPrev={prevPage}
+              onNext={nextPage}
+              onGoToPage={goToPage}
+              onPageSizeChange={changePageSize}
+            />
           )}
         </div>
       </StaffDataPanel>

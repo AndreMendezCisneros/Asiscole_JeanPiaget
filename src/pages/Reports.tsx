@@ -34,11 +34,12 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getCurrentSchoolYear, getAllBimestres, formatBimestreLabel, type Bimestre } from '@/lib/utils/bimestreUtils';
 import { StudentSearchCombobox } from '@/components/students/StudentSearchCombobox';
-import { CLASSROOM_FIELD_LABELS, CLASSROOM_GRADES, CLASSROOM_LEVELS } from '@/lib/constants/classrooms';
+import { CLASSROOM_FIELD_LABELS, CLASSROOM_GRADES, CLASSROOM_LEVELS, CLASSROOM_SECTIONS } from '@/lib/constants/classrooms';
 import { buildDashboardStatsFromIncidents } from '@/lib/utils/incidentReportStats';
 
 export const Reports = () => {
   const [selectedGrade, setSelectedGrade] = useState<string>('all');
+  const [selectedSection, setSelectedSection] = useState<string>('all');
   const [selectedLevel, setSelectedLevel] = useState<'all' | EducationalLevel>('all');
   const [severityFilter, setSeverityFilter] = useState<'all' | 'moderate' | 'critical'>('all');
   const [bimestre, setBimestre] = useState<Bimestre | 'all'>('all');
@@ -52,7 +53,8 @@ export const Reports = () => {
     añoEscolar,
     level: selectedLevel === 'all' ? undefined : (selectedLevel as EducationalLevel),
     grade: selectedGrade === 'all' ? undefined : selectedGrade,
-  }), [bimestre, añoEscolar, selectedLevel, selectedGrade]);
+    section: selectedSection === 'all' ? undefined : selectedSection,
+  }), [bimestre, añoEscolar, selectedLevel, selectedGrade, selectedSection]);
 
   const { data: reportsData, isLoading, isFetching, refetch } = useQuery({
     queryKey: queryKeys.reports.all(reportFilters),
@@ -62,6 +64,7 @@ export const Reports = () => {
         bimestre: reportFilters.bimestre,
         level: reportFilters.level,
         grade: reportFilters.grade,
+        section: reportFilters.section,
       });
 
       if (page.error) toast.error('Error al cargar estadísticas');
@@ -101,7 +104,11 @@ export const Reports = () => {
   const monthlyTrend = reportsData?.monthlyTrend ?? [];
   const weeklyData = reportsData?.weeklyData ?? [];
   const comparisonByGrade = reportsData?.comparisonByGrade ?? [];
-  const comparisonBySection = reportsData?.comparisonBySection ?? [];
+  const comparisonBySection = useMemo(() => {
+    const rows = reportsData?.comparisonBySection ?? [];
+    if (!reportFilters.section) return rows;
+    return rows.filter((row) => row.section === reportFilters.section);
+  }, [reportsData?.comparisonBySection, reportFilters.section]);
   const loading = isLoading && !reportsData;
   const studentReportStats = useMemo(
     () => (studentFilterActive ? buildDashboardStatsFromIncidents(studentIncidents) : null),
@@ -113,6 +120,7 @@ export const Reports = () => {
     const { incidents: incidentsList, error } = await incidentsService.getAll({
       nivelEducativo: selectedStudent ? undefined : selectedLevel === 'all' ? undefined : selectedLevel,
       grado: selectedStudent ? undefined : selectedGrade === 'all' ? undefined : selectedGrade,
+      seccion: selectedStudent ? undefined : selectedSection === 'all' ? undefined : selectedSection,
       bimestre: bimestre !== 'all' ? bimestre : undefined,
       añoEscolar: bimestre !== 'all' ? añoEscolar : undefined,
       estudianteId: selectedStudent?.id,
@@ -158,6 +166,7 @@ export const Reports = () => {
         `Generado ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm", { locale: es })}`,
         selectedStudent ? `Estudiante: ${selectedStudent.fullName}` : selectedLevel !== 'all' && `Nivel: ${selectedLevel}`,
         selectedStudent ? undefined : selectedGrade !== 'all' && `${CLASSROOM_FIELD_LABELS.grade}: ${selectedGrade}`,
+        selectedStudent ? undefined : selectedSection !== 'all' && `${CLASSROOM_FIELD_LABELS.section}: ${selectedSection}`,
         bimestreInfo && `Período: ${formatBimestreLabel(bimestreInfo)}`,
       ]);
 
@@ -282,6 +291,7 @@ export const Reports = () => {
       else {
         if (selectedLevel !== 'all') filterText += ` · Nivel: ${selectedLevel}`;
         if (selectedGrade !== 'all') filterText += ` · ${CLASSROOM_FIELD_LABELS.grade}: ${selectedGrade}`;
+        if (selectedSection !== 'all') filterText += ` · ${CLASSROOM_FIELD_LABELS.section}: ${selectedSection}`;
       }
       if (bimestre !== 'all') {
         const b = getAllBimestres(añoEscolar).find((x) => x.numero === bimestre);
@@ -477,6 +487,26 @@ export const Reports = () => {
             ))}
           </SelectContent>
         </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>{CLASSROOM_FIELD_LABELS.section}</Label>
+          <Select
+            value={selectedSection}
+            disabled={studentFilterActive}
+            onValueChange={setSelectedSection}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={CLASSROOM_FIELD_LABELS.allSections} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{CLASSROOM_FIELD_LABELS.allSections}</SelectItem>
+              {CLASSROOM_SECTIONS.map((section) => (
+                <SelectItem key={section} value={section}>
+                  {section}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </StaffToolbar>
 
@@ -732,7 +762,7 @@ export const Reports = () => {
                           border: '1px solid #d1d5db', 
                           borderRadius: '8px' 
                         }}
-                        formatter={(value: any) => [value, 'Incidencias']}
+                        formatter={(value: number) => [value, 'Incidencias']}
                       />
                       <Legend />
                       <Bar 
@@ -845,7 +875,7 @@ export const Reports = () => {
                           border: '1px solid #d1d5db', 
                           borderRadius: '8px' 
                         }}
-                        formatter={(value: any) => [value, 'Incidencias']}
+                        formatter={(value: number) => [value, 'Incidencias']}
                       />
                       <Legend />
                       <Bar 
