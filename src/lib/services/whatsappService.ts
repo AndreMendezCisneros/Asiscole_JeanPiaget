@@ -16,7 +16,7 @@ const META_WA_ENABLED = import.meta.env.VITE_META_WA_ENABLED === 'true';
 const META_WA_API_URL = (import.meta.env.VITE_META_WA_API_URL || '/meta-wa').replace(/\/$/, '');
 const META_WA_NOTIFY_KEY = import.meta.env.VITE_META_WA_NOTIFY_KEY || '';
 
-/** App móvil Asiscole — ingesta de eventos (prueba JP local) */
+/** App móvil Asiscole — ingesta de eventos (prueba local) */
 const MOBILE_INGEST_ENABLED = import.meta.env.VITE_MOBILE_INGEST_ENABLED === 'true';
 const MOBILE_INGEST_URL = (
   import.meta.env.VITE_MOBILE_INGEST_URL || '/mobile-ingest'
@@ -75,9 +75,9 @@ const WPPCONNECT_NOTIFY_URL = (
 ).replace(/\/$/, '');
 const WPPCONNECT_NOTIFY_KEY = import.meta.env.VITE_WPPCONNECT_NOTIFY_KEY || '';
 
-/** Nombre del colegio en textos WhatsApp (JP: Colegio Jean Piaget). */
+/** Nombre del colegio en textos WhatsApp (IEP Abraham Valdelomar). */
 const SCHOOL_NAME =
-  (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() || 'Colegio Jean Piaget';
+  (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() || 'IEP Abraham Valdelomar';
 
 const GREETING_VARIANTS = [
   'Hola,',

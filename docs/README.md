@@ -1,4 +1,4 @@
-# Documentación del SIE — Colegio Jean Piaget
+# Documentación del SIE — IEP Abraham Valdelomar
 
 Índice de la documentación del proyecto. El código de la aplicación está en `src/`; aquí solo hay guías y referencias.
 

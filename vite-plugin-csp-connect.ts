@@ -36,7 +36,7 @@ export function cspConnectSrcPlugin(): Plugin {
       const openwaOrigin = resolveHttpOrigin(env.VITE_OPENWA_API_URL);
       if (openwaOrigin) origins.add(openwaOrigin);
 
-      // Jean Piaget por defecto (no San Ramón)
+      // Proyecto por defecto (no San Ramón)
       const supabaseOrigin =
         resolveHttpOrigin(env.VITE_SUPABASE_URL) ||
         'https://kelylvvoebneugnajiwv.supabase.co';

@@ -1,20 +1,20 @@
 /**
  * Colores de marca SIE — reflejan tokens en src/index.css (:root).
  * Fuente canónica: variables CSS (--primary, --success, etc.).
- * Paleta Colegio Jean Piaget: navy + rojo.
+ * Paleta IEP Abraham Valdelomar: azul del escudo, amarillo, verde y lazo rojo.
  */
 export const COLORS = {
-  primary: 'hsl(221, 56%, 24%)',
-  secondary: 'hsl(221, 42%, 36%)',
-  accent: 'hsl(355, 71%, 41%)',
+  primary: 'hsl(219, 76%, 32%)',
+  secondary: 'hsl(219, 62%, 42%)',
+  accent: 'hsl(48, 90%, 48%)',
 
-  primaryLight: 'hsl(221, 40%, 94%)',
-  primaryDark: 'hsl(221, 60%, 18%)',
-  secondaryLight: 'hsl(221, 38%, 48%)',
-  secondaryDark: 'hsl(221, 50%, 22%)',
+  primaryLight: 'hsl(219, 55%, 94%)',
+  primaryDark: 'hsl(219, 78%, 22%)',
+  secondaryLight: 'hsl(219, 58%, 52%)',
+  secondaryDark: 'hsl(219, 70%, 28%)',
 
-  accentLight: 'hsl(355, 55%, 58%)',
-  accentDark: 'hsl(355, 72%, 32%)',
+  accentLight: 'hsl(48, 88%, 62%)',
+  accentDark: 'hsl(48, 92%, 38%)',
 
   white: 'hsl(0, 0%, 100%)',
   offWhite: 'hsl(240, 5%, 98%)',
@@ -28,10 +28,10 @@ export const COLORS = {
   warmGray: 'hsl(240, 6%, 94%)',
   sand: 'hsl(240, 5%, 98%)',
 
-  success: 'hsl(152, 48%, 38%)',
+  success: 'hsl(128, 50%, 42%)',
   warning: 'hsl(32, 85%, 46%)',
-  error: 'hsl(0, 65%, 48%)',
-  info: 'hsl(221, 48%, 42%)',
+  error: 'hsl(350, 73%, 44%)',
+  info: 'hsl(219, 62%, 42%)',
 
   background: 'hsl(240, 5%, 96%)',
   backgroundAlt: 'hsl(220, 14%, 92%)',
@@ -44,7 +44,7 @@ export const COLORS = {
   textTertiary: 'hsl(0, 0%, 60%)',
   textOnPrimary: 'hsl(0, 0%, 100%)',
   textOnSecondary: 'hsl(0, 0%, 100%)',
-  textOnAccent: 'hsl(0, 0%, 100%)',
+  textOnAccent: 'hsl(219, 78%, 18%)',
 
   borderLight: 'hsl(220, 13%, 91%)',
   borderMedium: 'hsl(240, 7%, 85%)',
@@ -54,16 +54,16 @@ export const COLORS = {
   shadowMd: 'none',
   shadowLg: 'none',
 
-  gradientPrimary: 'linear-gradient(135deg, hsl(221, 56%, 24%) 0%, hsl(221, 60%, 18%) 100%)',
-  gradientSecondary: 'linear-gradient(135deg, hsl(221, 42%, 36%) 0%, hsl(221, 38%, 48%) 100%)',
-  gradientAccent: 'linear-gradient(135deg, hsl(355, 71%, 41%) 0%, hsl(355, 55%, 58%) 100%)',
+  gradientPrimary: 'linear-gradient(135deg, hsl(219, 76%, 32%) 0%, hsl(219, 78%, 22%) 100%)',
+  gradientSecondary: 'linear-gradient(135deg, hsl(219, 62%, 42%) 0%, hsl(219, 58%, 52%) 100%)',
+  gradientAccent: 'linear-gradient(135deg, hsl(48, 90%, 48%) 0%, hsl(48, 88%, 62%) 100%)',
   gradientWarm: 'linear-gradient(135deg, hsl(240, 5%, 96%) 0%, hsl(220, 14%, 92%) 100%)',
   gradientHero: 'linear-gradient(135deg, hsl(0, 0%, 0%) 0%, hsl(0, 0%, 18%) 100%)',
 
   overlay: 'rgba(0, 0, 0, 0.5)',
-  primary10: 'hsla(221, 56%, 24%, 0.1)',
-  secondary10: 'hsla(221, 42%, 36%, 0.1)',
-  accent10: 'hsla(355, 71%, 41%, 0.08)',
+  primary10: 'hsla(219, 76%, 32%, 0.1)',
+  secondary10: 'hsla(219, 62%, 42%, 0.1)',
+  accent10: 'hsla(48, 90%, 48%, 0.12)',
 } as const;
 
 export const THEME = {

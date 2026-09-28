@@ -26,7 +26,7 @@ export function normalizeFaultName(name: string | null | undefined): string {
 /**
  * Inasistenciaencias que disparan deuda:
  * - "Falta" (exacto)
- * - "Falta académica" (lo que registra el staff en JP)
+ * - "Falta académica" (lo que registra el staff)
  */
 export function isFaltaInasistenciaName(name: string | null | undefined): boolean {
   const n = normalizeFaultName(name);

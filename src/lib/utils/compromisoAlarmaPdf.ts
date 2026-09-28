@@ -3,13 +3,13 @@ import { es } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import type { CompromisoAlarmaTipo } from '@/types/compromisoAlarma';
 
-const LOGO_SRC = '/logo-jean-piaget.jpg';
+const LOGO_SRC = '/logo-iep-abraham.png';
 
-/** Paleta institucional Jean Piaget (comunicados oficiales) */
-const JP = {
-  navy: [15, 40, 80] as [number, number, number],
-  navySoft: [30, 58, 110] as [number, number, number],
-  beige: [214, 201, 170] as [number, number, number],
+/** Paleta institucional IEP Abraham Valdelomar (escudo: azul, amarillo, verde) */
+const AV = {
+  navy: [26, 86, 196] as [number, number, number],
+  navySoft: [40, 100, 210] as [number, number, number],
+  beige: [255, 246, 196] as [number, number, number],
   text: [30, 30, 30] as [number, number, number],
   muted: [90, 90, 90] as [number, number, number],
   line: [200, 200, 200] as [number, number, number],
@@ -65,40 +65,43 @@ export type CompromisoPdfInput = {
   countsHint?: string | null;
 };
 
-function loadImage(src: string): Promise<HTMLImageElement> {
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error('No se pudo leer el logo'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function loadImageFromUrl(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error(`No se pudo cargar: ${src}`));
     img.src = src;
   });
 }
 
-async function imageToJpegDataUrl(img: HTMLImageElement, maxPx = 360): Promise<string | null> {
-  const scale = Math.min(maxPx / img.width, maxPx / img.height, 1);
-  const w = Math.max(1, Math.round(img.width * scale));
-  const h = Math.max(1, Math.round(img.height * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, w, h);
-  ctx.drawImage(img, 0, 0, w, h);
-  return canvas.toDataURL('image/jpeg', 0.92);
+async function loadLogoForPdf(src: string): Promise<{ dataUrl: string; width: number; height: number; format: 'PNG' | 'JPEG' }> {
+  const res = await fetch(src);
+  if (!res.ok) throw new Error(`No se pudo cargar el logo (${res.status})`);
+  const blob = await res.blob();
+  const dataUrl = await blobToDataUrl(blob);
+  const img = await loadImageFromUrl(dataUrl);
+  const format: 'PNG' | 'JPEG' = blob.type.includes('png') || dataUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+  return { dataUrl, width: img.naturalWidth || img.width, height: img.naturalHeight || img.height, format };
 }
 
 /**
  * Genera e imprime/descarga el PDF de compromiso del apoderado
- * con cabecera institucional Jean Piaget (estilo comunicado).
+ * con cabecera institucional IEP Abraham Valdelomar (estilo comunicado).
  */
 export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Promise<void> {
   const when = input.signedAt ?? new Date();
   const fechaTxt = format(when, "d 'de' MMMM 'de' yyyy", { locale: es });
   const motivoTxt = TIPO_MOTIVO[input.tipo];
-  const school = (input.schoolName || 'Colegio Privado Jean Piaget').trim();
+  const school = (input.schoolName || 'IEP Abraham Valdelomar').trim();
   const parent = (input.parentName || '').trim();
   const grade = (input.grade || '—').trim();
   const section = (input.section || '—').trim();
@@ -114,65 +117,64 @@ export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Pr
 
   // ── Cabecera institucional (como comunicado oficial) ──────────────────────
   let logoDrawn = false;
+  let headerTextX = margin;
   try {
-    const img = await loadImage(LOGO_SRC);
-    const dataUrl = await imageToJpegDataUrl(img, 420);
-    if (dataUrl) {
-      const logoMm = 22;
-      const logoH = img.width > 0 ? (img.height * logoMm) / img.width : logoMm;
-      pdf.addImage(dataUrl, 'JPEG', margin, y, logoMm, logoH, undefined, 'FAST');
-      logoDrawn = true;
+    const logo = await loadLogoForPdf(LOGO_SRC);
+    const logoH = 24;
+    const logoW = logo.height > 0 ? (logo.width * logoH) / logo.height : logoH;
+    pdf.addImage(logo.dataUrl, logo.format, margin, y, logoW, logoH, undefined, 'FAST');
+    logoDrawn = true;
+    headerTextX = margin + logoW + 4;
 
-      pdf.setTextColor(...JP.muted);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(9);
-      pdf.text('COLEGIO PRIVADO', margin + logoMm + 4, y + 8);
-      pdf.setTextColor(...JP.navy);
-      pdf.setFont('times', 'bold');
-      pdf.setFontSize(16);
-      pdf.text('Jean Piaget', margin + logoMm + 4, y + 16);
-    }
-  } catch {
-    /* sin logo: texto solo */
+    pdf.setTextColor(...AV.muted);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(9);
+    pdf.text('I.E.P.', headerTextX, y + 9);
+    pdf.setTextColor(...AV.navy);
+    pdf.setFont('times', 'bold');
+    pdf.setFontSize(16);
+    pdf.text('Abraham Valdelomar', headerTextX, y + 17);
+  } catch (err) {
+    console.warn('[SIE] Logo del PDF de compromiso:', err);
   }
 
   if (!logoDrawn) {
-    pdf.setTextColor(...JP.muted);
+    pdf.setTextColor(...AV.muted);
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(9);
-    pdf.text('COLEGIO PRIVADO', margin, y + 8);
-    pdf.setTextColor(...JP.navy);
+    pdf.text('I.E.P.', margin, y + 8);
+    pdf.setTextColor(...AV.navy);
     pdf.setFont('times', 'bold');
     pdf.setFontSize(16);
-    pdf.text('Jean Piaget', margin, y + 16);
+    pdf.text('Abraham Valdelomar', margin, y + 16);
   }
 
   // Barra Facebook (derecha)
-  const fbW = 52;
+  const fbW = 62;
   const fbH = 10;
   const fbX = pageW - margin - fbW;
   const fbY = y + 4;
-  pdf.setFillColor(...JP.navy);
+  pdf.setFillColor(...AV.navy);
   pdf.roundedRect(fbX, fbY, fbW, fbH, 1.2, 1.2, 'F');
-  pdf.setFillColor(...JP.white);
+  pdf.setFillColor(...AV.white);
   pdf.circle(fbX + 6, fbY + fbH / 2, 3.2, 'F');
-  pdf.setTextColor(...JP.navy);
+  pdf.setTextColor(...AV.navy);
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(8);
   pdf.text('f', fbX + 6, fbY + fbH / 2 + 1.1, { align: 'center' });
-  pdf.setTextColor(...JP.white);
+  pdf.setTextColor(...AV.white);
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(7.5);
-  pdf.text('Jean Piaget Ayacucho', fbX + 11, fbY + fbH / 2 + 1.1);
+  pdf.text('Abraham Valdelomar', fbX + 11, fbY + fbH / 2 + 1.1);
 
   y = 38;
   // Franja beige
-  pdf.setFillColor(...JP.beige);
+  pdf.setFillColor(...AV.beige);
   pdf.rect(0, y, pageW, 2.2, 'F');
   y += 14;
 
   // Título
-  pdf.setTextColor(...JP.text);
+  pdf.setTextColor(...AV.text);
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(15);
   pdf.text('ACTA DE COMPROMISO DEL APODERADO', pageW / 2, y, { align: 'center' });
@@ -181,21 +183,21 @@ export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Pr
   // Fecha (derecha, estilo comunicado)
   pdf.setFont('times', 'italic');
   pdf.setFontSize(11);
-  pdf.setTextColor(...JP.muted);
+  pdf.setTextColor(...AV.muted);
   pdf.text(`Ayacucho, ${fechaTxt}.`, pageW - margin, y, { align: 'right' });
   y += 10;
 
   // Destinatario institucional
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(11);
-  pdf.setTextColor(...JP.text);
+  pdf.setTextColor(...AV.text);
   pdf.text('Estimado(a) apoderado(a):', margin, y);
   y += 8;
 
   // Ficha del estudiante (ordenada)
   const boxH = code ? 34 : 28;
-  pdf.setFillColor(...JP.boxBg);
-  pdf.setDrawColor(...JP.boxBorder);
+  pdf.setFillColor(...AV.boxBg);
+  pdf.setDrawColor(...AV.boxBorder);
   pdf.setLineWidth(0.4);
   pdf.roundedRect(margin, y, contentW, boxH, 1.5, 1.5, 'FD');
 
@@ -208,13 +210,13 @@ export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Pr
   const label = (t: string, x: number, yy: number) => {
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(8);
-    pdf.setTextColor(...JP.muted);
+    pdf.setTextColor(...AV.muted);
     pdf.text(t, x, yy);
   };
   const value = (t: string, x: number, yy: number, maxW = 80) => {
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(10);
-    pdf.setTextColor(...JP.text);
+    pdf.setTextColor(...AV.text);
     const lines = pdf.splitTextToSize(t || '—', maxW);
     pdf.text(lines[0] ?? '—', x, yy);
   };
@@ -239,7 +241,7 @@ export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Pr
   // Cuerpo
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(10.5);
-  pdf.setTextColor(...JP.text);
+  pdf.setTextColor(...AV.text);
   const lineH = 5.4;
 
   const intro = [
@@ -255,13 +257,13 @@ export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Pr
 
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(11);
-  pdf.setTextColor(...JP.navy);
+  pdf.setTextColor(...AV.navy);
   pdf.text('I. DECLARACIÓN', margin, y);
   y += 7;
 
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(10.5);
-  pdf.setTextColor(...JP.text);
+  pdf.setTextColor(...AV.text);
 
   const declaracion = [
     'Declaro haber sido debidamente informado(a) por la institución educativa acerca de la situación del estudiante a mi cargo y de las medidas de seguimiento correspondientes.',
@@ -276,13 +278,13 @@ export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Pr
   y += 2;
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(11);
-  pdf.setTextColor(...JP.navy);
+  pdf.setTextColor(...AV.navy);
   pdf.text('II. COMPROMISO', margin, y);
   y += 7;
 
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(10.5);
-  pdf.setTextColor(...JP.text);
+  pdf.setTextColor(...AV.text);
 
   const body = [
     `En tal sentido, me comprometo a ${TIPO_COMPROMISO[input.tipo]}.`,
@@ -300,29 +302,29 @@ export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Pr
   const colW = contentW / 2;
   const ySign = y;
 
-  pdf.setDrawColor(...JP.line);
+  pdf.setDrawColor(...AV.line);
   pdf.setLineWidth(0.5);
   pdf.line(margin, ySign + 20, margin + colW - 12, ySign + 20);
   pdf.line(margin + colW + 12, ySign + 20, margin + contentW, ySign + 20);
 
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(9);
-  pdf.setTextColor(...JP.muted);
+  pdf.setTextColor(...AV.muted);
   pdf.text('Firma del apoderado(a)', margin, ySign + 26);
   pdf.text('Firma / sello del colegio', margin + colW + 12, ySign + 26);
 
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(9);
-  pdf.setTextColor(...JP.text);
+  pdf.setTextColor(...AV.text);
   pdf.text(parent || '________________________', margin, ySign + 31);
   pdf.text(school, margin + colW + 12, ySign + 31);
 
   y = ySign + 42;
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(8);
-  pdf.setTextColor(...JP.muted);
+  pdf.setTextColor(...AV.muted);
   lines = pdf.splitTextToSize(
-    'Documento oficial del Colegio Privado Jean Piaget — Ayacucho. Archivar una copia firmada en el expediente del estudiante.',
+    'Documento oficial del IEP Abraham Valdelomar. Archivar una copia firmada en el expediente del estudiante.',
     contentW,
   );
   pdf.text(lines, margin, y);

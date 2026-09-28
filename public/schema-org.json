@@ -9,17 +9,17 @@
       "applicationCategory": "EducationalApplication",
       "operatingSystem": "Web",
       "inLanguage": "es-PE",
-      "description": "Plataforma de incidencias, asistencia escolar y reportes para el Colegio Jean Piaget.",
+      "description": "Plataforma de incidencias, asistencia escolar y reportes para el IEP Abraham Valdelomar.",
       "provider": {
         "@type": "EducationalOrganization",
-        "name": "Colegio Jean Piaget",
+        "name": "IEP Abraham Valdelomar",
         "url": "https://asiscole.com/"
       }
     },
     {
       "@type": "EducationalOrganization",
       "@id": "https://asiscole.com/#organization",
-      "name": "Colegio Jean Piaget",
+      "name": "IEP Abraham Valdelomar",
       "url": "https://asiscole.com/",
       "sameAs": ["https://asiscole.com/"]
     },

@@ -1,6 +1,6 @@
-# SIE Asiscole — Colegio Jean Piaget
+# SIE Asiscole — IEP Abraham Valdelomar
 
-Sistema de Incidencias y Asistencia Escolar (SIE) para el **Colegio Jean Piaget**. Frontend React + Vite; backend **Supabase** (Postgres, Storage, RPC) y canal móvil vía `/canal-api` en el VPS.
+Sistema de Incidencias y Asistencia Escolar (SIE) para el **IEP Abraham Valdelomar**. Frontend React + Vite; backend **Supabase** (Postgres, Storage, RPC) y canal móvil vía `/canal-api` en el VPS.
 
 **Producción:** [jeanpiaget.asiscole.com](https://jeanpiaget.asiscole.com/)
 
@@ -15,7 +15,7 @@ Sistema de Incidencias y Asistencia Escolar (SIE) para el **Colegio Jean Piaget*
 ## Estructura del repositorio
 
 ```
-Asiscole_JeanPiaget/
+Asiscole_abraham/
 ├── src/                 # Código de la aplicación (páginas, componentes, servicios)
 ├── public/              # Assets estáticos y favicons
 ├── database/sql/        # Scripts SQL por categoría (crear, actualizar, funciones, …)
@@ -39,7 +39,7 @@ Asiscole_JeanPiaget/
 
 ```bash
 git clone https://github.com/AndreMendezCisneros/Asiscole_JeanPiaget.git
-cd Asiscole_JeanPiaget
+cd Asiscole_abraham
 npm install
 ```
 
@@ -51,7 +51,7 @@ Copia `.env.example` a `.env.local` y completa los valores. En Jean Piaget el VP
 VITE_SUPABASE_URL=https://tu-proyecto.supabase.co
 VITE_SUPABASE_ANON_KEY=tu_anon_key
 VITE_APP_URL=http://localhost:8080
-VITE_SCHOOL_NAME=Colegio Jean Piaget
+VITE_SCHOOL_NAME=IEP Abraham Valdelomar
 VITE_TALLERES_ENABLED=true
 VITE_PENSIONES_ENABLED=true
 VITE_MOBILE_INGEST_ENABLED=true
@@ -102,4 +102,4 @@ Despliegue alternativo en Cloudflare Workers: ver `AGENTS.md` y `wrangler.toml`.
 
 ## Licencia
 
-Proyecto privado — Colegio Jean Piaget / Asiscole.
+Proyecto privado — IEP Abraham Valdelomar / Asiscole.
