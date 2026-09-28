@@ -1,9 +1,9 @@
 import { SCHOOL_NAME } from '@/config/siteSeo';
 
-const CARNET_SRC = '/Carnet-JeanPiaget.png';
+const CARNET_SRC = '/Carnet-MiguelGrau.jpeg';
 
 /**
- * Carnet real del Colegio Jean Piaget en la escena de login
+ * Carnet de ejemplo del IEP Miguel Grau Seminario en la escena de login
  * (marco + animaciones GSAP sobre el wrapper de la imagen).
  */
 export function LoginHeroIllustration() {

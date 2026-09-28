@@ -20,19 +20,19 @@
     --popover: 0 0% 100%;
     --popover-foreground: 240 4% 12%;
 
-    /* Acción principal — navy Colegio Jean Piaget (#1A305E) */
-    --primary: 221 56% 24%;
+    /* Acción principal — navy escudo Miguel Grau (#164174) */
+    --primary: 213 68% 27%;
     --primary-foreground: 0 0% 100%;
 
     /* Secundario — navy más claro */
-    --secondary: 221 42% 36%;
+    --secondary: 213 55% 36%;
     --secondary-foreground: 0 0% 100%;
 
     --muted: 210 26% 96%;
     --muted-foreground: 215 16% 47%;
 
-    /* Acento — rojo Jean Piaget (#B11E2A) */
-    --accent: 355 71% 41%;
+    /* Acento — rojo bandera / cinta del escudo (#E21D26) */
+    --accent: 357 77% 46%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 72% 48%;
@@ -40,51 +40,51 @@
 
     --border: 214 20% 90%;
     --input: 0 0% 100%;
-    --ring: 221 56% 28%;
+    --ring: 213 68% 32%;
 
     /* Semáforo */
-    --success: 152 55% 38%;
+    --success: 125 40% 36%;
     --success-foreground: 0 0% 100%;
-    --warning: 32 90% 48%;
+    --warning: 45 90% 46%;
     --warning-foreground: 0 0% 100%;
-    --info: 221 48% 36%;
+    --info: 213 60% 38%;
     --info-foreground: 0 0% 100%;
     --danger: 0 72% 48%;
     --danger-foreground: 0 0% 100%;
 
     --radius: 0.75rem;
 
-    /* Sidebar — navy Jean Piaget */
-    --sidebar-background: 221 56% 18%;
+    /* Sidebar — navy Miguel Grau */
+    --sidebar-background: 213 68% 16%;
     --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 221 45% 72%;
-    --sidebar-primary-foreground: 221 56% 16%;
-    --sidebar-accent: 221 40% 26%;
+    --sidebar-primary: 213 45% 72%;
+    --sidebar-primary-foreground: 213 68% 16%;
+    --sidebar-accent: 213 50% 24%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 221 35% 28%;
-    --sidebar-ring: 221 45% 72%;
+    --sidebar-border: 213 40% 26%;
+    --sidebar-ring: 48 80% 55%;
 
     /* Tokens de marca (login) */
-    --brand-accent: 221 56% 24%;
-    --brand-accent-dark: 221 60% 18%;
-    --brand-accent-light: 221 40% 94%;
-    --brand-link: 221 48% 42%;
-    --canvas-ice: 220 14% 92%;
+    --brand-accent: 213 68% 27%;
+    --brand-accent-dark: 213 72% 18%;
+    --brand-accent-light: 213 40% 94%;
+    --brand-link: 213 60% 42%;
+    --canvas-ice: 213 20% 92%;
     --ink: 0 0% 0%;
     --fog: 240 5% 96%;
     --silver-mist: 240 7% 91%;
 
-    /* Login — navy / rojo Jean Piaget */
-    --login-deep: 221 40% 5%;
-    --login-surface: 221 28% 9%;
-    --login-elevated: 221 22% 13%;
-    --login-border: 221 16% 26%;
+    /* Login — navy / rojo / oro del escudo */
+    --login-deep: 213 45% 6%;
+    --login-surface: 213 32% 9%;
+    --login-elevated: 213 26% 13%;
+    --login-border: 213 18% 26%;
     --login-foreground: 210 30% 98%;
-    --login-muted: 216 20% 83%;
-    --login-caption: 216 16% 75%;
-    --login-placeholder: 216 14% 65%;
-    --login-accent: 355 71% 48%;
-    --login-glow: 221 55% 58%;
+    --login-muted: 213 20% 83%;
+    --login-caption: 213 16% 75%;
+    --login-placeholder: 213 14% 65%;
+    --login-accent: 357 77% 50%;
+    --login-glow: 48 85% 52%;
   }
 
   .dark {
@@ -94,22 +94,22 @@
     --card-foreground: 0 0% 98%;
     --popover: 0 0% 14%;
     --popover-foreground: 0 0% 98%;
-    --primary: 221 45% 52%;
+    --primary: 213 55% 52%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 221 38% 46%;
+    --secondary: 213 45% 46%;
     --secondary-foreground: 0 0% 100%;
     --muted: 0 0% 20%;
     --muted-foreground: 0 0% 65%;
-    --accent: 355 65% 52%;
+    --accent: 357 70% 52%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 70% 52%;
     --destructive-foreground: 0 0% 100%;
     --border: 0 0% 22%;
     --input: 0 0% 18%;
-    --ring: 221 45% 52%;
-    --success: 152 50% 45%;
-    --warning: 32 85% 52%;
-    --info: 217 45% 52%;
+    --ring: 213 55% 52%;
+    --success: 125 45% 42%;
+    --warning: 45 85% 52%;
+    --info: 213 50% 52%;
     --danger: 0 70% 52%;
     --sidebar-background: 0 0% 8%;
     --sidebar-foreground: 0 0% 98%;
@@ -1028,7 +1028,7 @@
     transform-origin: center center;
   }
 
-  /* Carnet real (imagen Jean Piaget) en login */
+  /* Carnet institucional (imagen Miguel Grau) en login */
   .login-carnet-replica--photo {
     max-width: min(280px, 72vw);
     min-height: 0;
@@ -1047,6 +1047,7 @@
 
   .login-carnet-replica__photo-card-img {
     @apply block h-auto w-full;
+    object-fit: contain;
     border-radius: 1.15rem;
   }
 

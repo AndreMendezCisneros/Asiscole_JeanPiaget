@@ -472,7 +472,7 @@ function TodayItem({
       <p
         className={cn(
           'mt-1 text-lg font-bold',
-          ok && 'text-[#1A305E]',
+          ok && 'text-[#164174]',
           warn && 'text-amber-600'
         )}
       >

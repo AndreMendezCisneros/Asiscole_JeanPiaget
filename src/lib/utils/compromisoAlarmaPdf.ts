@@ -3,12 +3,12 @@ import { es } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import type { CompromisoAlarmaTipo } from '@/types/compromisoAlarma';
 
-const LOGO_SRC = '/logo-jean-piaget.jpg';
+const LOGO_SRC = '/logo-acta-miguel-grau.png';
 
-/** Paleta institucional Jean Piaget (comunicados oficiales) */
+/** Paleta institucional del acta (navy del escudo Miguel Grau) */
 const JP = {
-  navy: [15, 40, 80] as [number, number, number],
-  navySoft: [30, 58, 110] as [number, number, number],
+  navy: [22, 65, 116] as [number, number, number],
+  navySoft: [30, 72, 125] as [number, number, number],
   beige: [214, 201, 170] as [number, number, number],
   text: [30, 30, 30] as [number, number, number],
   muted: [90, 90, 90] as [number, number, number],
@@ -92,13 +92,13 @@ async function imageToJpegDataUrl(img: HTMLImageElement, maxPx = 360): Promise<s
 
 /**
  * Genera e imprime/descarga el PDF de compromiso del apoderado
- * con cabecera institucional Jean Piaget (estilo comunicado).
+ * con cabecera institucional IEP Miguel Grau Seminario (estilo comunicado).
  */
 export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Promise<void> {
   const when = input.signedAt ?? new Date();
   const fechaTxt = format(when, "d 'de' MMMM 'de' yyyy", { locale: es });
   const motivoTxt = TIPO_MOTIVO[input.tipo];
-  const school = (input.schoolName || 'Colegio Privado Jean Piaget').trim();
+  const school = (input.schoolName || 'IEP Miguel Grau Seminario').trim();
   const parent = (input.parentName || '').trim();
   const grade = (input.grade || '—').trim();
   const section = (input.section || '—').trim();
@@ -126,11 +126,11 @@ export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Pr
       pdf.setTextColor(...JP.muted);
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(9);
-      pdf.text('COLEGIO PRIVADO', margin + logoMm + 4, y + 8);
+      pdf.text('INSTITUCIÓN EDUCATIVA', margin + logoMm + 4, y + 8);
       pdf.setTextColor(...JP.navy);
       pdf.setFont('times', 'bold');
       pdf.setFontSize(16);
-      pdf.text('Jean Piaget', margin + logoMm + 4, y + 16);
+      pdf.text('Miguel Grau Seminario', margin + logoMm + 4, y + 16);
     }
   } catch {
     /* sin logo: texto solo */
@@ -140,15 +140,15 @@ export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Pr
     pdf.setTextColor(...JP.muted);
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(9);
-    pdf.text('COLEGIO PRIVADO', margin, y + 8);
+    pdf.text('INSTITUCIÓN EDUCATIVA', margin, y + 8);
     pdf.setTextColor(...JP.navy);
     pdf.setFont('times', 'bold');
     pdf.setFontSize(16);
-    pdf.text('Jean Piaget', margin, y + 16);
+    pdf.text('Miguel Grau Seminario', margin, y + 16);
   }
 
   // Barra Facebook (derecha)
-  const fbW = 52;
+  const fbW = 58;
   const fbH = 10;
   const fbX = pageW - margin - fbW;
   const fbY = y + 4;
@@ -163,7 +163,7 @@ export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Pr
   pdf.setTextColor(...JP.white);
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(7.5);
-  pdf.text('Jean Piaget Ayacucho', fbX + 11, fbY + fbH / 2 + 1.1);
+  pdf.text('Miguel Grau Yanama', fbX + 11, fbY + fbH / 2 + 1.1);
 
   y = 38;
   // Franja beige
@@ -322,7 +322,7 @@ export async function downloadCompromisoAlarmaPdf(input: CompromisoPdfInput): Pr
   pdf.setFontSize(8);
   pdf.setTextColor(...JP.muted);
   lines = pdf.splitTextToSize(
-    'Documento oficial del Colegio Privado Jean Piaget — Ayacucho. Archivar una copia firmada en el expediente del estudiante.',
+    'Documento oficial del IEP Miguel Grau Seminario — Yanama. Archivar una copia firmada en el expediente del estudiante.',
     contentW,
   );
   pdf.text(lines, margin, y);
