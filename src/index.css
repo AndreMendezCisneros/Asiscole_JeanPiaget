@@ -694,7 +694,7 @@
   .login-hero-visual,
   .login-carnet-scene {
     @apply relative w-full mx-auto;
-    width: min(100%, 380px);
+    width: min(100%, 364px);
     filter: drop-shadow(0 24px 48px hsl(var(--login-deep) / 0.55));
   }
 
@@ -725,19 +725,20 @@
 
   .login-carnet-scene__frame {
     @apply relative w-full;
-    min-height: 360px;
+    min-height: 0;
     will-change: transform, opacity;
   }
 
   .login-carnet-scanner {
     @apply relative mx-auto flex flex-col items-center;
-    width: min(100%, 272px);
-    padding: 0.75rem 0.5rem 0.25rem;
+    width: min(100%, 301px);
+    padding: 0.5rem;
     perspective: 1100px;
   }
 
   .login-carnet-scanner__frame {
-    @apply pointer-events-none absolute inset-x-1 top-1 bottom-14;
+    @apply pointer-events-none absolute;
+    inset: 0.15rem;
   }
 
   .login-carnet-scanner__corner {
@@ -1012,7 +1013,7 @@
   .login-carnet-card {
     @apply relative mx-auto rounded-[1.35rem] border;
     width: 100%;
-    max-width: 272px;
+    max-width: none;
     border-color: hsl(var(--login-glow) / 0.45);
     background: transparent;
     box-shadow:
@@ -1023,31 +1024,34 @@
   }
 
   .login-carnet-replica {
-    min-height: 372px;
+    min-height: 0;
     transform-style: preserve-3d;
     transform-origin: center center;
   }
 
   /* Carnet de ejemplo IEP Abraham Valdelomar en login */
   .login-carnet-replica--photo {
-    max-width: min(280px, 72vw);
+    max-width: none;
     min-height: 0;
     border: none;
     background: transparent;
     box-shadow:
       0 0 48px hsl(var(--login-glow) / 0.18),
       0 28px 56px hsl(var(--login-deep) / 0.55);
-    overflow: hidden;
-    border-radius: 1.15rem;
+    overflow: visible;
+    border-radius: 1.5rem;
   }
 
   .login-carnet-replica__photo-card {
     @apply relative w-full;
+    line-height: 0;
   }
 
   .login-carnet-replica__photo-card-img {
-    @apply block h-auto w-full object-contain;
-    border-radius: 1.15rem;
+    @apply block h-auto w-full;
+    object-fit: contain;
+    object-position: center;
+    border-radius: 1.35rem;
   }
 
   .login-carnet-replica__flip {

@@ -1,6 +1,6 @@
 import { SCHOOL_NAME } from '@/config/siteSeo';
 
-const CARNET_SRC = '/carnet-abraham.png';
+const CARNET_SRC = '/carnet-abraham.png?v=2';
 
 /**
  * Carnet de ejemplo del IEP Abraham Valdelomar en la escena de login

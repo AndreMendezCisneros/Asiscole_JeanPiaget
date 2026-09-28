@@ -42,12 +42,7 @@ export function useLoginAmbientAnimation(scopeRef: RefObject<HTMLElement | null>
 
       /* ── Levitación del carnet (suave, tras la entrada) ─────── */
       toIf('[data-login-visual-card]', {
-        y: -10, duration: 3.8, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: IDLE_DELAY,
-      });
-
-      /* ── Inclinación 3D muy sutil en idle ───────────────────── */
-      toIf('[data-login-visual-card]', {
-        rotationZ: 0.8, duration: 6, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: IDLE_DELAY,
+        y: -8, duration: 3.8, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: IDLE_DELAY,
       });
 
       /* ── Halos / anillos (respiración lenta) ────────────────── */
@@ -103,10 +98,10 @@ export function useLoginAmbientAnimation(scopeRef: RefObject<HTMLElement | null>
       const onMove = contextSafe((e: MouseEvent) => {
         const nx = e.clientX / window.innerWidth  - 0.5;
         const ny = e.clientY / window.innerHeight - 0.5;
-        visualX?.(nx * 8);
-        visualY?.(ny * 5);
-        cardRY?.(nx * 7);
-        cardRX?.(-ny * 5);
+        visualX?.(nx * 5);
+        visualY?.(ny * 3);
+        cardRY?.(nx * 4);
+        cardRX?.(-ny * 3);
       });
 
       /* Activa el parallax solo cuando la entrada ya asentó las rotaciones. */
