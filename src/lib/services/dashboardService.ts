@@ -213,8 +213,7 @@ async function fetchFlatActiveIncidents(options?: DateRange & { studentIds?: num
   }, PAGE_SIZE);
 
   if (error) {
-    console.error('Error al cargar incidencias del dashboard:', error);
-    return [];
+    throw new Error(error);
   }
   return data;
 }
@@ -304,8 +303,7 @@ async function countActiveIncidents(opts: {
       .lte('fecha_hora_registro', opts.fechaHasta);
 
     if (error) {
-      console.error('Error al contar incidencias:', error);
-      return 0;
+      throw new Error(error.message);
     }
     return count ?? 0;
   }
@@ -324,8 +322,7 @@ async function countActiveIncidents(opts: {
       .in('id_estudiante', chunk);
 
     if (error) {
-      console.error('Error al contar incidencias filtradas:', error);
-      continue;
+      throw new Error(error.message);
     }
     total += count ?? 0;
   }

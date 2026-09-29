@@ -16,8 +16,8 @@ export function useDashboardStatsQuery() {
     },
     staleTime: DASHBOARD_STALE_MS,
     placeholderData: keepPreviousData,
-    // Si había un error previo, volver a intentar siempre al montar el componente
-    refetchOnMount: true,
+    refetchOnMount: 'always',
+    retry: 2,
   });
 }
 
