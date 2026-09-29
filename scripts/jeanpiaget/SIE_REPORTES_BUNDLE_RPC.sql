@@ -68,7 +68,7 @@ AS $$
       count(*) FILTER (WHERE b.fecha_hora_registro >= p.hoy)::int AS today_c,
       count(*) FILTER (WHERE b.fecha_hora_registro >= p.semana)::int AS week_c,
       count(*) FILTER (WHERE b.fecha_hora_registro >= p.mes_ini)::int AS month_c,
-      count(DISTINCT b.id_estudiante) FILTER (WHERE b.fecha_hora_registro >= p.mes_ini)::int AS students_month,
+      count(DISTINCT b.id_estudiante)::int AS students_month,
       round(coalesce(avg(b.nivel_reincidencia), 0)::numeric, 2) AS avg_n,
       count(*) FILTER (WHERE b.nivel_reincidencia = 0)::int AS l0,
       count(*) FILTER (WHERE b.nivel_reincidencia = 1)::int AS l1,
