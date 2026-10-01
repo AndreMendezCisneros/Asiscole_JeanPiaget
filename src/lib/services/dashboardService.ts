@@ -542,6 +542,70 @@ function buildComparisons(
 /**
  * Servicio de dashboard y reportes
  */
+function studentsInBundle(payload: Record<string, unknown>): number {
+  const direct = Number(payload.studentsWithIncidents) || 0;
+  if (direct > 0) return direct;
+  const grades = payload.byGrade;
+  if (!Array.isArray(grades)) return 0;
+  return grades.reduce((sum: number, row: unknown) => {
+    if (!row || typeof row !== 'object') return sum;
+    return sum + (Number((row as { studentsWithIncidents?: number }).studentsWithIncidents) || 0);
+  }, 0);
+}
+
+function statsFromBundle(payload: Record<string, unknown>): DashboardStats {
+  const ld = (payload.levelDistribution || {}) as Record<string, number>;
+  return {
+    totalIncidents: Number(payload.totalIncidents) || 0,
+    incidentsToday: Number(payload.incidentsToday) || 0,
+    incidentsThisWeek: Number(payload.incidentsThisWeek) || 0,
+    incidentsThisMonth: Number(payload.incidentsThisMonth) || 0,
+    studentsWithIncidents: studentsInBundle(payload),
+    averageReincidenceLevel: Number(payload.averageReincidenceLevel) || 0,
+    levelDistribution: {
+      level0: Number(ld.level0) || 0,
+      level1: Number(ld.level1) || 0,
+      level2: Number(ld.level2) || 0,
+      level3: Number(ld.level3) || 0,
+      level4: Number(ld.level4) || 0,
+      level5: Number(ld.level5) || 0,
+    },
+    topFaults: (payload.topFaults as DashboardStats['topFaults']) || [],
+    incidentsByGrade: (payload.incidentsByGrade as DashboardStats['incidentsByGrade']) || [],
+  };
+}
+
+/** Una sola agregación en Postgres. Si la función no existe, el inicio sigue por el camino anterior. */
+async function fetchReportBundle(args: {
+  fechaDesde?: string;
+  fechaHasta?: string;
+  hoy?: string;
+  inicioSemana?: string;
+  meses?: Array<{ label: string; desde: string; hasta: string }>;
+}): Promise<Record<string, unknown> | null> {
+  if (!args.fechaDesde || !args.fechaHasta) return null;
+  const { data, error } = await supabase.rpc('sie_reportes_bundle', {
+    p_fecha_desde: args.fechaDesde,
+    p_fecha_hasta: args.fechaHasta,
+    p_nivel: null,
+    p_grados: null,
+    p_hoy: args.hoy ?? null,
+    p_inicio_semana: args.inicioSemana ?? null,
+    p_meses: args.meses ?? [],
+    p_dias: [],
+  });
+  if (error) {
+    if (isMissingRpcError(error.message)) return null;
+    throw new Error(error.message);
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  const payload = data as Record<string, unknown>;
+  if (typeof payload.error === 'string' && payload.error) {
+    throw new Error(payload.error);
+  }
+  return payload;
+}
+
 export const dashboardService = {
   /**
    * Obtener estadísticas del dashboard ejecutivo
@@ -566,6 +630,16 @@ export const dashboardService = {
       const sundayKey = `${sundayDate.getUTCFullYear()}-${String(sundayDate.getUTCMonth() + 1).padStart(2, '0')}-${String(sundayDate.getUTCDate()).padStart(2, '0')}`;
       const { desde: weekDesde } = getLimaDayRangeISO(sundayKey);
       const inicioSemana = new Date(weekDesde);
+
+      const bundle = await fetchReportBundle({
+        fechaDesde,
+        fechaHasta,
+        hoy: hoyDesde,
+        inicioSemana: weekDesde,
+      });
+      if (bundle) {
+        return { stats: statsFromBundle(bundle), error: null };
+      }
 
       const { start: monthStart } = getMonthBounds(y, m);
       const { desde: monthDesde } = getLimaDayRangeISO(monthStart);
@@ -687,6 +761,21 @@ export const dashboardService = {
       // Mismo formato de fechas que resolveReportDateRange / schoolYearRange (probado con datos reales)
       const fechaDesde = new Date(first.year, first.month - 1, 1, 0, 0, 0, 0).toISOString();
       const fechaHasta = new Date(last.year, last.month, 0, 23, 59, 59, 999).toISOString();
+
+      if (!level && !grade && !section) {
+        const meses = window.map(({ year: wy, month, label }) => ({
+          label,
+          desde: new Date(wy, month - 1, 1, 0, 0, 0, 0).toISOString(),
+          hasta: new Date(wy, month, 0, 23, 59, 59, 999).toISOString(),
+        }));
+        const bundle = await fetchReportBundle({ fechaDesde, fechaHasta, meses });
+        if (bundle && Array.isArray(bundle.monthlyTrend)) {
+          return {
+            monthlyTrend: bundle.monthlyTrend as { month: string; incidents: number }[],
+            error: null,
+          };
+        }
+      }
 
       const rows = await fetchFlatActiveIncidents({
         fechaDesde,
