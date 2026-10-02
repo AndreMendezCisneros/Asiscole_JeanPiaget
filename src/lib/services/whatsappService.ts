@@ -1,6 +1,7 @@
 import type { ArrivalRecord, FaultType, Incident, Student } from '@/types';
 import { toWhatsAppChatId, toWhatsAppPhone } from '@/lib/utils/phoneUtils';
 import {
+  buildArrivalCorrectionIngestBody,
   buildArrivalIngestBody,
   buildCitaIngestBody,
   buildDepartureIngestBody,
@@ -39,8 +40,8 @@ function resolveMobileIngestEndpoint(): string {
 
 /**
  * WPPConnect puede coexistir con la app (mobile-ingest):
- * - DNIs en VITE_WPPCONNECT_STUDENT_DNIS → WhatsApp WPPConnect
- * - resto → app Asiscole
+ * - DNIs en VITE_WPPCONNECT_STUDENT_DNIS → WhatsApp + app
+ * - resto → solo app Asiscole
  * Si la lista está vacía y la app está activa → todo por app.
  */
 const WPPCONNECT_FLAG = import.meta.env.VITE_WPPCONNECT_ENABLED === 'true';
@@ -116,9 +117,88 @@ function studentInWaWhitelist(student: Student): boolean {
   );
 }
 
-/** true = avisar por WPPConnect (lista corta); false = app u otro proveedor */
+/** true = también avisar por WPPConnect (lista corta). La app se envía aparte. */
 function shouldNotifyViaWppConnect(student: Student): boolean {
   return Boolean(WPPCONNECT_FLAG && studentInWaWhitelist(student));
+}
+
+type ParentNotifyResult = {
+  ok: boolean;
+  error: string | null;
+  chatId?: string;
+  skipped?: boolean;
+};
+
+/**
+ * Lista blanca → WhatsApp y app. Fuera de lista → solo app.
+ * Si WhatsApp llega y la app falla, ok=true con error de app para avisar al staff.
+ */
+async function deliverParentNotice(
+  student: Student,
+  options: {
+    wppMessages?: string[];
+    ingestBody?: MobileIngestEventBody | null;
+    queue?: {
+      phone: string;
+      record: Partial<ArrivalRecord> | null;
+      messages: string[];
+      kind: 'arrival' | 'departure' | 'incident';
+    };
+  },
+): Promise<ParentNotifyResult> {
+  const apoderadoPhone = student.contactPhone?.trim() || student.emergencyPhone?.trim() || '';
+  const chatId = toWhatsAppChatId(apoderadoPhone) || undefined;
+  const viaWpp = shouldNotifyViaWppConnect(student);
+  const errors: string[] = [];
+  let wppOk = false;
+  let appOk = false;
+
+  if (viaWpp) {
+    const wppPhone = toWhatsAppPhone(apoderadoPhone);
+    if (!wppPhone || !chatId) {
+      errors.push('Teléfono de contacto no válido para WhatsApp');
+    } else {
+      const messages = options.wppMessages ?? options.queue?.messages ?? [];
+      const result =
+        options.queue && WPPCONNECT_ROTATION
+          ? await sendViaNotifyQueue(
+              options.queue.phone,
+              student,
+              options.queue.record,
+              options.queue.messages,
+              options.queue.kind,
+            )
+          : await sendTextsViaWppConnect(wppPhone, messages);
+      if (result.ok) wppOk = true;
+      else if (result.error) errors.push(result.error);
+    }
+  }
+
+  if (MOBILE_INGEST_ENABLED && options.ingestBody) {
+    const result = await sendViaMobileIngest(options.ingestBody);
+    if (result.ok) appOk = true;
+    else if (result.error) errors.push(result.error);
+  }
+
+  if (viaWpp) {
+    if (wppOk && (appOk || !MOBILE_INGEST_ENABLED || !options.ingestBody)) {
+      return { ok: true, error: null, chatId };
+    }
+    if (wppOk) {
+      return { ok: true, error: errors.join(' · ') || 'No se pudo avisar en la app', chatId };
+    }
+    if (appOk) {
+      return { ok: true, error: errors.join(' · ') || 'WhatsApp no se pudo enviar', chatId };
+    }
+    return { ok: false, error: errors[0] || 'No se pudo notificar', chatId };
+  }
+
+  if (appOk) return { ok: true, error: null, chatId };
+  return {
+    ok: false,
+    error: errors[0] || 'Notificaciones por aplicación no habilitadas',
+    chatId,
+  };
 }
 
 /** @deprecated alias — la lista corta ahora usa WPPConnect */
@@ -147,10 +227,10 @@ export type NotifyOpts = {
   tallerNombre?: string;
 };
 
-/** Cola: un aviso de la plantilla a la vez, para que la espera de 10 s no se pise ni se pierda. */
+/** Cola: un aviso de la plantilla a la vez, para que la espera de 4–6 s no se pise ni se pierda. */
 let wppSendChain: Promise<void> = Promise.resolve();
-const WPPCONNECT_TYPING_MIN_MS = 10_000;
-const WPPCONNECT_TYPING_MAX_MS = 12_000;
+const WPPCONNECT_TYPING_MIN_MS = 4_000;
+const WPPCONNECT_TYPING_MAX_MS = 6_000;
 
 function enqueueWppSend<T>(task: () => Promise<T>): Promise<T> {
   const run = wppSendChain.then(task, task);
@@ -170,7 +250,7 @@ function randomBetween(min: number, max: number): number {
 }
 
 export function buildNotifyDedupKey(
-  kind: 'arrival' | 'departure' | 'incident' | 'pension' | 'nota',
+  kind: 'arrival' | 'departure' | 'incident' | 'pension' | 'nota' | 'cita',
   studentId: number,
   date: string,
   opts?: { tallerId?: string; incidentId?: number },
@@ -183,6 +263,9 @@ export function buildNotifyDedupKey(
   }
   if (kind === 'nota') {
     return `nota:${studentId}:${date}`;
+  }
+  if (kind === 'cita') {
+    return `cita:${studentId}:${date}`;
   }
   if (opts?.tallerId) {
     return `taller:${opts.tallerId}:${kind}:${studentId}:${date.slice(0, 10)}`;
@@ -506,6 +589,78 @@ function buildIncidentNotifyMessages(
   return [buildIncidentMessage(student, incident, fault, opts)];
 }
 
+function formatCitaFechaTxt(fecha: string): string {
+  const [y, m, d] = fecha.slice(0, 10).split('-');
+  if (!d || !m || !y) return fecha;
+  return `${d}/${m}/${y}`;
+}
+
+function citaHeadline(alcance: CitaIngestAlcance): string {
+  if (alcance === 'apafa') return `📅 *Junta de padres (APAFA) — ${SCHOOL_NAME}*`;
+  if (alcance === 'piso') return `📅 *Citación por grado — ${SCHOOL_NAME}*`;
+  if (alcance === 'salon') return `📅 *Citación por sección — ${SCHOOL_NAME}*`;
+  return `📅 *Citación — ${SCHOOL_NAME}*`;
+}
+
+function citaSummaryLine(
+  student: Student,
+  input: { motivo: string; fecha: string; hora: string; alcance: CitaIngestAlcance },
+  fechaTxt: string,
+  horaTxt: string,
+): string {
+  if (input.alcance === 'apafa') {
+    return `Se convoca a junta de padres (APAFA) el ${fechaTxt} a las ${horaTxt}.`;
+  }
+  if (input.alcance === 'piso') {
+    return `Se convoca a los padres del grado ${student.grade} (${student.level}) el ${fechaTxt} a las ${horaTxt}.`;
+  }
+  if (input.alcance === 'salon') {
+    return `Se convoca a los padres de la sección ${student.section}, grado ${student.grade}, el ${fechaTxt} a las ${horaTxt}.`;
+  }
+  return `Se citó a los padres de ${student.fullName} el ${fechaTxt} a las ${horaTxt}.`;
+}
+
+export function buildCitaMessage(
+  student: Student,
+  input: {
+    motivo: string;
+    fecha: string;
+    hora: string;
+    alcance: CitaIngestAlcance;
+  },
+): string {
+  const greeting = GREETING_VARIANTS[randomBetween(0, GREETING_VARIANTS.length - 1)];
+  const closings = closingVariants();
+  const closing = closings[randomBetween(0, closings.length - 1)];
+  const fechaTxt = formatCitaFechaTxt(input.fecha);
+  const horaTxt = input.hora.slice(0, 5);
+  const portalLink = getParentPortalLink(student);
+  const portalBlock = portalLink
+    ? [`👩‍👧‍👦 *Ver asistencia de su hijo/a:*`, portalLink, '']
+    : [];
+
+  return [
+    greeting,
+    '',
+    citaHeadline(input.alcance),
+    '',
+    `*Estudiante:* ${student.fullName}`,
+    ...formatStudentAcademicLines(student),
+    `*Fecha:* ${fechaTxt}`,
+    `*Hora:* ${horaTxt}`,
+    `*Motivo:* ${input.motivo.trim()}`,
+    '',
+    citaSummaryLine(student, input, fechaTxt, horaTxt),
+    '',
+    ...portalBlock,
+    closing,
+  ]
+    .filter((l) => l !== null && l !== undefined && l !== '')
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function looksLikeHtmlResponse(raw: string): boolean {
   const t = raw.trim().toLowerCase();
   return t.startsWith('<!doctype') || t.startsWith('<html') || t.includes('<title>sie asiscole');
@@ -722,11 +877,9 @@ async function sendViaWppConnect(phone: string, text: string): Promise<{ ok: boo
   }
 
   return enqueueWppSend(async () => {
-    await wppconnectPost('/typing', { phone, isGroup: false, value: true }).catch(() => {});
+    // La API /typing de este WPPConnect falla con "Error on set typing" y no bloquea el envío.
     await sleep(randomBetween(WPPCONNECT_TYPING_MIN_MS, WPPCONNECT_TYPING_MAX_MS));
-    const sent = await wppconnectPost('/send-message', { phone, message: text, isGroup: false });
-    await wppconnectPost('/typing', { phone, isGroup: false, value: false }).catch(() => {});
-    return sent;
+    return wppconnectPost('/send-message', { phone, message: text, isGroup: false });
   });
 }
 
@@ -858,54 +1011,29 @@ export async function notifyParentIncident(
     };
   }
 
-  if (shouldNotifyViaWppConnect(student)) {
-    const wppPhone = toWhatsAppPhone(apoderadoPhone);
-    const chatId = toWhatsAppChatId(apoderadoPhone);
-    if (!wppPhone || !chatId) {
-      return { ok: false, error: 'Teléfono de contacto no válido para WhatsApp' };
-    }
-    const messages = buildIncidentNotifyMessages(student, incident, fault, apoderadoPhone, opts);
-    const stubRecord: Partial<ArrivalRecord> = {
-      id: incident.id,
-      date: (incident.registeredAt || '').slice(0, 10),
-      status: fault.name as ArrivalRecord['status'],
-    };
-    const result =
-      WPPCONNECT_ROTATION
-        ? await sendViaNotifyQueue(wppPhone, student, stubRecord, messages, 'incident')
-        : await sendTextsViaWppConnect(wppPhone, messages);
-    return { ...result, chatId };
-  }
-
-  if (MOBILE_INGEST_ENABLED) {
-    const result = await sendViaMobileIngest(
-      buildIncidentIngestBody(MOBILE_INGEST_TENANT, student, incident, fault),
-    );
-    return { ...result, chatId: toWhatsAppChatId(apoderadoPhone) || undefined };
-  }
-
-  const chatId = toWhatsAppChatId(apoderadoPhone);
-  const wppPhone = toWhatsAppPhone(apoderadoPhone);
-  if (!chatId || !wppPhone) {
-    return { ok: false, error: 'Teléfono de contacto no válido para WhatsApp' };
-  }
-
   const messages = buildIncidentNotifyMessages(student, incident, fault, apoderadoPhone, opts);
   const stubRecord: Partial<ArrivalRecord> = {
     id: incident.id,
     date: (incident.registeredAt || '').slice(0, 10),
     status: fault.name as ArrivalRecord['status'],
   };
+  const wppPhone = toWhatsAppPhone(apoderadoPhone);
 
-  const result = META_WA_ENABLED
-    ? await sendTextsViaMetaWa(wppPhone, student, stubRecord as ArrivalRecord, messages)
-    : WPPCONNECT_ENABLED && WPPCONNECT_ROTATION
-      ? await sendViaNotifyQueue(wppPhone, student, stubRecord, messages, 'incident')
-      : WPPCONNECT_ENABLED
-        ? await sendTextsViaWppConnect(wppPhone, messages)
-        : await sendTextsViaOpenwa(chatId, messages);
-
-  return { ...result, chatId };
+  return deliverParentNotice(student, {
+    wppMessages: messages,
+    ingestBody: MOBILE_INGEST_ENABLED
+      ? buildIncidentIngestBody(MOBILE_INGEST_TENANT, student, incident, fault)
+      : null,
+    queue:
+      wppPhone
+        ? {
+            phone: wppPhone,
+            record: stubRecord,
+            messages,
+            kind: 'incident',
+          }
+        : undefined,
+  });
 }
 
 export function buildPensionPendingMessage(
@@ -1019,8 +1147,7 @@ export async function notifyParentNota(
 }
 
 /**
- * Aviso de citación vía app móvil (canal / mobile ingest). No usa WhatsApp.
- * Las citas no tienen trigger de outbox: el SIE debe POST tipo aviso + contexto cita.
+ * Citación: lista blanca → WhatsApp y app; el resto → solo app.
  */
 export async function notifyParentCita(
   student: Student,
@@ -1032,11 +1159,15 @@ export async function notifyParentCita(
     alcance: CitaIngestAlcance;
   },
 ): Promise<{ ok: boolean; error: string | null; chatId?: string; skipped?: boolean }> {
-  if (!MOBILE_INGEST_ENABLED) {
-    return { ok: false, error: 'Notificaciones por aplicación no habilitadas' };
+  if (!WHATSAPP_ENABLED) {
+    return { ok: false, error: 'WhatsApp desactivado' };
   }
 
   const apoderadoPhone = student.contactPhone?.trim() || student.emergencyPhone?.trim() || '';
+  if (!MOBILE_INGEST_ENABLED && !apoderadoPhone) {
+    return { ok: false, error: 'El estudiante no tiene teléfono de contacto' };
+  }
+
   const dedupKey = buildNotifyDedupKey('cita', student.id, String(input.citaId));
 
   if (shouldSkipDuplicateNotify(dedupKey)) {
@@ -1048,10 +1179,81 @@ export async function notifyParentCita(
     };
   }
 
-  const result = await sendViaMobileIngest(
-    buildCitaIngestBody(MOBILE_INGEST_TENANT, student, input),
-  );
-  return { ...result, chatId: toWhatsAppChatId(apoderadoPhone) || undefined };
+  return deliverParentNotice(student, {
+    wppMessages: [buildCitaMessage(student, input)],
+    ingestBody: MOBILE_INGEST_ENABLED
+      ? buildCitaIngestBody(MOBILE_INGEST_TENANT, student, input)
+      : null,
+  });
+}
+
+export function buildArrivalCorrectionMessage(
+  student: Student,
+  input: { fecha: string; hora: string },
+): string {
+  const greeting = GREETING_VARIANTS[randomBetween(0, GREETING_VARIANTS.length - 1)];
+  const closings = closingVariants();
+  const closing = closings[randomBetween(0, closings.length - 1)];
+  const horaTxt = input.hora.slice(0, 5);
+  const portalLink = getParentPortalLink(student);
+  const portalBlock = portalLink
+    ? [`👩‍👧‍👦 *Ver asistencia de su hijo/a:*`, portalLink, '']
+    : [];
+
+  return [
+    greeting,
+    '',
+    `🕒 *Corrección de hora de llegada*`,
+    '',
+    `*Estudiante:* ${student.fullName}`,
+    ...formatStudentAcademicLines(student),
+    `*Fecha:* ${formatCitaFechaTxt(input.fecha)}`,
+    '',
+    `Se corrigió la hora de llegada a las ${horaTxt}.`,
+    '',
+    ...portalBlock,
+    closing,
+  ]
+    .filter((l) => l !== null && l !== undefined && l !== '')
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
+ * Aviso de corrección de hora de llegada (lo decide el staff al editar).
+ * Lista blanca → WhatsApp y app; el resto → solo app.
+ */
+export async function notifyParentArrivalCorrection(
+  student: Student,
+  input: { recordId: number; fecha: string; hora: string },
+): Promise<{ ok: boolean; error: string | null; chatId?: string; skipped?: boolean }> {
+  if (!WHATSAPP_ENABLED) {
+    return { ok: false, error: 'WhatsApp desactivado' };
+  }
+
+  const apoderadoPhone = student.contactPhone?.trim() || student.emergencyPhone?.trim() || '';
+  const viaWpp = shouldNotifyViaWppConnect(student);
+  if (!viaWpp && !MOBILE_INGEST_ENABLED) {
+    return { ok: false, error: 'Notificaciones por aplicación no habilitadas' };
+  }
+
+  const dedupKey = `correccion:${input.recordId}:${input.fecha.slice(0, 10)}:${input.hora.slice(0, 5)}`;
+  if (shouldSkipDuplicateNotify(dedupKey)) {
+    return {
+      ok: true,
+      error: null,
+      skipped: true,
+      chatId: toWhatsAppChatId(apoderadoPhone) || undefined,
+    };
+  }
+
+  return deliverParentNotice(student, {
+    wppMessages: [buildArrivalCorrectionMessage(student, input)],
+    ingestBody: MOBILE_INGEST_ENABLED
+      ? buildArrivalCorrectionIngestBody(MOBILE_INGEST_TENANT, student, input)
+      : null,
+  });
 }
 
 async function notifyParentEvent(
@@ -1082,62 +1284,37 @@ async function notifyParentEvent(
     };
   }
 
-  if (shouldNotifyViaWppConnect(student)) {
-    const wppPhone = toWhatsAppPhone(apoderadoPhone);
-    const chatId = toWhatsAppChatId(apoderadoPhone);
-    if (!wppPhone || !chatId) {
-      return { ok: false, error: 'Teléfono de contacto no válido para WhatsApp' };
-    }
-    const messages =
-      kind === 'departure'
-        ? buildDepartureNotifyMessages(student, record, apoderadoPhone, opts)
-        : buildNotifyMessages(student, record, apoderadoPhone, opts);
-    const result =
-      WPPCONNECT_ROTATION
-        ? await sendViaNotifyQueue(wppPhone, student, record, messages, kind)
-        : await sendTextsViaWppConnect(wppPhone, messages);
-    return { ...result, chatId };
-  }
-
-  if (MOBILE_INGEST_ENABLED) {
-    const isTaller = Boolean(opts?.tallerId || opts?.tallerNombre);
-    const result = await sendViaMobileIngest(
-      kind === 'departure'
-        ? buildDepartureIngestBody(MOBILE_INGEST_TENANT, student, record, { taller: isTaller })
-        : buildArrivalIngestBody(MOBILE_INGEST_TENANT, student, record, {
-            taller: isTaller,
-          }),
-    );
-    return { ...result, chatId: toWhatsAppChatId(apoderadoPhone) || undefined };
-  }
-
-  const chatId = toWhatsAppChatId(apoderadoPhone);
-  const wppPhone = toWhatsAppPhone(apoderadoPhone);
-  if (!chatId || !wppPhone) {
-    return { ok: false, error: 'Teléfono de contacto no válido para WhatsApp' };
-  }
-
+  const isTaller = Boolean(opts?.tallerId || opts?.tallerNombre);
   const messages =
     kind === 'departure'
       ? buildDepartureNotifyMessages(student, record, apoderadoPhone, opts)
       : buildNotifyMessages(student, record, apoderadoPhone, opts);
+  const wppPhone = toWhatsAppPhone(apoderadoPhone);
 
-  const result = META_WA_ENABLED
-    ? await sendTextsViaMetaWa(wppPhone, student, record, messages)
-    : WPPCONNECT_ENABLED && WPPCONNECT_ROTATION
-      ? await sendViaNotifyQueue(wppPhone, student, record, messages, kind)
-      : WPPCONNECT_ENABLED
-        ? await sendTextsViaWppConnect(wppPhone, messages)
-        : await sendTextsViaOpenwa(chatId, messages);
-
-  return { ...result, chatId };
+  return deliverParentNotice(student, {
+    wppMessages: messages,
+    ingestBody: MOBILE_INGEST_ENABLED
+      ? kind === 'departure'
+        ? buildDepartureIngestBody(MOBILE_INGEST_TENANT, student, record, { taller: isTaller })
+        : buildArrivalIngestBody(MOBILE_INGEST_TENANT, student, record, { taller: isTaller })
+      : null,
+    queue:
+      wppPhone
+        ? {
+            phone: wppPhone,
+            record,
+            messages,
+            kind,
+          }
+        : undefined,
+  });
 }
 
 export const whatsappService = {
   isEnabled: () => WHATSAPP_ENABLED,
   /** Push/aviso por backend de la app móvil (canal), no WhatsApp. */
   isAppNotificationsEnabled: () => MOBILE_INGEST_ENABLED,
-  /** Lista corta de DNIs → WPPConnect; el resto → app. */
+  /** Lista corta de DNIs → WhatsApp y app; el resto → solo app. */
   isWppWhitelistEnabled: () => WPPCONNECT_FLAG && WPPCONNECT_STUDENT_DNIS.size > 0,
   usesWppForStudent: (student: Student) => shouldNotifyViaWppConnect(student),
   /** @deprecated usar usesWppForStudent */
@@ -1163,5 +1340,7 @@ export const whatsappService = {
   notifyParentPensionPending,
   notifyParentNota,
   notifyParentCita,
+  notifyParentArrivalCorrection,
   buildPensionPendingMessage,
+  buildCitaMessage,
 };

@@ -1,8 +1,7 @@
-# Sitio Jean Piaget — Caddy (mismo VPS que asiscole.com)
+# Sitio Jean Piaget — Caddy (VPS 138.201.203.50)
 # Se instala en: /etc/caddy/sites.d/10-jeanpiaget.caddy
-# Placeholder __SUPABASE_HOST__ lo reemplaza deploy/bootstrap (ej. xxxxx.supabase.co)
-# Canal móvil: /canal-api → Django asiscole-canal :8000
-# WPP legado (opcional / apagado): /wpp-api + /wpp-notify
+# App, canal y WPPConnect en este mismo servidor (127.0.0.1).
+# Placeholder __SUPABASE_HOST__ lo reemplaza deploy/bootstrap.
 
 jeanpiaget.asiscole.com {
 	encode gzip zstd

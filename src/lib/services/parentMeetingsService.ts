@@ -3,6 +3,7 @@ import { ParentMeeting, CitaPadreDB } from '@/types';
 import { getLimaNow, getLimaTodayDate, normalizeTimeHHMM } from '@/lib/utils/limaDateTime';
 import { gradeFilterValues } from '@/lib/utils/gradeAliases';
 import { studentsService } from './studentsService';
+import { sessionService } from './sessionService';
 import { fetchAllPages } from '@/lib/utils/supabasePagination';
 
 const INSERT_BATCH_SIZE = 200;
@@ -128,7 +129,64 @@ function mapDBToParentMeeting(data: CitaPadreDB & {
   };
 }
 
+function isMissingFunctionError(message?: string | null): boolean {
+  const m = (message || '').toLowerCase();
+  return m.includes('could not find the function') || m.includes('pgrst202');
+}
+
+export type SuggestedCitationStudent = {
+  studentId: number;
+  fullName: string;
+  barcode: string | null;
+  level: string;
+  grade: string;
+  section: string;
+  reincidenceLevel: number;
+  faultsInWindow: number;
+  lastIncidentAt: string | null;
+  lastFault: string | null;
+};
+
 export const parentMeetingsService = {
+  /**
+   * Alumnos sugeridos a citar: nivel de reincidencia actual (ventana del sistema) ≥ minLevel,
+   * activos y sin cita abierta desde hoy.
+   */
+  async getSuggestedToCite(
+    minLevel = 3,
+    limit = 15,
+  ): Promise<{ students: SuggestedCitationStudent[]; windowDays: number | null; error: string | null }> {
+    const token = sessionService.getApiToken();
+    if (!token) {
+      return { students: [], windowDays: null, error: 'Sesión expirada. Vuelva a iniciar sesión.' };
+    }
+    try {
+      const { data, error } = await supabase.rpc('sie_sugeridos_citar', {
+        p_token: token,
+        p_min_nivel: minLevel,
+        p_limit: limit,
+      });
+      if (error) return { students: [], windowDays: null, error: error.message };
+      const payload = (data ?? {}) as {
+        students?: SuggestedCitationStudent[];
+        windowDays?: number;
+        error?: string | null;
+      };
+      if (payload.error) return { students: [], windowDays: null, error: payload.error };
+      return {
+        students: Array.isArray(payload.students) ? payload.students : [],
+        windowDays: payload.windowDays ?? null,
+        error: null,
+      };
+    } catch (error: unknown) {
+      return {
+        students: [],
+        windowDays: null,
+        error: error instanceof Error ? error.message : 'Error al cargar sugeridos',
+      };
+    }
+  },
+
   /**
    * Crear nueva cita con padre
    */
@@ -141,6 +199,27 @@ export const parentMeetingsService = {
     notas?: string;
   }): Promise<{ meeting: ParentMeeting | null; error: string | null }> {
     try {
+      const token = sessionService.getApiToken();
+      if (token) {
+        const { data: rpcData, error: rpcError } = await supabase.rpc('sie_crear_cita_individual', {
+          p_token: token,
+          p_id_estudiante: meeting.id_estudiante,
+          p_motivo: meeting.motivo,
+          p_fecha: meeting.fecha,
+          p_hora: meeting.hora,
+          p_notas: meeting.notas || null,
+        });
+        if (!rpcError) {
+          const payload = (rpcData ?? {}) as { id?: number | null; error?: string | null };
+          if (payload.error) return { meeting: null, error: payload.error };
+          if (payload.id) return await this.getById(payload.id);
+          return { meeting: null, error: 'No se pudo crear la cita' };
+        }
+        if (!isMissingFunctionError(rpcError.message)) {
+          return { meeting: null, error: rpcError.message };
+        }
+      }
+
       const { data, error } = await supabase
         .from('citas_padres')
         .insert({

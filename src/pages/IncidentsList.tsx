@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Eye, Edit, Printer, Camera, FileSpreadsheet, FileText, AlertCircle, CheckCircle2, Sparkles, Loader2, Check, X } from 'lucide-react';
+import { Search, Eye, Printer, Camera, FileSpreadsheet, FileText, AlertCircle, CheckCircle2, Sparkles, Loader2, Check, X } from 'lucide-react';
 import {
   StaffKpiStat,
   StaffToolbar,
@@ -274,13 +274,18 @@ export const IncidentsList = () => {
     setExporting(true);
     toast.loading('Preparando exportación…', { id: 'incidents-export' });
     try {
-      const { incidents: allRows, error } = await incidentsService.getAll({
+      const EXPORT_LIMIT = 2000;
+      const { incidents: allRows, error, total } = await incidentsService.getAll({
         ...listFilters,
-        fetchAll: true,
+        page: 1,
+        pageSize: EXPORT_LIMIT,
       });
       if (error) {
         toast.error('No se pudo exportar', { id: 'incidents-export' });
         return;
+      }
+      if ((total ?? 0) > allRows.length) {
+        toast.message(`El Excel incluye las ${EXPORT_LIMIT} incidencias más recientes`);
       }
       const parts: string[] = [];
       if (levelFilter !== 'all') parts.push(`Nivel: ${levelFilter}`);
@@ -757,21 +762,19 @@ export const IncidentsList = () => {
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="hover:bg-info/10 hover:text-info disabled:opacity-40"
-                            onClick={() => openJustify(incident)}
-                            disabled={incident.status !== 'Activa'}
-                            aria-label={`Justificar incidencia ${incident.id}`}
-                            title={
-                              incident.status === 'Activa'
-                                ? 'Justificar incidencia'
-                                : 'Solo incidencias activas'
-                            }
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
+                          {incident.status === 'Activa' ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1 border-success/40 text-success hover:bg-success/10 hover:text-success"
+                              onClick={() => openJustify(incident)}
+                              aria-label={`Justificar incidencia ${incident.id}`}
+                              title="Justificar incidencia"
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                              Justificar
+                            </Button>
+                          ) : null}
                           <Button
                             variant="ghost"
                             size="sm"

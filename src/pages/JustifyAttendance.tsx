@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -106,86 +106,21 @@ export const JustifyAttendance = () => {
   const [justifying, setJustifying] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
 
+  const [serverTotal, setServerTotal] = useState(0);
+  const requestIdRef = useRef(0);
+
   const absenceDateKey = debouncedDateFilter || dateFilter;
   const absenceFiltersReady = Boolean(absenceDateKey);
-
-  const loadRecords = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-
-    if (statusFilter === 'Inasistencias' && !absenceFiltersReady) {
-      setRecords([]);
-      setLoading(false);
-      return;
-    }
-
-    if (absenceDateKey && !isWeekdayDateKey(absenceDateKey)) {
-      setRecords([]);
-      setLoading(false);
-      return;
-    }
-
-    const classroom = {
-      level: levelFilter === 'all' ? undefined : levelFilter,
-      grade: gradeFilter === 'all' ? undefined : gradeFilter,
-      section: sectionFilter === 'all' ? undefined : sectionFilter,
-    };
-
-    const result =
-      statusFilter === 'Inasistencias'
-        ? await arrivalService.getPendingAbsencesForDate({
-            date: absenceDateKey,
-            level: classroom.level,
-            grade: classroom.grade,
-            section: classroom.section,
-          })
-        : await arrivalService.getAttendanceJustifications({
-            pending: statusFilter === 'Activa',
-            date: debouncedDateFilter || undefined,
-            limit: 500,
-          });
-
-    if (result.error) {
-      setLoadError(result.error);
-      setRecords([]);
-      toast.error(result.error);
-    } else {
-      let rows = result.records.filter((row) => isWeekdayDateKey(arrivalDateKey(row.date)));
-      if (statusFilter !== 'Inasistencias') {
-        rows = rows.filter((row) => {
-          if (classroom.level && row.student?.level !== classroom.level) return false;
-          if (classroom.grade && row.student?.grade !== classroom.grade) return false;
-          if (classroom.section && row.student?.section !== classroom.section) return false;
-          return true;
-        });
-      }
-      setRecords(rows);
-    }
-    setLoading(false);
-  }, [
-    statusFilter,
-    absenceDateKey,
-    debouncedDateFilter,
-    levelFilter,
-    gradeFilter,
-    sectionFilter,
-    absenceFiltersReady,
-  ]);
-
-  useEffect(() => {
-    if (statusFilter === 'Inasistencias' && !dateFilter) {
-      setDateFilter(getLimaTodayDate());
-    }
-  }, [statusFilter, dateFilter]);
-
-  useEffect(() => {
-    void loadRecords();
-  }, [loadRecords]);
+  /** Tardanzas: paginado y búsqueda en servidor. Faltos: lista del día en cliente. */
+  const isServerMode = statusFilter === 'Activa';
+  const serverSearch = isServerMode ? debouncedSearch.trim() : '';
 
   const filtered = useMemo(() => {
-    if (!debouncedSearch.trim()) return records;
+    if (isServerMode || !debouncedSearch.trim()) return records;
     return records.filter((row) => studentMatchesNameOrClassroom(row.student, debouncedSearch));
-  }, [records, debouncedSearch]);
+  }, [records, debouncedSearch, isServerMode]);
+
+  const totalItems = isServerMode ? serverTotal : filtered.length;
 
   const {
     page: currentPage,
@@ -198,15 +133,97 @@ export const JustifyAttendance = () => {
     resetPage,
     sliceRange,
   } = useTablePagination({
-    totalItems: filtered.length,
+    totalItems,
     initialPageSize: TABLE_PAGE_SIZE,
   });
+
+  const loadRecords = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+    setLoading(true);
+    setLoadError(null);
+
+    const finish = (rows: ArrivalRecord[], total: number, error: string | null) => {
+      if (requestId !== requestIdRef.current) return;
+      if (error) {
+        setLoadError(error);
+        setRecords([]);
+        setServerTotal(0);
+        toast.error(error);
+      } else {
+        setRecords(rows);
+        setServerTotal(total);
+      }
+      setLoading(false);
+    };
+
+    if (statusFilter === 'Inasistencias' && !absenceFiltersReady) {
+      finish([], 0, null);
+      return;
+    }
+
+    if (absenceDateKey && !isWeekdayDateKey(absenceDateKey)) {
+      finish([], 0, null);
+      return;
+    }
+
+    const classroom = {
+      level: levelFilter === 'all' ? undefined : levelFilter,
+      grade: gradeFilter === 'all' ? undefined : gradeFilter,
+      section: sectionFilter === 'all' ? undefined : sectionFilter,
+    };
+
+    if (isServerMode) {
+      const result = await arrivalService.getAttendanceJustificationsPage({
+        pending: true,
+        date: debouncedDateFilter || undefined,
+        level: classroom.level,
+        grade: classroom.grade,
+        section: classroom.section,
+        search: serverSearch || undefined,
+        page: currentPage,
+        pageSize,
+      });
+      finish(result.records, result.total, result.error);
+      return;
+    }
+
+    const result = await arrivalService.getPendingAbsencesForDate({
+      date: absenceDateKey,
+      level: classroom.level,
+      grade: classroom.grade,
+      section: classroom.section,
+    });
+    const rows = result.records.filter((row) => isWeekdayDateKey(arrivalDateKey(row.date)));
+    finish(rows, rows.length, result.error);
+  }, [
+    statusFilter,
+    absenceDateKey,
+    debouncedDateFilter,
+    levelFilter,
+    gradeFilter,
+    sectionFilter,
+    absenceFiltersReady,
+    isServerMode,
+    serverSearch,
+    currentPage,
+    pageSize,
+  ]);
+
+  useEffect(() => {
+    if (statusFilter === 'Inasistencias' && !dateFilter) {
+      setDateFilter(getLimaTodayDate());
+    }
+  }, [statusFilter, dateFilter]);
 
   useEffect(() => {
     resetPage();
   }, [statusFilter, debouncedDateFilter, debouncedSearch, levelFilter, gradeFilter, sectionFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const pageRows = filtered.slice(sliceRange.start, sliceRange.end);
+  useEffect(() => {
+    void loadRecords();
+  }, [loadRecords]);
+
+  const pageRows = isServerMode ? records : filtered.slice(sliceRange.start, sliceRange.end);
 
   const handleJustify = async () => {
     if (!selectedRecord) return;
@@ -282,7 +299,7 @@ export const JustifyAttendance = () => {
       <div className="app-kpi-grid !grid-cols-2 sm:!grid-cols-3">
         <StaffKpiStat
           label="En lista"
-          value={filtered.length}
+          value={totalItems}
           hint={
             statusFilter === 'Activa' ? 'Tardanzas pendientes' : 'Faltos / inasistencias'
           }
@@ -305,7 +322,7 @@ export const JustifyAttendance = () => {
           hasActiveFilters ? (
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
-                {filtered.length} resultado{filtered.length === 1 ? '' : 's'}
+                {totalItems} resultado{totalItems === 1 ? '' : 's'}
                 {debouncedSearch.trim() ? ` · “${debouncedSearch.trim()}”` : ''}
               </p>
               <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
@@ -422,7 +439,7 @@ export const JustifyAttendance = () => {
 
       <StaffDataPanel>
         <StaffDataPanelHeader
-          title={`Registros (${filtered.length})`}
+          title={`Registros (${totalItems})`}
           description={
             statusFilter === 'Activa'
               ? 'Tardanzas sin justificar. Pulse Justificar e indique el motivo.'
@@ -602,12 +619,12 @@ export const JustifyAttendance = () => {
               </Table>
             </div>
           )}
-          {filtered.length > pageSize && (
+          {totalItems > pageSize && (
             <StaffTablePagination
               page={currentPage}
               totalPages={totalPages}
               pageSize={pageSize}
-              totalItems={filtered.length}
+              totalItems={totalItems}
               onPrev={prevPage}
               onNext={nextPage}
               onGoToPage={goToPage}

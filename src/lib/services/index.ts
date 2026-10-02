@@ -13,6 +13,7 @@ export { auditService } from './auditService';
 export { configService } from './configService';
 export { reincidenceConfigService } from './reincidenceConfigService';
 export { parentMeetingsService } from './parentMeetingsService';
+export type { SuggestedCitationStudent } from './parentMeetingsService';
 export { sessionService } from './sessionService';
 export { whatsappService } from './whatsappService';
 export { parentPortalService } from './parentPortalService';

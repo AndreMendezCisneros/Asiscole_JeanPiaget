@@ -7,7 +7,9 @@ import {
   addDataSheet,
   addExcelWatermark,
   addReportHeader,
-  autoFitColumns,
+  applyLandscapeFit,
+  applyWrapRowHeights,
+  EXCEL_COL,
   createWorkbook,
   defaultExportFilename,
   EXCEL_COLORS,
@@ -17,6 +19,7 @@ import {
   setColumnWidths,
   styleDataRows,
   styleHeaderRow,
+  yieldToMain,
 } from '@/lib/utils/excelExport';
 import type { MonthlyAttendanceRow } from '@/types';
 
@@ -281,7 +284,18 @@ export async function buildAttendanceDetailSheet(
   styleHeaderRow(headerRow);
 
   const dataStart = startRow + 1;
-  rows.forEach((row) => {
+  const colorCells = rows.length <= 120;
+  const attendanceColors: Record<string, { bg: string; fg: string }> = {
+    A_tiempo: { bg: 'FFD1FAE5', fg: 'FF065F46' },
+    Tarde: { bg: 'FFFEF3C7', fg: 'FF92400E' },
+    Tarde_justificada: { bg: 'FFDBEAFE', fg: 'FF1E40AF' },
+    Inasistencia_justificada: { bg: 'FFEDE9FE', fg: 'FF5B21B6' },
+    Justificada: { bg: 'FFDBEAFE', fg: 'FF1E40AF' },
+    Injustificada: { bg: 'FFFEE2E2', fg: 'FF991B1B' },
+  };
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
     const values = [
       row.student.fullName,
       row.student.level,
@@ -295,29 +309,26 @@ export async function buildAttendanceDetailSheet(
       row.totals.absentJustified,
     ];
     const dataRow = sheet.addRow(values);
-    row.days.forEach((day, index) => {
-      const cell = dataRow.getCell(index + 5);
-      const colors: Record<string, { bg: string; fg: string }> = {
-        A_tiempo: { bg: 'FFD1FAE5', fg: 'FF065F46' },
-        Tarde: { bg: 'FFFEF3C7', fg: 'FF92400E' },
-        Tarde_justificada: { bg: 'FFDBEAFE', fg: 'FF1E40AF' },
-        Inasistencia_justificada: { bg: 'FFEDE9FE', fg: 'FF5B21B6' },
-        Justificada: { bg: 'FFDBEAFE', fg: 'FF1E40AF' },
-        Injustificada: { bg: 'FFFEE2E2', fg: 'FF991B1B' },
-      };
-      const c = colors[day.status];
-      if (c) {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: c.bg } };
-        cell.font = { size: 9, color: { argb: c.fg } };
-      }
-      if (day.justificationReason) {
-        cell.note = day.justificationReason;
-      }
-    });
-  });
+    if (colorCells) {
+      row.days.forEach((day, index) => {
+        const cell = dataRow.getCell(index + 5);
+        const c = attendanceColors[day.status];
+        if (c) {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: c.bg } };
+          cell.font = { size: 9, color: { argb: c.fg } };
+        }
+        if (day.justificationReason) {
+          cell.note = day.justificationReason;
+        }
+      });
+    }
+    if (i > 0 && i % 80 === 0) {
+      await yieldToMain();
+    }
+  }
 
-  if (rows.length > 0) {
-    styleDataRows(sheet, dataStart, dataStart + rows.length - 1, { zebra: true, fontSize: 9 });
+  if (rows.length > 0 && rows.length <= 80) {
+    styleDataRows(sheet, dataStart, dataStart + rows.length - 1, { zebra: false, fontSize: 9, wrapText: false });
   }
 
   sheet.addRow([]);
@@ -339,9 +350,14 @@ export async function buildAttendanceDetailSheet(
   });
 
   freezePane(sheet, startRow);
-  const widths = [30, 12, 10, 8, ...daysArray.map(() => 6), 10, 10, 10, 10, 10];
+  const widths = [EXCEL_COL.name, 12, 10, 8, ...daysArray.map(() => EXCEL_COL.day), 8, 8, 8, 8, 8];
   setColumnWidths(sheet, widths);
-  autoFitColumns(sheet, 6, 32);
+  if (rows.length <= 400) {
+    applyWrapRowHeights(sheet, dataStart, dataStart + rows.length - 1, [1]);
+  } else {
+    sheet.getColumn(1).alignment = { wrapText: true, vertical: 'top' };
+  }
+  applyLandscapeFit(sheet);
 
   const centerRow = startRow + Math.max(6, Math.floor(rows.length / 2) + 3);
   await addExcelWatermark(workbook, sheet, { mergeCols, centerRow });

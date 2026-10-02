@@ -41,6 +41,8 @@ function mapRpcStudent(raw: Record<string, unknown>): Student {
     responsibleRelationship: (raw.responsibleRelationship as string | null) ?? null,
     emergencyPhone: (raw.emergencyPhone as string | null) ?? null,
     estadoPension: (raw.estadoPension as Student['estadoPension']) ?? 'sin_dato',
+    cuidadoEspecial: raw.cuidadoEspecial === true,
+    condicionEspecialNota: (raw.condicionEspecialNota as string | null) ?? null,
   };
 }
 
@@ -455,7 +457,7 @@ export const studentsService = {
         let q = supabase
           .from('estudiantes')
           .select(
-            'id_estudiante, codigo_barras, nombre_completo, grado, seccion, nivel_educativo, foto_perfil, activo, telefono_contacto, email_contacto, nombre_responsable, parentesco_responsable, telefono_emergencia',
+            'id_estudiante, codigo_barras, nombre_completo, grado, seccion, nivel_educativo, foto_perfil, activo, telefono_contacto, email_contacto, nombre_responsable, parentesco_responsable, telefono_emergencia, cuidado_especial, condicion_especial_nota',
             withCount ? { count: 'exact' } : undefined,
           )
           .order('nombre_completo', { ascending: true })
@@ -489,6 +491,8 @@ export const studentsService = {
         responsibleRelationship: (row.parentesco_responsable as string | null) ?? null,
         emergencyPhone: (row.telefono_emergencia as string | null) ?? null,
         estadoPension: 'sin_dato',
+        cuidadoEspecial: row.cuidado_especial === true,
+        condicionEspecialNota: (row.condicion_especial_nota as string | null) ?? null,
       });
 
       const enrichWithReincidence = async (students: Student[]): Promise<Student[]> => {
@@ -695,6 +699,8 @@ export const studentsService = {
       nombre_responsable?: string;
       parentesco_responsable?: string;
       telefono_emergencia?: string;
+      cuidado_especial?: boolean;
+      condicion_especial_nota?: string | null;
     }>
   ): Promise<{ success: boolean; error: string | null }> {
     const token = requireApiToken();

@@ -57,6 +57,7 @@ import { Label } from '@/components/ui/label';
 import { arrivalService, authService, studentsService, whatsappService } from '@/lib/services';
 import type { ArrivalRecord, EducationalLevel } from '@/types';
 import { toast } from 'sonner';
+import { alertSpecialCare } from '@/lib/utils/specialCareAlert';
 import { staffNotify } from '@/lib/utils/staffNotify';
 import { cn } from '@/lib/utils';
 import { useTablePagination } from '@/hooks/useTablePagination';
@@ -358,6 +359,7 @@ export const DepartureControl = () => {
         toast.error(error || 'No se encontró estudiante con ese DNI o carnet');
         return;
       }
+      alertSpecialCare(student);
 
       const record = records.find((r) => r.student?.id === student.id);
       if (!record) {

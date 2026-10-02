@@ -152,6 +152,28 @@ export function buildPensionIngestBody(
   });
 }
 
+export function buildArrivalCorrectionIngestBody(
+  tenantId: string,
+  student: Student,
+  input: { recordId: number; fecha: string; hora: string },
+): MobileIngestEventBody {
+  const horaTxt = input.hora.slice(0, 5);
+  return buildMobileIngestBody({
+    tenantId,
+    tipo: 'aviso',
+    student,
+    idRegistro: input.recordId,
+    payloadExtra: {
+      contexto: 'correccion_llegada',
+      fecha: input.fecha.slice(0, 10),
+      hora_llegada: horaTxt,
+      texto_libre:
+        `Se corrigió la hora de llegada de ${student.fullName} a las ${horaTxt} ` +
+        `del ${formatCitaFecha(input.fecha)}.`,
+    },
+  });
+}
+
 export type CitaIngestAlcance = 'individual' | 'apafa' | 'piso' | 'salon';
 
 export function citaAlcanceFromMeetingTipo(

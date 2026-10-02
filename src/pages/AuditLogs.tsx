@@ -196,7 +196,7 @@ export const AuditLogs = () => {
     const { logs: fetchedLogs, total: fetchedTotal, error } = await auditService.getAuditLogs(filters);
 
     if (error) {
-      toast.error('Error al cargar logs de auditoría');
+      toast.error('Error al cargar logs de auditoría', { description: error });
     } else {
       setLogs(fetchedLogs);
       setTotal(fetchedTotal);
@@ -207,6 +207,18 @@ export const AuditLogs = () => {
   const loadStats = async () => {
     const { stats: fetchedStats } = await auditService.getAuditStats(7);
     setStats(fetchedStats);
+  };
+
+  const openLogDetail = async (log: AuditLog) => {
+    setSelectedLog(log);
+    const { log: fullLog, error } = await auditService.getAuditLogDetail(log.id);
+    if (error) {
+      toast.error('No se pudo cargar el detalle', { description: error });
+      return;
+    }
+    if (fullLog) {
+      setSelectedLog((current) => (current?.id === fullLog.id ? fullLog : current));
+    }
   };
 
   const getOperationColor = (operation: string) => {
@@ -247,8 +259,15 @@ export const AuditLogs = () => {
           variant="outline-primary"
           onClick={() => {
             void (async () => {
+              const { logs: fullLogs, error } = await auditService.getAuditLogsWithData(
+                logs.map((log) => log.id),
+              );
+              if (error) {
+                toast.error(`No se pudo exportar la auditoría: ${error}`);
+                return;
+              }
               const { exportAuditLogsExcel } = await import('@/lib/utils/excelListExports');
-              await exportAuditLogsExcel(logs);
+              await exportAuditLogsExcel(fullLogs);
             })();
           }}
           disabled={logs.length === 0 || loading}
@@ -446,7 +465,7 @@ export const AuditLogs = () => {
                             {OPERATION_LABELS[log.operation]}
                           </Badge>
                           <p className="text-xs text-muted-foreground">
-                            {summarizeLog(log, getChangeRows(log).length)}
+                            {summarizeLog(log, log.changesCount ?? getChangeRows(log).length)}
                           </p>
                         </div>
                       </TableCell>
@@ -467,7 +486,7 @@ export const AuditLogs = () => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => setSelectedLog(log)}
+                          onClick={() => void openLogDetail(log)}
                         >
                           <FileText className="w-4 h-4 mr-1" />
                           Ver Detalles

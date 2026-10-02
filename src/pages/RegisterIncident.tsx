@@ -627,6 +627,9 @@ export const RegisterIncident = () => {
                   maxLength={500}
                   disabled={loading}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Esta observación la verá el apoderado.
+                </p>
                 <p className="text-xs text-muted-foreground text-right">
                   {observations.length}/500 caracteres
                 </p>

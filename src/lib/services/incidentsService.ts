@@ -876,6 +876,7 @@ type RpcPublicIncidentRow = {
   registeredAt: string;
   faultName: string;
   status: string;
+  observations?: string | null;
 };
 
 export async function fetchMonthIncidentsForStudent(
@@ -917,7 +918,7 @@ export async function fetchMonthIncidentsForStudent(
     },
     registeredBy: 0,
     registeredAt: row.registeredAt || `${row.date}T00:00:00`,
-    observations: null,
+    observations: row.observations?.trim() || null,
     reincidenceLevel: 0,
     hasEvidence: false,
     evidenceCount: 0,

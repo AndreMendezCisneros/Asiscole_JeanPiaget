@@ -18,6 +18,7 @@ import {
 import { StudentPhoto } from '@/components/shared/StudentPhoto';
 import { GuardyMark } from '@/components/brand/GuardyMark';
 import { toast } from 'sonner';
+import { alertSpecialCare } from '@/lib/utils/specialCareAlert';
 import {
   studentsService,
   faultsService,
@@ -793,6 +794,7 @@ export const TutorScanner = () => {
           duration: 3500,
         });
       }
+      alertSpecialCare(foundStudent);
 
       // Alarma deuda: faltas / carnet / ≥5 tardanzas / pensión — no bloquea registro.
       // Se reinicia solo con compromiso firmado del apoderado (/compromisos-alarma).
@@ -2012,6 +2014,11 @@ export const TutorScanner = () => {
                       {pensionesEnabled && student.estadoPension === 'moroso' && (
                         <Badge variant="destructive" className="mt-1">
                           Pensión: no pagó
+                        </Badge>
+                      )}
+                      {student.cuidadoEspecial && (
+                        <Badge variant="destructive" className="mt-1">
+                          Cuidado especial{student.condicionEspecialNota ? `: ${student.condicionEspecialNota}` : ''}
                         </Badge>
                       )}
                     </div>

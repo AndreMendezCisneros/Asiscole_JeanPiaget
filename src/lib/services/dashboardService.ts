@@ -4,10 +4,18 @@ import { gradeFilterValues } from '@/lib/utils/gradeAliases';
 import { getBimestreDates, getCurrentSchoolYear } from '@/lib/utils/bimestreUtils';
 import { fetchAllPages } from '@/lib/utils/supabasePagination';
 import {
+  formatDateKeyLima,
   getLimaDayRangeISO,
   getLimaTodayDate,
   getMonthBounds,
 } from '@/lib/utils/limaDateTime';
+import {
+  businessDaysBetween,
+  businessDayWindowsForMonth,
+  formatDayLabel,
+  monthRangeISO,
+} from '@/lib/utils/schoolCalendar';
+import { fetchNonSchoolDays } from './schoolCalendarService';
 
 /** PostgREST suele limitar a ~1000 filas por request; paginamos. */
 const PAGE_SIZE = 1000;
@@ -92,7 +100,76 @@ function mapBundleStats(payload: Record<string, unknown>): DashboardStats {
     },
     topFaults: (payload.topFaults as DashboardStats['topFaults']) || [],
     incidentsByGrade: (payload.incidentsByGrade as DashboardStats['incidentsByGrade']) || [],
+    ...mapBundleStatus(payload),
   };
+}
+
+/** Claves de la RPC v2; si la RPC es anterior, no se agregan y la UI las oculta. */
+function mapBundleStatus(payload: Record<string, unknown>): Pick<DashboardStats, 'statusCounts' | 'avgHoursToJustify'> {
+  const sc = payload.statusCounts as Record<string, unknown> | undefined;
+  if (!sc || typeof sc !== 'object') return {};
+  const avg = payload.avgHorasJustificacion;
+  return {
+    statusCounts: {
+      registered: Number(sc.registered) || 0,
+      active: Number(sc.active) || 0,
+      justified: Number(sc.justified) || 0,
+      annulled: Number(sc.annulled) || 0,
+      inReview: Number(sc.inReview) || 0,
+    },
+    avgHoursToJustify: avg == null || avg === '' ? null : Number(avg),
+  };
+}
+
+export type ReportSectionActivityRow = {
+  section: string;
+  grade: string;
+  level: string;
+  label: string;
+  enrolled: number;
+  incidents: number;
+  tardies: number;
+};
+
+export type ReportTopStudentRow = {
+  studentId: number;
+  fullName: string;
+  level: string;
+  grade: string;
+  section: string;
+  incidents: number;
+  maxReincidence: number;
+  lastIncidentAt: string;
+};
+
+export type DailyIncidentPoint = { date: string; day: string; incidents: number };
+
+/**
+ * Serie diaria del periodo: todos los días hábiles (con 0 si no hubo) y, además,
+ * cualquier otro día que sí tenga incidencias, para no ocultar registros.
+ */
+async function buildBusinessDailySeries(
+  range: DateRange,
+  points: { date: string; count: number }[],
+): Promise<DailyIncidentPoint[]> {
+  if (!range.fechaDesde || !range.fechaHasta) return [];
+  const from = formatDateKeyLima(new Date(range.fechaDesde));
+  const rangeEnd = formatDateKeyLima(new Date(range.fechaHasta));
+  const today = getLimaTodayDate();
+  const to = rangeEnd < today ? rangeEnd : today;
+  if (from > to) return [];
+
+  const counts = new Map(points.map((p) => [String(p.date).slice(0, 10), Number(p.count) || 0]));
+  const holidays = await fetchNonSchoolDays(from, to);
+  const keys = new Set(businessDaysBetween(from, to, holidays));
+  for (const [key, count] of counts) {
+    if (count > 0 && key >= from && key <= to) keys.add(key);
+  }
+  return [...keys].sort().map((key) => ({
+    date: key,
+    day: formatDayLabel(key),
+    incidents: counts.get(key) ?? 0,
+  }));
 }
 
 /** Una sola agregación en Postgres, sin bajar filas ni reevaluar RLS por registro. */
@@ -102,6 +179,7 @@ async function fetchReportBundle(args: {
   hoy?: string;
   inicioSemana?: string;
   meses?: Array<{ label: string; desde: string; hasta: string }>;
+  dias?: Array<{ label: string; desde: string; hasta: string }>;
   level?: string | null;
   grados?: string[] | null;
 }): Promise<Record<string, unknown> | null> {
@@ -113,7 +191,7 @@ async function fetchReportBundle(args: {
     p_hoy: args.hoy ?? null,
     p_inicio_semana: args.inicioSemana ?? null,
     p_meses: args.meses ?? [],
-    p_dias: [],
+    p_dias: args.dias ?? [],
   });
   if (error) {
     if (isMissingRpcError(error.message)) return null;
@@ -461,6 +539,7 @@ type GradeComparisonRow = {
     level2: number;
     level3: number;
     level4: number;
+    level5: number;
   };
 };
 
@@ -480,6 +559,10 @@ type ReportsPageResult = {
   bySection: SectionComparisonRow[];
   monthlyTrend: { month: string; incidents: number }[];
   weeklyData: { day: string; count: number }[];
+  /** Solo desde la RPC v2; vacíos en el fallback cliente. */
+  sectionActivity: ReportSectionActivityRow[];
+  topStudents: ReportTopStudentRow[];
+  dailyTrend: DailyIncidentPoint[];
   error: string | null;
   source: 'rpc' | 'client';
 };
@@ -557,6 +640,7 @@ function buildComparisons(
           level2: group.niveles.filter((v) => v === 2).length,
           level3: group.niveles.filter((v) => v === 3).length,
           level4: group.niveles.filter((v) => v === 4).length,
+          level5: group.niveles.filter((v) => v >= 5).length,
         },
       };
     })
@@ -782,6 +866,47 @@ export const dashboardService = {
   },
 
   /**
+   * Incidencias activas por día hábil de un mes (lun-vie sin días no lectivos).
+   * Si es el mes en curso, llega hasta hoy.
+   */
+  async getDailyTrend(
+    year: number,
+    month: number,
+  ): Promise<{ dailyTrend: DailyIncidentPoint[]; error: string | null }> {
+    try {
+      const { startDate, endDate } = monthRangeISO(year, month);
+      const holidays = await fetchNonSchoolDays(startDate.slice(0, 10), endDate.slice(0, 10));
+      const windows = businessDayWindowsForMonth(year, month, holidays);
+      if (windows.length === 0) return { dailyTrend: [], error: null };
+
+      const dias = windows.map(({ label, desde, hasta }) => ({ label, desde, hasta }));
+      const bundle = await fetchReportBundle({
+        fechaDesde: windows[0].desde,
+        fechaHasta: windows[windows.length - 1].hasta,
+        dias,
+      });
+
+      let counts: number[];
+      if (bundle && Array.isArray(bundle.weeklyData)) {
+        counts = (bundle.weeklyData as { count: number }[]).map((d) => Number(d.count) || 0);
+      } else {
+        counts = await Promise.all(
+          windows.map((w) => countActiveIncidents({ fechaDesde: w.desde, fechaHasta: w.hasta })),
+        );
+      }
+
+      return {
+        dailyTrend: windows.map((w, i) => ({ date: w.key, day: w.label, incidents: counts[i] ?? 0 })),
+        error: null,
+      };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error al obtener tendencia diaria';
+      console.error('Error en getDailyTrend:', error);
+      return { dailyTrend: [], error: message };
+    }
+  },
+
+  /**
    * Datos semanales (últimos 5 días hábiles).
    */
   async getWeeklyData(
@@ -929,14 +1054,27 @@ export const dashboardService = {
             },
             topFaults: (payload.topFaults as DashboardStats['topFaults']) || [],
             incidentsByGrade: (payload.incidentsByGrade as DashboardStats['incidentsByGrade']) || [],
+            ...mapBundleStatus(payload),
           };
 
           return {
             stats,
-            byGrade: (payload.byGrade as GradeComparisonRow[]) || [],
+            byGrade: ((payload.byGrade as GradeComparisonRow[]) || []).map((row) => ({
+              ...row,
+              levelDistribution: {
+                ...row.levelDistribution,
+                level5: Number(row.levelDistribution?.level5) || 0,
+              },
+            })),
             bySection: (payload.bySection as SectionComparisonRow[]) || [],
             monthlyTrend: (payload.monthlyTrend as { month: string; incidents: number }[]) || [],
             weeklyData: (payload.weeklyData as { day: string; count: number }[]) || [],
+            sectionActivity: (payload.sectionActivity as ReportSectionActivityRow[]) || [],
+            topStudents: (payload.topStudents as ReportTopStudentRow[]) || [],
+            dailyTrend: await buildBusinessDailySeries(
+              range,
+              (payload.dailyTrend as { date: string; count: number }[]) || [],
+            ),
             error: null,
             source: 'rpc',
           };
@@ -966,6 +1104,9 @@ export const dashboardService = {
       bySection: bundle.bySection,
       monthlyTrend: trendResult.monthlyTrend ?? [],
       weeklyData: weeklyResult.weeklyData ?? [],
+      sectionActivity: [],
+      topStudents: [],
+      dailyTrend: [],
       error: bundle.error || trendResult.error || weeklyResult.error,
       source: 'client',
     };

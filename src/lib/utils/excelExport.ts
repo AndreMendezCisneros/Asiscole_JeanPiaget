@@ -21,6 +21,17 @@ function thinBorder(): Partial<ExcelJS.Borders> {
   return { top: side, left: side, bottom: side, right: side };
 }
 
+/** Cede el hilo al navegador para que el toast y la UI no se congelen. */
+export function yieldToMain(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => setTimeout(resolve, 0));
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
+}
+
 /** Logo Guardy con esquinas redondeadas para hojas de cálculo */
 export async function loadInstitutionLogo(): Promise<{ buffer: ArrayBuffer; extension: 'png' } | null> {
   return getRoundedReportLogoBuffer({ maxWidth: 200, maxHeight: 72, radiusPx: 14 });
@@ -81,10 +92,13 @@ export async function addExcelWatermark(
   const centerRow = options?.centerRow ?? 14;
   const col = Math.max(0.3, cols / 2 - 2.2);
 
+  const dataRows = sheet.lastRow?.number ?? 0;
+  if (dataRows > 500) return;
+
   const imageId = workbook.addImage(wm);
   sheet.addImage(imageId, {
     tl: { col, row: centerRow },
-    ext: { width: 340, height: 300 },
+    ext: { width: 200, height: 180 },
   });
 
   const footRow = sheet.lastRow?.number ? sheet.lastRow.number + 2 : centerRow + 22;
@@ -156,16 +170,32 @@ export function styleDataRows(
   sheet: ExcelJS.Worksheet,
   fromRow: number,
   toRow: number,
-  options?: { zebra?: boolean; fontSize?: number }
+  options?: { zebra?: boolean; fontSize?: number; wrapText?: boolean }
 ): void {
   const fontSize = options?.fontSize ?? 10;
+  const rowCount = Math.max(0, toRow - fromRow + 1);
+  if (rowCount === 0) return;
+
+  // En exportaciones grandes el estilo celda a celda congela el navegador.
+  if (rowCount > 400) {
+    const lastCol = sheet.columnCount || sheet.columns?.length || 0;
+    for (let c = 1; c <= lastCol; c++) {
+      sheet.getColumn(c).font = { size: fontSize, color: { argb: EXCEL_COLORS.title } };
+      sheet.getColumn(c).alignment = { vertical: 'middle', wrapText: false };
+    }
+    return;
+  }
+
+  const wrapText = options?.wrapText ?? true;
+  const zebra = Boolean(options?.zebra) && rowCount <= 800;
+  const border = thinBorder();
   for (let r = fromRow; r <= toRow; r++) {
     const row = sheet.getRow(r);
     row.eachCell((cell) => {
       cell.font = { size: fontSize, color: { argb: EXCEL_COLORS.title } };
-      cell.alignment = { vertical: 'middle', wrapText: true };
-      cell.border = thinBorder();
-      if (options?.zebra && (r - fromRow) % 2 === 1) {
+      cell.alignment = { vertical: 'middle', wrapText };
+      cell.border = border;
+      if (zebra && (r - fromRow) % 2 === 1) {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EXCEL_COLORS.altRow } };
       }
     });
@@ -194,6 +224,55 @@ export function autoFitColumns(sheet: ExcelJS.Worksheet, min = 8, max = 48): voi
   });
 }
 
+/** Anchos fijos por tipo de columna. */
+export const EXCEL_COL = {
+  id: 8,
+  name: 28,
+  day: 4.5,
+  count: 8,
+  notes: 36,
+  phone: 14,
+} as const;
+
+export function applyLandscapeFit(sheet: ExcelJS.Worksheet): void {
+  sheet.pageSetup = {
+    ...sheet.pageSetup,
+    orientation: 'landscape',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    paperSize: 9,
+  };
+}
+
+/** Altura de fila según texto envuelto en columnas indicadas (1-based). */
+export function applyWrapRowHeights(
+  sheet: ExcelJS.Worksheet,
+  fromRow: number,
+  toRow: number,
+  wrapCols: number[],
+): void {
+  if (toRow - fromRow > 400) {
+    for (const col of wrapCols) {
+      sheet.getColumn(col).alignment = { wrapText: true, vertical: 'top' };
+    }
+    return;
+  }
+  for (let r = fromRow; r <= toRow; r++) {
+    const row = sheet.getRow(r);
+    let lines = 1;
+    for (const col of wrapCols) {
+      const cell = row.getCell(col);
+      const width = sheet.getColumn(col).width || 12;
+      const text = cell.value == null ? '' : String(cell.value);
+      const estimated = Math.ceil(text.length / Math.max(width, 8));
+      lines = Math.max(lines, estimated);
+      cell.alignment = { ...(cell.alignment || {}), wrapText: true, vertical: 'top' };
+    }
+    row.height = Math.max(18, 15 * Math.min(lines, 6));
+  }
+}
+
 export function freezePane(sheet: ExcelJS.Worksheet, row: number, col = 1): void {
   sheet.views = [{ state: 'frozen', ySplit: row, xSplit: col - 1, activeCell: `A${row + 1}` }];
 }
@@ -215,6 +294,7 @@ export function downloadWorkbook(workbook: ExcelJS.Workbook, filename: string): 
 }
 
 export async function saveWorkbook(workbook: ExcelJS.Workbook, filename: string): Promise<void> {
+  await yieldToMain();
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -240,6 +320,7 @@ export async function runExcelExport(
   const toastId = 'excel-export';
   try {
     toast.loading(`Generando ${label}...`, { id: toastId });
+    await yieldToMain();
     await fn();
     toast.success(`${label} descargado correctamente`, { id: toastId });
   } catch (error) {

@@ -70,6 +70,8 @@ export interface EstudianteDB {
   nombre_responsable?: string | null;
   parentesco_responsable?: string | null;
   telefono_emergencia?: string | null;
+  cuidado_especial?: boolean;
+  condicion_especial_nota?: string | null;
 }
 
 export interface CatalogoFaltaDB {
@@ -216,6 +218,9 @@ export interface Student {
   emergencyPhone?: string | null;
   /** Cache periodo actual: al_dia | pendiente | moroso | sin_dato */
   estadoPension?: EstudianteEstadoPension;
+  /** Alerta interna de puerta; no se envía a padres. */
+  cuidadoEspecial?: boolean;
+  condicionEspecialNota?: string | null;
 }
 
 export interface FaultType {
@@ -301,6 +306,16 @@ export interface DashboardStats {
     label: string;
     count: number;
   }>;
+  /** Todas las incidencias del periodo por estado (solo desde la RPC). */
+  statusCounts?: {
+    registered: number;
+    active: number;
+    justified: number;
+    annulled: number;
+    inReview: number;
+  };
+  /** Horas promedio entre registro y justificación; null si no hay justificadas. */
+  avgHoursToJustify?: number | null;
 }
 
 // Nuevas tablas del sistema
@@ -447,6 +462,8 @@ export interface AuditLog {
   actionDescription?: string;
   ipAddress?: string;
   timestamp: string;
+  /** Campos cambiados (calculado en servidor para la lista, sin traer el JSON). */
+  changesCount?: number;
 }
 
 export interface SystemConfig {

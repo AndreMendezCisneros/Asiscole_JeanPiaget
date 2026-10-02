@@ -361,10 +361,16 @@ export const AttendanceReport = () => {
             punctuality: `${punctuality}%`,
           };
         }),
-        { fontSize: 8 }
+        { fontSize: 8, maxRows: 150 }
       );
 
-      if (daysArray.length <= 28) {
+      if (rows.length > 150) {
+        toast.message('El PDF resume los primeros 150 estudiantes. Use Excel para el listado completo.', {
+          id: 'pdf-export-note',
+        });
+      }
+
+      if (daysArray.length <= 28 && rows.length <= 60) {
         doc.drawSectionTitle('Registro diario del mes');
         doc.drawParagraph(
           'Matriz de asistencia por día. Para el detalle completo exporte también el archivo Excel.'
@@ -408,7 +414,9 @@ export const AttendanceReport = () => {
         );
       } else {
         doc.drawParagraph(
-          'El mes tiene muchos días para mostrar la matriz diaria en PDF. Use Exportar Excel para el calendario completo.'
+          rows.length > 60
+            ? 'Hay demasiados estudiantes para la matriz diaria en PDF. Use Exportar Excel para el calendario completo.'
+            : 'El mes tiene muchos días para mostrar la matriz diaria en PDF. Use Exportar Excel para el calendario completo.'
         );
       }
 

@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { ArrowLeft, ChevronDown, GraduationCap, LogOut, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { alertSpecialCare } from '@/lib/utils/specialCareAlert';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -227,6 +228,7 @@ export const TeacherIncidentScanner = () => {
     setEvidenceFiles([]);
     setEvidencePreviews([]);
     setView('incident');
+    alertSpecialCare(found);
   }, []);
 
   const goBackToClassrooms = () => {
@@ -440,6 +442,11 @@ export const TeacherIncidentScanner = () => {
                             <ReincidenceBadge level={student.reincidenceLevel ?? 0} short />
                           </div>
                         )}
+                        {student.cuidadoEspecial && (
+                          <Badge variant="destructive" className="mt-1">
+                            Cuidado especial
+                          </Badge>
+                        )}
                         <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                           {student.level} · {student.grade} — {student.section}
                         </p>
@@ -480,6 +487,9 @@ export const TeacherIncidentScanner = () => {
                         className="resize-none"
                         disabled={registering}
                       />
+                      <p className="text-xs text-muted-foreground">
+                        Esta observación la verá el apoderado.
+                      </p>
                     </div>
 
                     <EvidenceQuickUpload

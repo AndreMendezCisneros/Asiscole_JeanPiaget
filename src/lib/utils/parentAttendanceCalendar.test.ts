@@ -110,7 +110,7 @@ describe('parentAttendanceCalendar', () => {
       },
       registeredBy: 1,
       registeredAt: '2026-09-07T07:55:00',
-      observations: null,
+      observations: 'Golpeó a un compañero',
       reincidenceLevel: 0,
       hasEvidence: false,
       evidenceCount: 0,
@@ -118,6 +118,7 @@ describe('parentAttendanceCalendar', () => {
     } as Incident;
     expect(formatClassIncidentDayDetail([incident])).toEqual([
       'Incidencia: Agresion Fisica · 7:55 a.m.',
+      'Observación: Golpeó a un compañero',
     ]);
   });
 });

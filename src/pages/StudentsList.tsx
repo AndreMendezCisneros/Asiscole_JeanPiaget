@@ -29,6 +29,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -68,7 +69,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { toast } from 'sonner';
-import { studentsService } from '@/lib/services';
+import { authService, studentsService } from '@/lib/services';
 import { prefetchSignedProfilePhotos } from '@/lib/utils/profilePhoto';
 import { Student, EducationalLevel } from '@/types';
 import { useStudentsQuery, useInvalidateStudents } from '@/hooks/queries/useStudentsQuery';
@@ -97,11 +98,14 @@ const studentFormSchema = z.object({
   nombre_responsable: z.string().optional(),
   parentesco_responsable: z.string().optional(),
   telefono_emergencia: z.string().optional(),
+  cuidado_especial: z.boolean().optional(),
+  condicion_especial_nota: z.string().max(200, 'Máximo 200 caracteres').optional(),
 });
 
 type StudentFormValues = z.infer<typeof studentFormSchema>;
 
 export const StudentsList = () => {
+  const canEditSpecialCare = ['Admin', 'Director'].includes(authService.getCurrentUser()?.role ?? '');
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('all');
@@ -135,6 +139,8 @@ export const StudentsList = () => {
     nombre_responsable: '',
     parentesco_responsable: '',
     telefono_emergencia: '',
+    cuidado_especial: false,
+    condicion_especial_nota: '',
   };
 
   const form = useForm<StudentFormValues>({
@@ -331,6 +337,8 @@ export const StudentsList = () => {
       nombre_responsable: student.responsibleName || '',
       parentesco_responsable: student.responsibleRelationship || '',
       telefono_emergencia: student.emergencyPhone || '',
+      cuidado_especial: Boolean(student.cuidadoEspecial),
+      condicion_especial_nota: student.condicionEspecialNota || '',
     });
     setTempGrado(student.grade);
     setTempSeccion(student.section);
@@ -366,6 +374,12 @@ export const StudentsList = () => {
         nombre_responsable: data.nombre_responsable || undefined,
         parentesco_responsable: data.parentesco_responsable || undefined,
         telefono_emergencia: data.telefono_emergencia || undefined,
+        ...(canEditSpecialCare
+          ? {
+              cuidado_especial: Boolean(data.cuidado_especial),
+              condicion_especial_nota: data.condicion_especial_nota || '',
+            }
+          : {}),
       });
       
       if (!isMountedRef.current) return;
@@ -763,6 +777,14 @@ export const StudentsList = () => {
                         </Badge>
                       </div>
                     </div>
+                    {selectedStudent.cuidadoEspecial ? (
+                      <div>
+                        <Label className="text-muted-foreground">Cuidado especial</Label>
+                        <p className="text-sm font-semibold">
+                          {selectedStudent.condicionEspecialNota || 'Activado'}
+                        </p>
+                      </div>
+                    ) : null}
                     <div>
                       <Label className="text-muted-foreground">Teléfono padre / apoderado</Label>
                       <p className="text-lg font-semibold font-mono">
@@ -1040,6 +1062,46 @@ export const StudentsList = () => {
                     </div>
                   </div>
 
+                  {canEditSpecialCare ? (
+                    <div className="space-y-3 rounded-lg border p-3">
+                      <FormField
+                        control={form.control}
+                        name="cuidado_especial"
+                        render={({ field }) => (
+                          <FormItem className="flex items-center justify-between gap-3 space-y-0">
+                            <FormLabel className="font-medium">Cuidado especial</FormLabel>
+                            <FormControl>
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 accent-primary"
+                                checked={Boolean(field.value)}
+                                onChange={(e) => field.onChange(e.target.checked)}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="condicion_especial_nota"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Nota interna (no se envía a padres)</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                rows={2}
+                                maxLength={200}
+                                placeholder="Alergia, apoyo, etc."
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  ) : null}
+
                   <DialogFooter>
                     <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)}>
                       Cancelar
@@ -1219,6 +1281,9 @@ export const StudentsList = () => {
                         <div>
                           <p className="font-medium">{student.fullName}</p>
                           <p className="text-xs text-muted-foreground">{student.barcode}</p>
+                          {student.cuidadoEspecial ? (
+                            <Badge variant="destructive" className="mt-1">Cuidado especial</Badge>
+                          ) : null}
                         </div>
                       </div>
                     </TableCell>

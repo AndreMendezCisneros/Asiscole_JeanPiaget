@@ -29,6 +29,7 @@ import {
   StaffTablePagination,
 } from '@/components/staff';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -40,6 +41,7 @@ import {
 import { arrivalService, authService, studentsService, whatsappService } from '@/lib/services';
 import type { ArrivalRecord, EducationalLevel, EstudianteEstadoPension, Student } from '@/types';
 import { toast } from 'sonner';
+import { alertSpecialCare } from '@/lib/utils/specialCareAlert';
 import { staffNotify } from '@/lib/utils/staffNotify';
 import { isPensionesEnabled } from '@/config/features';
 import { playPensionMorosoBeep } from '@/lib/utils/pensionBeep';
@@ -88,6 +90,7 @@ export const ArrivalControl = () => {
   const [editStep, setEditStep] = useState<'ask' | 'edit'>('ask');
   const [editTime, setEditTime] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
+  const [notifyEditParent, setNotifyEditParent] = useState(false);
   const isMountedRef = useRef(true);
   const pensionesEnabled = isPensionesEnabled();
 
@@ -210,6 +213,7 @@ export const ArrivalControl = () => {
         duration: 3200,
       });
     }
+    alertSpecialCare(student);
 
     setRegisteringStudentId(student.id);
     try {
@@ -253,12 +257,14 @@ export const ArrivalControl = () => {
     setEditRecord(null);
     setEditStep('ask');
     setEditTime('');
+    setNotifyEditParent(false);
   };
 
   const openEditArrival = (record: ArrivalRecord) => {
     const raw = (record.arrivalTime || '').slice(0, 5);
     setEditTime(raw);
     setEditStep('ask');
+    setNotifyEditParent(false);
     setEditRecord(record);
   };
 
@@ -285,6 +291,25 @@ export const ArrivalControl = () => {
         'Entrada actualizada',
         `${editRecord.student?.fullName || 'Estudiante'}: ${editTime}`,
       );
+      const notifyStudent = studentsById.get(editRecord.studentId) ?? editRecord.student;
+      if (notifyEditParent && notifyStudent && whatsappService.isEnabled()) {
+        void whatsappService
+          .notifyParentArrivalCorrection(notifyStudent, {
+            recordId: editRecord.id,
+            fecha: record.date || editRecord.date,
+            hora: editTime,
+          })
+          .then((wa) => {
+            if (!isMountedRef.current) return;
+            if (!wa.ok && wa.error) {
+              toast.warning(`Aviso al apoderado: ${wa.error}`, { duration: 4500 });
+            } else if (wa.ok && wa.error) {
+              toast.warning(`Aviso enviado, con detalle: ${wa.error}`, { duration: 4500 });
+            } else if (wa.ok && !wa.skipped) {
+              toast.success('Aviso de corrección enviado al apoderado');
+            }
+          });
+      }
       closeEditArrival();
       loadArrivals();
     } finally {
@@ -752,6 +777,19 @@ export const ArrivalControl = () => {
                   onChange={(e) => setEditTime(e.target.value)}
                   disabled={savingEdit}
                 />
+                {whatsappService.isEnabled() && (
+                  <div className="flex items-start gap-2 pt-2">
+                    <Checkbox
+                      id="edit-arrival-notify"
+                      checked={notifyEditParent}
+                      onCheckedChange={(checked) => setNotifyEditParent(checked === true)}
+                      disabled={savingEdit}
+                    />
+                    <Label htmlFor="edit-arrival-notify" className="text-sm font-normal leading-snug">
+                      Avisar al apoderado del cambio de hora
+                    </Label>
+                  </div>
+                )}
               </div>
               <DialogFooter className="gap-2 sm:gap-0">
                 <Button

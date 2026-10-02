@@ -36,8 +36,11 @@ import { getCurrentSchoolYear, getAllBimestres, formatBimestreLabel, type Bimest
 import { StudentSearchCombobox } from '@/components/students/StudentSearchCombobox';
 import { CLASSROOM_FIELD_LABELS, CLASSROOM_GRADES, CLASSROOM_LEVELS, CLASSROOM_SECTIONS } from '@/lib/constants/classrooms';
 import { buildDashboardStatsFromIncidents } from '@/lib/utils/incidentReportStats';
+import { useNavigate } from 'react-router-dom';
+import { ReportInsights } from '@/components/reports/ReportInsights';
 
 export const Reports = () => {
+  const navigate = useNavigate();
   const [selectedGrade, setSelectedGrade] = useState<string>('all');
   const [selectedSection, setSelectedSection] = useState<string>('all');
   const [selectedLevel, setSelectedLevel] = useState<'all' | EducationalLevel>('all');
@@ -75,6 +78,10 @@ export const Reports = () => {
         weeklyData: page.weeklyData ?? [],
         comparisonByGrade: page.byGrade ?? [],
         comparisonBySection: page.bySection ?? [],
+        sectionActivity: page.sectionActivity ?? [],
+        topStudents: page.topStudents ?? [],
+        dailyTrend: page.dailyTrend ?? [],
+        source: page.source,
       };
     },
     staleTime: 5 * 60 * 1000,
@@ -116,18 +123,23 @@ export const Reports = () => {
   );
   const viewStats = studentReportStats ?? stats;
 
-  const loadExportIncidents = async () => {
-    const { incidents: incidentsList, error } = await incidentsService.getAll({
+  const loadExportIncidents = async (limit: number) => {
+    const { incidents: incidentsList, error, total } = await incidentsService.getAll({
       nivelEducativo: selectedStudent ? undefined : selectedLevel === 'all' ? undefined : selectedLevel,
       grado: selectedStudent ? undefined : selectedGrade === 'all' ? undefined : selectedGrade,
       seccion: selectedStudent ? undefined : selectedSection === 'all' ? undefined : selectedSection,
       bimestre: bimestre !== 'all' ? bimestre : undefined,
       añoEscolar: bimestre !== 'all' ? añoEscolar : undefined,
       estudianteId: selectedStudent?.id,
-      fetchAll: true,
+      page: 1,
+      pageSize: limit,
     });
-    if (error) return { error, incidents: [] as Incident[] };
-    return { error: null, incidents: incidentsList };
+    if (error) return { error, incidents: [] as Incident[], truncated: false };
+    return {
+      error: null,
+      incidents: incidentsList,
+      truncated: (total ?? 0) > incidentsList.length,
+    };
   };
 
   const exportToPDF = async () => {
@@ -139,11 +151,14 @@ export const Reports = () => {
     try {
       toast.loading('Generando PDF...', { id: 'pdf-export' });
 
-      const { incidents: incidentsList, error } = await loadExportIncidents();
+      const { incidents: incidentsList, error, truncated } = await loadExportIncidents(80);
 
       if (error) {
         toast.error('Error al cargar incidencias para el PDF', { id: 'pdf-export' });
         return;
+      }
+      if (truncated) {
+        toast.message('El PDF muestra las 80 incidencias más recientes', { id: 'pdf-export-note' });
       }
 
       if (selectedStudent && incidentsList.length === 0) {
@@ -177,13 +192,17 @@ export const Reports = () => {
       );
       await doc.drawCoverHeader();
 
-      const criticalCount = exportStats.levelDistribution.level3 + exportStats.levelDistribution.level4;
+      const criticalCount =
+        exportStats.levelDistribution.level3 +
+        exportStats.levelDistribution.level4 +
+        exportStats.levelDistribution.level5;
       const exportLevelItems = [
         { level: 'Nivel 0 - Sin reincidencias', count: exportStats.levelDistribution.level0 },
         { level: 'Nivel 1 - Primera reincidencia', count: exportStats.levelDistribution.level1 },
         { level: 'Nivel 2 - Reincidencia moderada', count: exportStats.levelDistribution.level2 },
         { level: 'Nivel 3 - Reincidencia alta', count: exportStats.levelDistribution.level3 },
         { level: 'Nivel 4 - Reincidencia crítica', count: exportStats.levelDistribution.level4 },
+        { level: 'Nivel 5 - Reincidencia crítica máxima', count: exportStats.levelDistribution.level5 },
       ];
 
       doc.drawKpiCards([
@@ -270,11 +289,14 @@ export const Reports = () => {
     }
 
     try {
-      const { incidents: incidentsList, error } = await loadExportIncidents();
+      const { incidents: incidentsList, error, truncated } = await loadExportIncidents(1500);
 
       if (error) {
         toast.error('Error al cargar incidencias para exportar');
         return;
+      }
+      if (truncated) {
+        toast.message('El Excel incluye las 1500 incidencias más recientes');
       }
 
       if (selectedStudent && incidentsList.length === 0) {
@@ -304,6 +326,7 @@ export const Reports = () => {
         { level: 'Nivel 2 - Reincidencia moderada', count: exportStats.levelDistribution.level2 },
         { level: 'Nivel 3 - Reincidencia alta', count: exportStats.levelDistribution.level3 },
         { level: 'Nivel 4 - Reincidencia crítica', count: exportStats.levelDistribution.level4 },
+        { level: 'Nivel 5 - Reincidencia crítica máxima', count: exportStats.levelDistribution.level5 },
       ];
 
       const { exportIncidentsReportExcel } = await import('@/lib/utils/excelReportExports');
@@ -337,6 +360,7 @@ export const Reports = () => {
         { level: 'Nivel 2 - Reincidencia moderada', key: 'level2' as const, count: viewStats.levelDistribution.level2, severity: 'moderate' },
         { level: 'Nivel 3 - Reincidencia alta', key: 'level3' as const, count: viewStats.levelDistribution.level3, severity: 'critical' },
         { level: 'Nivel 4 - Reincidencia crítica', key: 'level4' as const, count: viewStats.levelDistribution.level4, severity: 'critical' },
+        { level: 'Nivel 5 - Reincidencia crítica máxima', key: 'level5' as const, count: viewStats.levelDistribution.level5, severity: 'critical' },
       ]
     : [];
 
@@ -532,11 +556,27 @@ export const Reports = () => {
         />
         <StaffKpiStat
           label="Casos críticos"
-          value={(viewStats?.levelDistribution.level3 ?? 0) + (viewStats?.levelDistribution.level4 ?? 0)}
+          value={
+            (viewStats?.levelDistribution.level3 ?? 0) +
+            (viewStats?.levelDistribution.level4 ?? 0) +
+            (viewStats?.levelDistribution.level5 ?? 0)
+          }
+          hint="Niveles 3 a 5"
           icon={AlertTriangle}
           tone="secondary"
         />
       </div>
+
+      {!studentFilterActive && (
+        <ReportInsights
+          stats={stats}
+          sectionActivity={reportsData?.sectionActivity ?? []}
+          topStudents={reportsData?.topStudents ?? []}
+          dailyTrend={reportsData?.dailyTrend ?? []}
+          available={reportsData?.source === 'rpc'}
+          onCite={(student) => navigate(`/parent-meetings?citar=${student.studentId}`)}
+        />
+      )}
 
       {/* Charts y detalle */}
       {/* Tendencia mensual a ancho completo */}
@@ -794,6 +834,7 @@ export const Reports = () => {
                           <th className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">Nivel 2</th>
                           <th className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">Nivel 3</th>
                           <th className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">Nivel 4</th>
+                          <th className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">Nivel 5</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -828,6 +869,9 @@ export const Reports = () => {
                             </td>
                             <td className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-red-700">
                               {item.levelDistribution.level4}
+                            </td>
+                            <td className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-red-800">
+                              {item.levelDistribution.level5 ?? 0}
                             </td>
                           </tr>
                         ))}

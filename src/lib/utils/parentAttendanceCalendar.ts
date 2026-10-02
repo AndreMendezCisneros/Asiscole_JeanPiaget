@@ -182,11 +182,14 @@ export function formatClassAttendanceLines(record: ArrivalRecord | undefined): s
 
 /** Incidencias de jornada regular (sin taller). */
 export function formatClassIncidentDayDetail(rows: Incident[]): string[] {
-  return rows.map((row) => {
+  return rows.flatMap((row) => {
     const faultName = row.faultType?.name?.trim() || 'Incidencia registrada';
     const hora = row.registeredAt?.slice(11, 16);
     const timePart = hora ? ` · ${parseArrivalTime12h(hora)}` : '';
-    return `Incidencia: ${faultName}${timePart}`;
+    const lines = [`Incidencia: ${faultName}${timePart}`];
+    const note = row.observations?.trim();
+    if (note) lines.push(`Observación: ${note}`);
+    return lines;
   });
 }
 

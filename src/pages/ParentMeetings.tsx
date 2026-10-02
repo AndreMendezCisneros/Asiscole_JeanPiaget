@@ -59,7 +59,8 @@ import {
   PhoneCall,
 } from 'lucide-react';
 import { ModernCalendar } from '@/components/calendar/ModernCalendar';
-import { parentMeetingsService } from '@/lib/services';
+import { useSearchParams } from 'react-router-dom';
+import { parentMeetingsService, type SuggestedCitationStudent } from '@/lib/services';
 import { studentsService } from '@/lib/services';
 import { whatsappService } from '@/lib/services';
 import { ParentMeeting, Student } from '@/types';
@@ -84,6 +85,7 @@ import {
   parseMeetingDateTime,
 } from '@/lib/utils/limaDateTime';
 import { StudentSearchCombobox } from '@/components/students/StudentSearchCombobox';
+import { ReincidenceBadge } from '@/components/shared/ReincidenceBadge';
 import { citaAlcanceFromMeetingTipo } from '@/lib/services/mobileIngest';
 
 const meetingFormSchema = z
@@ -179,6 +181,9 @@ export const ParentMeetings = () => {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [notifyOnCreate, setNotifyOnCreate] = useState(true);
+  const [suggested, setSuggested] = useState<SuggestedCitationStudent[]>([]);
+  const [suggestedWindow, setSuggestedWindow] = useState<number | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [stats, setStats] = useState<{
     total: number;
@@ -222,6 +227,26 @@ export const ParentMeetings = () => {
     setBulkDialogOpen(true);
   };
 
+  const openCiteFromSuggestion = (row: SuggestedCitationStudent) => {
+    form.reset({
+      ...individualMeetingDefaults,
+      id_estudiante: row.studentId,
+      motivo: `Revisión por reincidencia nivel ${row.reincidenceLevel} (${row.faultsInWindow} incidencias activas)`,
+    });
+    setDialogOpen(true);
+  };
+
+  const loadSuggested = async () => {
+    const { students, windowDays, error } = await parentMeetingsService.getSuggestedToCite(3, 15);
+    if (!isMountedRef.current) return;
+    if (error) {
+      console.warn('sugeridos a citar:', error);
+      return;
+    }
+    setSuggested(students);
+    setSuggestedWindow(windowDays);
+  };
+
   const focusMeetingsOnDate = (fecha: string) => {
     const [year, month, day] = fecha.split('-').map(Number);
     if (year && month && day) {
@@ -246,12 +271,30 @@ export const ParentMeetings = () => {
     isMountedRef.current = true;
     loadMeetings();
     loadStats();
+    void loadSuggested();
 
     return () => {
       isMountedRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, meetingsDateRange.fechaDesde, meetingsDateRange.fechaHasta]);
+
+  useEffect(() => {
+    const raw = searchParams.get('citar');
+    if (!raw) return;
+    const studentId = Number(raw);
+    if (!studentId) return;
+    form.reset({
+      ...individualMeetingDefaults,
+      id_estudiante: studentId,
+      motivo: 'Revisión por reincidencia',
+    });
+    setDialogOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('citar');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const loadMeetings = async () => {
     if (!isMountedRef.current) return;
@@ -306,13 +349,14 @@ export const ParentMeetings = () => {
     rows: Array<{ citaId: number; studentId: number; student?: Student }>;
   }) => {
     if (!notifyOnCreate) return;
-    if (!whatsappService.isAppNotificationsEnabled()) {
-      toast.message('Avisos por aplicación no habilitados en este entorno');
+    if (!whatsappService.isEnabled()) {
+      toast.message('Avisos a padres no habilitados en este entorno');
       return;
     }
 
     const alcance = citaAlcanceFromMeetingTipo(params.tipo);
-    let sent = 0;
+    let sentWpp = 0;
+    let sentApp = 0;
     let failed = 0;
     for (const row of params.rows) {
       let student = row.student;
@@ -334,30 +378,45 @@ export const ParentMeetings = () => {
           emergencyPhone: null,
         } satisfies Student);
       try {
-        const app = await whatsappService.notifyParentCita(target, {
+        const viaWpp = whatsappService.usesWppForStudent(target);
+        const notified = await whatsappService.notifyParentCita(target, {
           citaId: row.citaId,
           motivo: params.motivo,
           fecha: params.fecha,
           hora: params.hora,
           alcance,
         });
-        if (app.ok && !app.skipped) sent += 1;
-        else if (!app.ok) failed += 1;
+        if (notified.ok && !notified.skipped) {
+          if (viaWpp) sentWpp += 1;
+          else sentApp += 1;
+        } else if (!notified.ok) {
+          failed += 1;
+        }
       } catch {
         failed += 1;
       }
     }
 
-    if (sent > 0) {
+    if (sentWpp > 0 && sentApp > 0) {
       toast.success(
-        sent === 1
+        `WhatsApp: ${sentWpp} citación(es) · Aplicación: ${sentApp} aviso(s)`,
+      );
+    } else if (sentWpp > 0) {
+      toast.success(
+        sentWpp === 1
+          ? 'WhatsApp: citación enviada'
+          : `WhatsApp: ${sentWpp} citaciones enviadas`,
+      );
+    } else if (sentApp > 0) {
+      toast.success(
+        sentApp === 1
           ? 'Aplicación: aviso de citación enviado'
-          : `Aplicación: ${sent} avisos de citación enviados`,
+          : `Aplicación: ${sentApp} avisos de citación enviados`,
       );
     } else if (failed > 0) {
-      toast.error(`No se pudieron enviar ${failed} avisos por la aplicación`);
+      toast.error(`No se pudieron enviar ${failed} avisos de citación`);
     } else {
-      toast.message('Sin avisos nuevos por la aplicación (ya notificados o sin destino)');
+      toast.message('Sin avisos nuevos (ya notificados o sin destino)');
     }
   };
 
@@ -403,6 +462,7 @@ export const ParentMeetings = () => {
           focusMeetingsOnDate(data.fecha);
           loadMeetings();
           loadStats();
+          void loadSuggested();
           void notifyCreatedCitas({
             tipo: data.tipo,
             motivo: data.motivo,
@@ -438,6 +498,7 @@ export const ParentMeetings = () => {
           form.reset();
           loadMeetings();
           loadStats();
+          void loadSuggested();
           if (meeting) {
             void notifyCreatedCitas({
               tipo: 'individual',
@@ -737,6 +798,53 @@ export const ParentMeetings = () => {
             tone="accent"
           />
         </div>
+      )}
+
+      {suggested.length > 0 && (
+        <StaffDataPanel>
+          <StaffDataPanelHeader
+            title="Sugeridos a citar"
+            description={`Alumnos con reincidencia nivel 3 o más en los últimos ${suggestedWindow ?? 60} días, sin cita abierta`}
+            accent="warning"
+          />
+          <StaffDataPanelBody className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Estudiante</TableHead>
+                  <TableHead>Aula</TableHead>
+                  <TableHead>Nivel</TableHead>
+                  <TableHead>Faltas</TableHead>
+                  <TableHead className="text-right">Acción</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {suggested.map((row) => (
+                  <TableRow key={row.studentId}>
+                    <TableCell>
+                      <p className="font-medium">{row.fullName}</p>
+                      {row.lastFault ? (
+                        <p className="text-xs text-muted-foreground">{row.lastFault}</p>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {row.level} {row.grade} {row.section}
+                    </TableCell>
+                    <TableCell>
+                      <ReincidenceBadge level={(row.reincidenceLevel || 0) as 0 | 1 | 2 | 3 | 4 | 5} />
+                    </TableCell>
+                    <TableCell>{row.faultsInWindow}</TableCell>
+                    <TableCell className="text-right">
+                      <Button type="button" size="sm" variant="outline" onClick={() => openCiteFromSuggestion(row)}>
+                        Citar
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </StaffDataPanelBody>
+        </StaffDataPanel>
       )}
 
       <StaffDataPanel>
@@ -1330,7 +1438,7 @@ export const ParentMeetings = () => {
                   checked={notifyOnCreate}
                   onChange={(e) => setNotifyOnCreate(e.target.checked)}
                 />
-                Notificar por la aplicación a padres
+                Notificar a padres (WhatsApp lista blanca y aplicación)
               </label>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
@@ -1595,7 +1703,7 @@ export const ParentMeetings = () => {
                   checked={notifyOnCreate}
                   onChange={(e) => setNotifyOnCreate(e.target.checked)}
                 />
-                Notificar por la aplicación a padres
+                Notificar a padres (WhatsApp lista blanca y aplicación)
               </label>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setBulkDialogOpen(false)}>

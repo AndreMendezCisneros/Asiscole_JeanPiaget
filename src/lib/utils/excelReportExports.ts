@@ -6,7 +6,9 @@ import {
   addBrandedExcelHeader,
   addExcelWatermark,
   addReportHeader,
-  autoFitColumns,
+  applyLandscapeFit,
+  applyWrapRowHeights,
+  EXCEL_COL,
   createWorkbook,
   defaultExportFilename,
   EXCEL_COLORS,
@@ -64,8 +66,8 @@ export async function exportIncidentsReportExcel(
       ['Estudiantes involucrados', stats.studentsWithIncidents],
       ['Nivel promedio reincidencia', stats.averageReincidenceLevel.toFixed(1)],
       [
-        'Casos críticos (nivel 3-4)',
-        stats.levelDistribution.level3 + stats.levelDistribution.level4,
+        'Casos críticos (nivel 3-5)',
+        stats.levelDistribution.level3 + stats.levelDistribution.level4 + stats.levelDistribution.level5,
       ],
     ]);
 
@@ -134,11 +136,30 @@ export async function exportIncidentsReportExcel(
 
     const lastRow = detailStart + incidentsList.length;
     if (incidentsList.length > 0) {
-      styleDataRows(detailsSheet, detailStart + 1, lastRow, { zebra: true });
+      styleDataRows(detailsSheet, detailStart + 1, lastRow, {
+        zebra: incidentsList.length <= 800,
+        wrapText: incidentsList.length <= 400,
+      });
     }
     freezePane(detailsSheet, detailStart);
-    setColumnWidths(detailsSheet, [8, 28, 12, 10, 8, 24, 14, 12, 12, 8, 12, 40]);
-    autoFitColumns(detailsSheet, 8, 42);
+    setColumnWidths(detailsSheet, [
+      EXCEL_COL.id,
+      EXCEL_COL.name,
+      12,
+      10,
+      8,
+      24,
+      14,
+      12,
+      12,
+      8,
+      12,
+      EXCEL_COL.notes,
+    ]);
+    if (incidentsList.length > 0) {
+      applyWrapRowHeights(detailsSheet, detailStart + 1, lastRow, [2, 6, 12]);
+    }
+    applyLandscapeFit(detailsSheet);
 
     await addExcelWatermark(workbook, summarySheet, {
       mergeCols: 4,

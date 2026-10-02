@@ -3,6 +3,7 @@ import type { ArrivalRecord, RegistroLlegadaDB, Student, EducationalLevel, Month
 import { configService } from './configService';
 import { studentsService } from './studentsService';
 import { authService } from './authService';
+import { sessionService } from './sessionService';
 import { getLimaNow, getLimaTodayDate, getLimaMonthBounds, getMonthBounds } from '@/lib/utils/limaDateTime';
 import { getCached, invalidateCache, setCached } from '@/lib/utils/memoryCache';
 import type { ArrivalLimitsByLevel } from '@/lib/utils/arrivalLimit';
@@ -729,7 +730,7 @@ const ARRIVAL_REPORT_BATCH_SIZE = 150;
 
 type ArrivalReportRow = Pick<
   RegistroLlegadaDB,
-  'id_estudiante' | 'fecha' | 'hora_llegada' | 'estado' | 'motivo_justificacion'
+  'id_estudiante' | 'fecha' | 'hora_llegada' | 'hora_salida' | 'estado' | 'motivo_justificacion'
 >;
 
 async function fetchArrivalsForReport(
@@ -749,7 +750,7 @@ async function fetchArrivalsForReport(
     while (true) {
       const { data, error } = await supabase
         .from('registros_llegada')
-        .select('id_estudiante, fecha, hora_llegada, estado, motivo_justificacion')
+        .select('id_estudiante, fecha, hora_llegada, hora_salida, estado, motivo_justificacion')
         .in('id_estudiante', batch)
         .gte('fecha', startStr)
         .lte('fecha', endStr)
@@ -870,6 +871,7 @@ export async function getMonthlyAttendance(filters: {
           day,
           status,
           arrivalTime: record?.hora_llegada,
+          departureTime: record?.hora_salida ?? undefined,
           justificationReason: record?.motivo_justificacion ?? undefined,
         };
       });
@@ -988,6 +990,7 @@ export async function getBimestralAttendance(filters: {
           day,
           status,
           arrivalTime: record?.hora_llegada,
+          departureTime: record?.hora_salida ?? undefined,
           justificationReason: record?.motivo_justificacion ?? undefined,
         };
       });
@@ -1703,6 +1706,61 @@ export async function getAttendanceJustifications(filters?: {
   };
 }
 
+/** Tardanzas por justificar (o ya justificadas), paginadas en servidor con total real. */
+export async function getAttendanceJustificationsPage(filters: {
+  pending: boolean;
+  date?: string;
+  level?: EducationalLevel;
+  grade?: string;
+  section?: string;
+  search?: string;
+  page: number;
+  pageSize: number;
+}): Promise<{ records: ArrivalRecord[]; total: number; error: string | null }> {
+  if (filters.date && !isWeekdayDateKey(filters.date)) {
+    return { records: [], total: 0, error: null };
+  }
+  const token = sessionService.getApiToken();
+  if (!token) {
+    return { records: [], total: 0, error: 'Sesión expirada. Vuelva a iniciar sesión.' };
+  }
+  const pageSize = Math.max(1, filters.pageSize);
+  const offset = (Math.max(1, filters.page) - 1) * pageSize;
+  try {
+    const { data, error } = await supabase.rpc('sie_justificaciones_paginado', {
+      p_token: token,
+      p_filtros: {
+        pending: filters.pending,
+        date: filters.date ?? null,
+        level: filters.level ?? null,
+        grade: filters.grade ?? null,
+        section: filters.section ?? null,
+        search: filters.search?.trim() || null,
+        limit: pageSize,
+        offset,
+      },
+    });
+    if (error) return { records: [], total: 0, error: error.message };
+    const payload = (data ?? {}) as { records?: unknown; total?: number; error?: string | null };
+    if (payload.error) return { records: [], total: 0, error: payload.error };
+    const limits = await fetchArrivalLimits();
+    const rows = (Array.isArray(payload.records) ? payload.records : []) as Array<
+      RegistroLlegadaDB & { estudiante?: { nivel_educativo?: string } }
+    >;
+    const records = rows.map((row) => {
+      if (row.hora_llegada && row.hora_llegada.length > 5) {
+        row.hora_llegada = row.hora_llegada.substring(0, 5);
+      }
+      const mapped = mapArrivalRecord(row);
+      return applyScanStatus(mapped, limits, mapped.student?.level ?? row.estudiante?.nivel_educativo ?? null);
+    });
+    return { records, total: Number(payload.total) || 0, error: null };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Error al cargar justificaciones';
+    return { records: [], total: 0, error: message };
+  }
+}
+
 /** Alumnos activos sin llegada (o con estado Falta) en una fecha, para justificar IJ. */
 export async function getPendingAbsencesForDate(filters: {
   date: string;
@@ -1976,6 +2034,7 @@ export const arrivalService = {
   getPublicInfoByDNI,
   fetchMonthArrivalsForStudent,
   getAttendanceJustifications,
+  getAttendanceJustificationsPage,
   getPendingAbsencesForDate,
   justifyTardiness,
   createJustifiedAbsence,

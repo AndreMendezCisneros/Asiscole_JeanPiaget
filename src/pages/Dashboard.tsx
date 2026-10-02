@@ -29,8 +29,15 @@ import {
   Line,
   Legend,
 } from 'recharts';
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PageLoader } from '@/components/ui/page-loader';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DashboardStats, Incident } from '@/types';
 import { toast } from 'sonner';
@@ -57,12 +64,42 @@ import { cn } from '@/lib/utils';
 import type { ReincidenceLevel } from '@/types';
 import {
   useDashboardStatsQuery,
+  useDailyTrendQuery,
   useDepartureAlertsQuery,
   useRecentIncidentsQuery,
   useMonthlyTrendQuery,
   useWeeklyAttendanceTrendQuery,
 } from '@/hooks/queries/useDashboardQueries';
 import { niceAxisScale } from '@/lib/utils/chartAxis';
+import { getLimaTodayDate } from '@/lib/utils/limaDateTime';
+import { formatMonthLabel, monthRangeISO, previousMonth } from '@/lib/utils/schoolCalendar';
+
+const MONTH_SHORT = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+type SeverityRange = 'month' | 'previous' | 'year';
+
+const SEVERITY_RANGE_OPTIONS: Array<{ value: SeverityRange; label: string; short: string }> = [
+  { value: 'month', label: 'Este mes', short: 'mes' },
+  { value: 'previous', label: 'Mes anterior', short: 'mes ant.' },
+  { value: 'year', label: 'Año escolar', short: 'año' },
+];
+
+/** Meses del año escolar en curso (marzo → mes actual, Lima). */
+function schoolYearMonths(todayKey: string): Array<{ year: number; month: number; key: string; label: string }> {
+  const [cy, cm] = todayKey.split('-').map(Number);
+  let y = cm <= 2 ? cy - 1 : cy;
+  let m = 3;
+  const out: Array<{ year: number; month: number; key: string; label: string }> = [];
+  while ((y < cy || (y === cy && m <= cm)) && out.length < 12) {
+    out.push({ year: y, month: m, key: `${y}-${m}`, label: formatMonthLabel(y, m) });
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  }
+  return out;
+}
 
 /** Paleta ejecutiva para gráficos (azul pizarra, sin acentos chillones) */
 const CHART = {
@@ -88,6 +125,28 @@ export const Dashboard = () => {
   const recentIncidentsQuery = useRecentIncidentsQuery(statsReady);
   const navigate = useNavigate();
 
+  const todayKey = getLimaTodayDate();
+  const trendMonths = useMemo(() => schoolYearMonths(todayKey), [todayKey]);
+  const [trendMonthKey, setTrendMonthKey] = useState(
+    () => trendMonths[trendMonths.length - 1]?.key ?? '',
+  );
+  const trendMonth =
+    trendMonths.find((m) => m.key === trendMonthKey) ?? trendMonths[trendMonths.length - 1];
+  const dailyTrendQuery = useDailyTrendQuery(
+    trendMonth?.year ?? 0,
+    trendMonth?.month ?? 0,
+    Boolean(trendMonth),
+  );
+
+  const [severityRange, setSeverityRange] = useState<SeverityRange>('month');
+  const severityDates = useMemo(() => {
+    if (severityRange === 'year') return null;
+    const [cy, cm] = todayKey.split('-').map(Number);
+    const target = severityRange === 'month' ? { year: cy, month: cm } : previousMonth(cy, cm);
+    return monthRangeISO(target.year, target.month);
+  }, [severityRange, todayKey]);
+  const severityQuery = useDashboardStatsQuery(severityDates, severityDates != null);
+
   useEffect(() => {
     if (statsQuery.isError) {
       toast.error('Error al cargar estadísticas del dashboard');
@@ -110,6 +169,7 @@ export const Dashboard = () => {
   const departureAlerts = alertsQuery.data ?? [];
   const recentIncidents: Incident[] = recentIncidentsQuery.data ?? [];
   const monthlyTrend = monthlyTrendQuery.data ?? [];
+  const dailyTrend = dailyTrendQuery.data ?? [];
   const weeklyAttendance = weeklyAttendanceQuery.data ?? [];
 
   const initialLoading = statsQuery.isLoading && !stats;
@@ -147,11 +207,18 @@ export const Dashboard = () => {
     );
   }
   
+  const severityStats: DashboardStats =
+    severityRange === 'year' ? stats : (severityQuery.data ?? stats);
+  const severityStale =
+    severityRange !== 'year' && (!severityQuery.data || severityQuery.isPlaceholderData);
+  const severityOption =
+    SEVERITY_RANGE_OPTIONS.find((o) => o.value === severityRange) ?? SEVERITY_RANGE_OPTIONS[0];
+
   const levelDistributionRows = REINCIDENCE_LEVELS.map((level) => {
     const key = `level${level}` as keyof typeof stats.levelDistribution;
     return {
       level,
-      value: stats.levelDistribution[key] ?? 0,
+      value: severityStats.levelDistribution[key] ?? 0,
       label: getReincidenceLevelSummaryLabel(level),
       color: getReincidenceLevelBarColor(level),
     };
@@ -175,7 +242,7 @@ export const Dashboard = () => {
 
   const CHART_MARGIN = { top: 8, right: 8, left: 0, bottom: 4 };
 
-  const maxTrend = Math.max(0, ...monthlyTrend.map((d) => d.incidents));
+  const maxTrend = Math.max(0, ...dailyTrend.map((d) => d.incidents));
   const trendAxis = niceAxisScale(maxTrend);
 
   const maxAttendanceDay = Math.max(0, ...weeklyAttendance.map((d) => d.total));
@@ -192,18 +259,28 @@ export const Dashboard = () => {
       : null;
   const attendanceGrowthDown = Boolean(attendanceGrowthBadge?.startsWith('-'));
 
-  // Calcular tasa de resolución
-  const resolutionRate = stats.totalIncidents > 0 
-    ? Math.min(100, Math.round(((stats.totalIncidents - stats.incidentsToday) / stats.totalIncidents) * 100))
-    : 100;
+  // Tasa de resolución: (justificadas + anuladas) / registradas en el año escolar
+  const statusCounts = stats.statusCounts;
+  const resolvedCount = statusCounts ? statusCounts.justified + statusCounts.annulled : 0;
+  const resolutionRate =
+    statusCounts && statusCounts.registered > 0
+      ? Math.round((resolvedCount / statusCounts.registered) * 100)
+      : null;
 
-  // Calcular porcentaje de crecimiento
-  const growthPercentage = monthlyTrend.length >= 2
-    ? calculatePercentageChange(
-        monthlyTrend[monthlyTrend.length - 1].incidents,
-        monthlyTrend[monthlyTrend.length - 2].incidents
-      )
-    : 0;
+  // Mes elegido frente al anterior (totales mensuales del año escolar)
+  const monthTotal = (year: number, month: number) =>
+    monthlyTrend.find((d) => d.month === MONTH_SHORT[month - 1])?.incidents;
+  const selectedMonthTotal = trendMonth ? monthTotal(trendMonth.year, trendMonth.month) : undefined;
+  const prevOfSelected = trendMonth ? previousMonth(trendMonth.year, trendMonth.month) : null;
+  const prevMonthTotal =
+    prevOfSelected && trendMonths.some((m) => m.year === prevOfSelected.year && m.month === prevOfSelected.month)
+      ? monthTotal(prevOfSelected.year, prevOfSelected.month)
+      : undefined;
+  const growthPercentage =
+    selectedMonthTotal != null && prevMonthTotal != null
+      ? calculatePercentageChange(selectedMonthTotal, prevMonthTotal)
+      : null;
+  const growthDown = growthPercentage != null && growthPercentage < 0;
 
   const quickActions = [
     {
@@ -242,7 +319,7 @@ export const Dashboard = () => {
 
       <StaffQuickActions actions={quickActions} />
 
-      <div className="app-kpi-grid">
+      <div className="app-kpi-grid xl:grid-cols-5">
         <StaffKpiStat
           label="Total incidencias"
           value={stats.totalIncidents}
@@ -273,11 +350,23 @@ export const Dashboard = () => {
         />
         <StaffKpiStat
           label="Tasa de resolución"
-          value={`${resolutionRate}%`}
-          hint={resolutionRate > 80 ? 'Excelente' : 'Mejorable'}
-          hintIcon={resolutionRate > 80 ? TrendingUp : TrendingDown}
+          value={resolutionRate == null ? '—' : `${resolutionRate}%`}
+          hint={
+            statusCounts
+              ? `${resolvedCount} de ${statusCounts.registered} justificadas o anuladas`
+              : 'Sin datos de estado'
+          }
+          hintIcon={resolutionRate != null && resolutionRate >= 50 ? TrendingUp : TrendingDown}
           icon={Target}
           tone="success"
+        />
+        <StaffKpiStat
+          label="Pendientes activas"
+          value={statusCounts ? statusCounts.active : stats.totalIncidents}
+          hint="Sin justificar ni anular · año escolar"
+          hintIcon={AlertCircle}
+          icon={Clock}
+          tone="warning"
         />
       </div>
 
@@ -287,29 +376,64 @@ export const Dashboard = () => {
             compact
             accent="primary"
             title="Tendencia de incidencias"
-            description="Año escolar en curso (marzo → hoy)"
+            description={`Días hábiles · ${trendMonth?.label ?? ''}`}
             action={
-              <span className="inline-flex shrink-0 items-center rounded-md border border-primary/25 bg-primary/15 px-2 py-0.5 text-[11px] font-semibold text-primary shadow-sm">
-                <ArrowUpRight className="mr-1 h-3 w-3" />
-                {growthPercentage > 0 ? '+' : ''}
-                {growthPercentage.toFixed(1)}%
-              </span>
+              <div className="flex shrink-0 items-center gap-2">
+                {growthPercentage != null && (
+                  <span
+                    className={cn(
+                      'inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold shadow-sm',
+                      growthDown
+                        ? 'border-emerald-500/25 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                        : 'border-rose-500/25 bg-rose-500/15 text-rose-700 dark:text-rose-400',
+                    )}
+                    title="Frente al mes anterior"
+                  >
+                    {growthDown ? (
+                      <ArrowDownRight className="mr-1 h-3 w-3" />
+                    ) : (
+                      <ArrowUpRight className="mr-1 h-3 w-3" />
+                    )}
+                    {growthPercentage > 0 ? '+' : ''}
+                    {growthPercentage.toFixed(1)}%
+                  </span>
+                )}
+                <Select value={trendMonth?.key ?? ''} onValueChange={setTrendMonthKey}>
+                  <SelectTrigger className="h-8 w-[118px] text-xs" aria-label="Mes de la tendencia">
+                    <SelectValue placeholder="Mes" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {trendMonths.map((m) => (
+                      <SelectItem key={m.key} value={m.key} className="text-xs">
+                        {m.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             }
           />
           <StaffDataPanelBody compact className="app-chart-surface !flex !min-h-0 !flex-1 !flex-col !p-0">
-            <div className="app-chart-wrap app-chart-wrap--fill">
+            <div className={cn('app-chart-wrap app-chart-wrap--fill', dailyTrendQuery.isFetching && 'opacity-70')}>
               <div className="absolute inset-0">
+              {dailyTrend.length === 0 && !dailyTrendQuery.isFetching ? (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  {dailyTrendQuery.isError ? 'No se pudo cargar la tendencia' : 'Sin días hábiles en este mes'}
+                </div>
+              ) : (
               <ResponsiveContainer width="100%" height="100%" debounce={50}>
-              <ComposedChart data={monthlyTrend} margin={CHART_MARGIN} barCategoryGap="28%">
+              <ComposedChart data={dailyTrend} margin={CHART_MARGIN} barCategoryGap="20%">
                 <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} vertical={false} />
                 <XAxis
-                  dataKey="month"
+                  dataKey="day"
                   stroke={CHART.axis}
-                  fontSize={12}
+                  fontSize={11}
                   tickLine={false}
                   axisLine={{ stroke: CHART.grid }}
                   tickMargin={8}
-                  tick={{ fill: CHART.axis, fontSize: 12 }}
+                  interval="preserveStartEnd"
+                  minTickGap={6}
+                  tick={{ fill: CHART.axis, fontSize: 11 }}
                 />
                 <YAxis
                   stroke={CHART.axis}
@@ -331,6 +455,10 @@ export const Dashboard = () => {
                     fontSize: '12px',
                   }}
                   formatter={(value: number) => [value, 'Incidencias']}
+                  labelFormatter={(label, payload) => {
+                    const date = payload?.[0]?.payload?.date as string | undefined;
+                    return date ? `${label} · ${date.split('-').reverse().join('/')}` : label;
+                  }}
                 />
                 <Bar
                   dataKey="incidents"
@@ -357,6 +485,7 @@ export const Dashboard = () => {
                 />
               </ComposedChart>
             </ResponsiveContainer>
+              )}
               </div>
             </div>
           </StaffDataPanelBody>
@@ -368,8 +497,31 @@ export const Dashboard = () => {
             accent="info"
             title="Gravedad por reincidencia"
             description="Escala 0 (leve) → 5 (máxima) · incidencias activas"
+            action={
+              <div className="flex flex-wrap justify-end gap-1" role="group" aria-label="Periodo de gravedad">
+                {SEVERITY_RANGE_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setSeverityRange(option.value)}
+                    aria-pressed={severityRange === option.value}
+                    className={cn(
+                      'rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors',
+                      severityRange === option.value
+                        ? 'border-primary/40 bg-primary/15 text-primary'
+                        : 'border-border text-muted-foreground hover:bg-muted',
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            }
           />
-          <StaffDataPanelBody compact className="space-y-4">
+          <StaffDataPanelBody compact className={cn('space-y-4', severityStale && 'opacity-60')}>
+            {severityQuery.isError && severityRange !== 'year' && (
+              <p className="text-xs text-destructive">No se pudo cargar este periodo; se muestra el año escolar.</p>
+            )}
             <div className="grid grid-cols-[auto_1fr] items-center gap-4 border-b border-border/70 pb-4">
               <div className="app-stat-ring">
                 <svg className="h-[88px] w-[88px] -rotate-90" aria-hidden>
@@ -381,19 +533,19 @@ export const Dashboard = () => {
                     stroke={CHART.bar}
                     strokeWidth="6"
                     fill="none"
-                    strokeDasharray={`${(stats.incidentsThisMonth / Math.max(stats.totalIncidents, 1)) * 226} 226`}
+                    strokeDasharray={`${Math.min(1, severityStats.totalIncidents / Math.max(stats.totalIncidents, 1)) * 226} 226`}
                     strokeLinecap="round"
                   />
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-xl font-bold tabular-nums leading-none">{stats.incidentsThisMonth}</span>
-                  <span className="text-[10px] text-muted-foreground">mes</span>
+                  <span className="text-xl font-bold tabular-nums leading-none">{severityStats.totalIncidents}</span>
+                  <span className="text-[10px] text-muted-foreground">{severityOption.short}</span>
                 </div>
               </div>
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between gap-2">
                   <dt className="text-muted-foreground">Promedio nivel</dt>
-                  <dd className="font-semibold tabular-nums">{stats.averageReincidenceLevel.toFixed(1)}</dd>
+                  <dd className="font-semibold tabular-nums">{severityStats.averageReincidenceLevel.toFixed(1)}</dd>
                 </div>
                 <div className="flex justify-between gap-2">
                   <dt className="text-muted-foreground">Esta semana</dt>
