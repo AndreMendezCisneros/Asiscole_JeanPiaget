@@ -54,6 +54,7 @@ import {
 } from '@/components/staff';
 import { Label } from '@/components/ui/label';
 import { arrivalService, authService, studentsService, whatsappService } from '@/lib/services';
+import { fetchServerLimaClock } from '@/lib/services/serverClock';
 import type { ArrivalRecord, EducationalLevel } from '@/types';
 import { toast } from 'sonner';
 import { staffNotify } from '@/lib/utils/staffNotify';
@@ -66,14 +67,16 @@ import {
   CLASSROOM_SECTIONS,
 } from '@/lib/constants/classrooms';
 
-function enqueueDepartureWhatsApp(
+async function notifyDepartureToParents(
   records: ArrivalRecord[],
   updatedIds: number[],
   departureTime: string | null,
   tipo: 'Normal' | 'Autorizada',
 ) {
   if (!whatsappService.isEnabled() || updatedIds.length === 0) return;
+  const channel = whatsappService.isAppNotificationsEnabled() ? 'App' : 'WhatsApp';
   const idSet = new Set(updatedIds);
+  const jobs: Promise<void>[] = [];
   for (const record of records) {
     if (!idSet.has(record.id) || !record.student) continue;
     const student = record.student;
@@ -82,12 +85,21 @@ function enqueueDepartureWhatsApp(
       departureTime: departureTime || record.departureTime,
       departureType: tipo,
     };
-    void whatsappService.notifyParentDeparture(student, notifyRecord).then((wa) => {
-      if (!wa.ok && wa.error) {
-        toast.warning(`WhatsApp salida (${student.fullName}): ${wa.error}`, { duration: 4500 });
-      }
-    });
+    jobs.push(
+      whatsappService.notifyParentDeparture(student, notifyRecord).then((wa) => {
+        if (!wa.ok && wa.error) {
+          toast.warning(`${channel} salida (${student.fullName}): ${wa.error}`, {
+            duration: 4500,
+          });
+        } else if (wa.sinDestinatario) {
+          toast.info(`${channel}: sin cuenta de apoderado (${student.fullName})`, {
+            duration: 3500,
+          });
+        }
+      }),
+    );
   }
+  await Promise.allSettled(jobs);
 }
 
 function getTodayDate() {
@@ -204,6 +216,17 @@ export const DepartureControl = () => {
   const [gradeFilter, setGradeFilter] = useState<'all' | string>('all');
   const [sectionFilter, setSectionFilter] = useState<'all' | string>('all');
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDate());
+  const [serverToday, setServerToday] = useState<string>(getTodayDate());
+
+  useEffect(() => {
+    fetchServerLimaClock()
+      .then((clock) => {
+        if (!isMountedRef.current) return;
+        setServerToday(clock.date);
+        setSelectedDate(clock.date);
+      })
+      .catch(() => {});
+  }, []);
   const [confirmBulk, setConfirmBulk] = useState<BulkConfirmTarget | null>(null);
   const [individualOpen, setIndividualOpen] = useState(false);
   const isMountedRef = useRef(true);
@@ -320,7 +343,7 @@ export const DepartureControl = () => {
       return;
     }
 
-    enqueueDepartureWhatsApp(records, updatedIds, departureTime, target.tipo);
+    await notifyDepartureToParents(records, updatedIds, departureTime, target.tipo);
 
     const skippedNote = skipped > 0 ? ` · ${skipped} ya tenían salida` : '';
     staffNotify.success(
@@ -383,7 +406,7 @@ export const DepartureControl = () => {
         return;
       }
 
-      enqueueDepartureWhatsApp(
+      await notifyDepartureToParents(
         records.map((r) => (r.id === record.id ? { ...r, student } : r)),
         updatedIds,
         departureTime,
@@ -426,7 +449,7 @@ export const DepartureControl = () => {
   }, [records, departureGroups.length]);
 
   const dateLabel =
-    selectedDate === getTodayDate()
+    selectedDate === serverToday
       ? 'del día de hoy'
       : `del ${new Date(`${selectedDate}T12:00:00`).toLocaleDateString('es-PE', {
           day: 'numeric',
@@ -505,7 +528,7 @@ export const DepartureControl = () => {
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                max={getTodayDate()}
+                max={serverToday}
               />
             </div>
             <div className="space-y-2">

@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react';
+import { toast } from 'sonner';
 import { isTalleresEnabled } from '@/config/features';
 import { tallerAttendanceService, whatsappService } from '@/lib/services';
-import { getLimaTodayDate } from '@/lib/utils/limaDateTime';
+import { fetchServerLimaClock } from '@/lib/services/serverClock';
 import type { ArrivalRecord, Student, TallerAsistencia } from '@/types';
 
 export type ScanMode = 'clase' | 'taller';
@@ -89,7 +90,7 @@ export function useTallerScan() {
         return { ok: false, error: 'Usuario no autenticado' };
       }
 
-      const today = getLimaTodayDate();
+      const today = (await fetchServerLimaClock()).date;
       const { year, month } = getYearMonth(today);
       const { records, error: recordsError } = await tallerAttendanceService.fetchMonthForStudent(
         student.id,
@@ -127,7 +128,19 @@ export function useTallerScan() {
         const record = mapTallerRecordToArrivalRecord(updated);
 
         if (whatsappService.isEnabled()) {
-          void whatsappService.notifyParentDeparture(student, record, TALLER_NOTIFY);
+          const channel = whatsappService.isAppNotificationsEnabled() ? 'App' : 'WhatsApp';
+          const wa = await whatsappService.notifyParentDeparture(
+            student,
+            record,
+            TALLER_NOTIFY,
+          );
+          if (!wa.ok && wa.error) {
+            toast.warning(`${channel}: ${wa.error}`, { duration: 4500 });
+          } else if (wa.sinDestinatario) {
+            toast.info(`${channel}: sin cuenta de apoderado (no se creó mensaje)`, {
+              duration: 3500,
+            });
+          }
         }
 
         return {
@@ -164,7 +177,15 @@ export function useTallerScan() {
       const displayTime = arrivalRecord.arrivalTime ?? '—:—';
 
       if (whatsappService.isEnabled()) {
-        void whatsappService.notifyParentArrival(student, record, TALLER_NOTIFY);
+        const channel = whatsappService.isAppNotificationsEnabled() ? 'App' : 'WhatsApp';
+        const wa = await whatsappService.notifyParentArrival(student, record, TALLER_NOTIFY);
+        if (!wa.ok && wa.error) {
+          toast.warning(`${channel}: ${wa.error}`, { duration: 4500 });
+        } else if (wa.sinDestinatario) {
+          toast.info(`${channel}: sin cuenta de apoderado (no se creó mensaje)`, {
+            duration: 3500,
+          });
+        }
       }
 
       return {

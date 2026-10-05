@@ -1,11 +1,10 @@
 import { supabase } from '../supabaseClient';
 import type { TallerAsistencia } from '@/types';
 import {
-  getLimaNow,
-  getLimaTodayDate,
   getLimaMonthBounds,
   getMonthBounds,
 } from '@/lib/utils/limaDateTime';
+import { fetchServerLimaClock } from './serverClock';
 
 type TallerLlegadaRow = {
   id_registro: number;
@@ -51,11 +50,12 @@ export async function recordArrival(
   _tallerId: string | undefined,
   studentId: number,
   registeredBy?: number,
-  options?: RecordTallerArrivalOptions,
+  _options?: RecordTallerArrivalOptions,
 ): Promise<{ record: TallerAsistencia | null; error: string | null }> {
   try {
-    const fecha = options?.date ?? getLimaTodayDate();
-    const hora = options?.arrivalTime ?? getLimaNow().time;
+    const clock = await fetchServerLimaClock();
+    const fecha = clock.date;
+    const hora = clock.time;
 
     const payload: Record<string, unknown> = {
       id_estudiante: studentId,
@@ -90,7 +90,7 @@ export async function recordArrival(
 export async function recordDeparture(
   studentId: number,
   registeredBy?: number,
-  date?: string,
+  _date?: string,
 ): Promise<{
   success: boolean;
   error: string | null;
@@ -98,8 +98,9 @@ export async function recordDeparture(
   record: TallerAsistencia | null;
 }> {
   try {
-    const fecha = date ?? getLimaTodayDate();
-    const departureTime = getLimaNow().time;
+    const clock = await fetchServerLimaClock();
+    const fecha = clock.date;
+    const departureTime = clock.time;
 
     const updateData: Record<string, unknown> = {
       hora_salida: departureTime,

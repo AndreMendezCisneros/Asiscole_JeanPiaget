@@ -3,7 +3,8 @@ import type { ArrivalRecord, RegistroLlegadaDB, Student, EducationalLevel, Month
 import { configService } from './configService';
 import { studentsService } from './studentsService';
 import { authService } from './authService';
-import { getLimaNow, getLimaTodayDate, getLimaMonthBounds, getMonthBounds } from '@/lib/utils/limaDateTime';
+import { getLimaTodayDate, getLimaMonthBounds, getMonthBounds } from '@/lib/utils/limaDateTime';
+import { fetchServerLimaClock } from './serverClock';
 import { getCached, invalidateCache, setCached } from '@/lib/utils/memoryCache';
 import type { ArrivalLimitsByLevel } from '@/lib/utils/arrivalLimit';
 import {
@@ -136,9 +137,11 @@ export async function fetchArrivalLimitTime(level?: string): Promise<string> {
   return getArrivalLimitTime(level);
 }
 
-export async function fetchArrivalLimits(): Promise<ArrivalLimitsByLevel> {
-  const cached = getCached<ArrivalLimitsByLevel>(ARRIVAL_LIMITS_CACHE_KEY);
-  if (cached) return cached;
+export async function fetchArrivalLimits(options?: { force?: boolean }): Promise<ArrivalLimitsByLevel> {
+  if (!options?.force) {
+    const cached = getCached<ArrivalLimitsByLevel>(ARRIVAL_LIMITS_CACHE_KEY);
+    if (cached) return cached;
+  }
 
   const keys = [
     SYSTEM_SETTING_KEYS.arrivalLimit,
@@ -244,7 +247,7 @@ export async function getTodayArrivalForStudent(
   studentLevel?: string | null,
 ): Promise<{ record: ArrivalRecord | null; error: string | null }> {
   try {
-    const targetDate = date ?? getLimaNow().date;
+    const targetDate = date ?? (await fetchServerLimaClock()).date;
 
     const { data, error } = await supabase
       .from('registros_llegada')
@@ -277,10 +280,9 @@ async function createArrivalRecordInner(
   options?: CreateArrivalOptions
 ): Promise<CreateArrivalResult> {
   try {
-    const { date: formattedDate, time: formattedTime } =
-      options?.date && options?.arrivalTime
-        ? { date: options.date, time: options.arrivalTime }
-        : getLimaNow();
+    const clock = await fetchServerLimaClock();
+    const formattedDate = clock.date;
+    const formattedTime = clock.time;
 
     let level = options?.studentLevel ?? null;
     if (!level) {
@@ -505,7 +507,7 @@ export async function getArrivalsForStudents(
     return { records: [], error: null };
   }
 
-  const dateKey = date ?? getLimaTodayDate();
+  const dateKey = date ?? (await fetchServerLimaClock()).date;
 
   try {
     const rows: ClassroomArrivalRow[] = [];
@@ -1000,13 +1002,13 @@ export async function createDepartureRecord(
   registroId: number,
   registeredBy?: number,
   tipoSalida: 'Normal' | 'Autorizada' = 'Normal'
-): Promise<{ success: boolean; error: string | null }> {
-  const { successCount, error } = await createBulkDepartureRecords(
+): Promise<{ success: boolean; error: string | null; departureTime: string | null }> {
+  const { successCount, error, departureTime } = await createBulkDepartureRecords(
     [registroId],
     registeredBy,
     tipoSalida,
   );
-  return { success: successCount > 0 && !error, error };
+  return { success: successCount > 0 && !error, error, departureTime };
 }
 
 /**
@@ -1029,13 +1031,10 @@ export async function createBulkDepartureRecords(
   }
 
   try {
-    const now = new Date();
-    const hours = now.toLocaleString('es-PE', { timeZone: 'America/Lima', hour: '2-digit', hour12: false });
-    const minutes = now.toLocaleString('es-PE', { timeZone: 'America/Lima', minute: '2-digit' });
-    const formattedTime = `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
+    const clock = await fetchServerLimaClock();
 
     const updateData: Record<string, unknown> = {
-      hora_salida: formattedTime,
+      hora_salida: clock.time,
       fecha_salida: new Date().toISOString(),
       tipo_salida: tipoSalida,
     };
@@ -1049,7 +1048,7 @@ export async function createBulkDepartureRecords(
       .update(updateData)
       .in('id_registro', uniqueIds)
       .is('hora_salida', null)
-      .select('id_registro');
+      .select('id_registro, hora_salida');
 
     if (error) {
       return {
@@ -1062,12 +1061,13 @@ export async function createBulkDepartureRecords(
     }
 
     const updatedIds = (data ?? []).map((row) => Number(row.id_registro)).filter((id) => id > 0);
+    const savedTime = String((data ?? [])[0]?.hora_salida ?? clock.time).slice(0, 5);
     return {
       successCount: updatedIds.length,
       skipped: uniqueIds.length - updatedIds.length,
       error: null,
       updatedIds,
-      departureTime: formattedTime,
+      departureTime: savedTime,
     };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error al registrar salidas';
@@ -1349,7 +1349,7 @@ export async function getPublicInfoByDNI(dni: string): Promise<{
       return { arrival: null, recentArrivals: [], student: null, error: 'No se encontró ningún estudiante con ese DNI.' };
     }
 
-    const today = getLimaTodayDate();
+    const today = (await fetchServerLimaClock()).date;
 
     const [todayRes, recentArrivals] = await Promise.all([
       getTodayArrivalForStudent(student.id, today, student.level),

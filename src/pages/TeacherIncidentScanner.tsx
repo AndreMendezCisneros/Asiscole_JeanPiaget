@@ -17,7 +17,7 @@ import {
   studentsService,
 } from '@/lib/services';
 import type { ArrivalRecord, DocenteClassroom, FaultType, Student } from '@/types';
-import { getLimaNow, getLimaTodayDate } from '@/lib/utils/limaDateTime';
+import { fetchServerLimaClock } from '@/lib/services/serverClock';
 import { GuardyMark } from '@/components/brand/GuardyMark';
 import { StudentPhoto } from '@/components/shared/StudentPhoto';
 import { ReincidenceBadge } from '@/components/shared/ReincidenceBadge';
@@ -101,10 +101,14 @@ export const TeacherIncidentScanner = () => {
           : 'Revisar y confirmar';
 
   const loadClassroomArrivals = useCallback(async (studentIds: number[]) => {
-    const { records, error } = await arrivalService.getArrivalsForStudents(
-      studentIds,
-      getLimaTodayDate(),
-    );
+    let date: string;
+    try {
+      date = (await fetchServerLimaClock()).date;
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo leer la hora del servidor');
+      return;
+    }
+    const { records, error } = await arrivalService.getArrivalsForStudents(studentIds, date);
     if (!isMountedRef.current) return;
 
     if (error) {
@@ -182,25 +186,24 @@ export const TeacherIncidentScanner = () => {
 
     setRegisteringDepartureId(recordId);
     try {
-      const { success, error } = await arrivalService.createDepartureRecord(
+      const { success, error, departureTime } = await arrivalService.createDepartureRecord(
         recordId,
         currentUser.id,
       );
       if (!isMountedRef.current) return;
 
-      if (error || !success) {
+      if (error || !success || !departureTime) {
         toast.error(error || 'No se pudo registrar la salida');
         return;
       }
 
-      const { time } = getLimaNow();
       setArrivalByStudentId((prev) => {
         const existing = prev.get(student.id);
         if (!existing) return prev;
         const next = new Map(prev);
         next.set(student.id, {
           ...existing,
-          departureTime: time,
+          departureTime,
           departureType: 'Normal',
         });
         return next;

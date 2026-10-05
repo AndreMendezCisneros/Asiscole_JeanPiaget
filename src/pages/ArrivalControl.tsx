@@ -29,6 +29,7 @@ import {
 } from '@/components/staff';
 import { Label } from '@/components/ui/label';
 import { arrivalService, authService, studentsService, whatsappService } from '@/lib/services';
+import { fetchServerLimaClock } from '@/lib/services/serverClock';
 import type { ArrivalRecord, EducationalLevel, EstudianteEstadoPension, Student } from '@/types';
 import { toast } from 'sonner';
 import { staffNotify } from '@/lib/utils/staffNotify';
@@ -101,6 +102,17 @@ export const ArrivalControl = () => {
   };
   
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDate());
+  const [serverToday, setServerToday] = useState<string>(getTodayDate());
+
+  useEffect(() => {
+    fetchServerLimaClock()
+      .then((clock) => {
+        if (!isMountedRef.current) return;
+        setServerToday(clock.date);
+        setSelectedDate(clock.date);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -219,12 +231,16 @@ export const ArrivalControl = () => {
         toast.info(`${student.fullName} ya tenía entrada registrada hoy`);
       } else {
         if (whatsappService.isEnabled()) {
-          void whatsappService.notifyParentArrival(student, record).then((wa) => {
-            if (!isMountedRef.current) return;
-            if (!wa.ok && wa.error) {
-              toast.warning(`WhatsApp: ${wa.error}`, { duration: 4500 });
-            }
-          });
+          const channel = whatsappService.isAppNotificationsEnabled() ? 'App' : 'WhatsApp';
+          const wa = await whatsappService.notifyParentArrival(student, record);
+          if (!isMountedRef.current) return;
+          if (!wa.ok && wa.error) {
+            toast.warning(`${channel}: ${wa.error}`, { duration: 4500 });
+          } else if (wa.sinDestinatario) {
+            toast.info(`${channel}: sin cuenta de apoderado (no se creó mensaje)`, {
+              duration: 3500,
+            });
+          }
         }
         staffNotify.success('¡Entrada registrada!', `${student.fullName} quedó registrado`);
       }
@@ -257,18 +273,20 @@ export const ArrivalControl = () => {
       toast.error(error || 'No se pudo registrar la salida');
     } else {
       if (whatsappService.isEnabled() && existing?.student && updatedIds.includes(recordId)) {
-        void whatsappService
-          .notifyParentDeparture(existing.student, {
-            ...existing,
-            departureTime: departureTime || existing.departureTime,
-            departureType: 'Normal',
-          })
-          .then((wa) => {
-            if (!isMountedRef.current) return;
-            if (!wa.ok && wa.error) {
-              toast.warning(`WhatsApp: ${wa.error}`, { duration: 4500 });
-            }
+        const channel = whatsappService.isAppNotificationsEnabled() ? 'App' : 'WhatsApp';
+        const wa = await whatsappService.notifyParentDeparture(existing.student, {
+          ...existing,
+          departureTime: departureTime || existing.departureTime,
+          departureType: 'Normal',
+        });
+        if (!isMountedRef.current) return;
+        if (!wa.ok && wa.error) {
+          toast.warning(`${channel}: ${wa.error}`, { duration: 4500 });
+        } else if (wa.sinDestinatario) {
+          toast.info(`${channel}: sin cuenta de apoderado (no se creó mensaje)`, {
+            duration: 3500,
           });
+        }
       }
       staffNotify.success('¡Salida registrada!', 'El registro de asistencia quedó actualizado');
       loadArrivals(); // Recargar los registros
@@ -355,7 +373,7 @@ export const ArrivalControl = () => {
         icon={Clock}
         eyebrow="Asistencia"
         title="Control de Llegadas"
-        description={`Registro y seguimiento de ingresos ${selectedDate === getTodayDate() ? 'del día de hoy' : `del ${new Date(selectedDate).toLocaleDateString('es-PE', { day: 'numeric', month: 'long', year: 'numeric' })}`}`}
+        description={`Registro y seguimiento de ingresos ${selectedDate === serverToday ? 'del día de hoy' : `del ${new Date(selectedDate).toLocaleDateString('es-PE', { day: 'numeric', month: 'long', year: 'numeric' })}`}`}
         accent="success"
       />
 
@@ -400,7 +418,7 @@ export const ArrivalControl = () => {
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              max={getTodayDate()}
+              max={serverToday}
             />
           </div>
           <div className="space-y-2 sm:col-span-2 lg:col-span-3">

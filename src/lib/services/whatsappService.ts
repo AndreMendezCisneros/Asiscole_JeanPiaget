@@ -57,7 +57,7 @@ const WPPCONNECT_NOTIFY_KEY = import.meta.env.VITE_WPPCONNECT_NOTIFY_KEY || '';
 
 /** Nombre del colegio en textos WhatsApp (JP: Colegio Jean Piaget). */
 const SCHOOL_NAME =
-  (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() || 'I.E. San Ramón';
+  (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() || 'Academia Sofía';
 
 const GREETING_VARIANTS = [
   'Hola,',
@@ -143,13 +143,27 @@ export function buildNotifyDedupKey(
   return `${kind}:${studentId}:${date.slice(0, 10)}`;
 }
 
-function shouldSkipDuplicateNotify(key: string): boolean {
+/** Solo consulta. La marca se escribe tras un envío OK (si no, un fallo
+ *  silencioso bloqueaba reintentos durante 2 minutos). */
+function wasRecentlyNotified(key: string): boolean {
   const last = recentNotifyKeys.get(key);
-  const now = Date.now();
-  if (last != null && now - last < NOTIFY_DEDUP_MS) return true;
-  recentNotifyKeys.set(key, now);
-  return false;
+  return last != null && Date.now() - last < NOTIFY_DEDUP_MS;
 }
+
+function markNotified(key: string): void {
+  recentNotifyKeys.set(key, Date.now());
+}
+
+export type NotifyResult = {
+  ok: boolean;
+  error: string | null;
+  chatId?: string;
+  skipped?: boolean;
+  /** Filas creadas en el canal (si el body JSON lo trae). */
+  creados?: number;
+  /** 202 pero sin destinatario (cuenta/vínculo ausente). */
+  sinDestinatario?: boolean;
+};
 
 const APP_URL = (import.meta.env.VITE_APP_URL as string | undefined)?.replace(/\/$/, '') || '';
 
@@ -596,38 +610,54 @@ async function sendViaMetaWa(
   }
 }
 
-async function sendViaMobileIngest(
-  body: MobileIngestEventBody,
-): Promise<{ ok: boolean; error: string | null }> {
-  try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (MOBILE_INGEST_KEY) headers['X-Asiscole-Ingest-Key'] = MOBILE_INGEST_KEY;
+async function sendViaMobileIngest(body: MobileIngestEventBody): Promise<NotifyResult> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (MOBILE_INGEST_KEY) headers['X-Asiscole-Ingest-Key'] = MOBILE_INGEST_KEY;
+  const endpoint = resolveMobileIngestEndpoint();
 
-    const endpoint = resolveMobileIngestEndpoint();
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
+  let lastError: string | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
 
-    const raw = await response.text().catch(() => response.statusText);
-    if (looksLikeHtmlResponse(raw) || response.status === 404) {
+      const raw = await response.text().catch(() => response.statusText);
+      if (looksLikeHtmlResponse(raw) || response.status === 404) {
+        return {
+          ok: false,
+          error:
+            'App móvil: ruta no encontrada (404). En VPS no existe /mobile-ingest. ' +
+            'Usa la URL pública del Django: …/v0.1/ingesta/eventos (ngrok o backend desplegado). ' +
+            `Intentado: ${endpoint}`,
+        };
+      }
+      if (!response.ok && response.status !== 202) {
+        return { ok: false, error: friendlyWaError(raw, response.status, 'App móvil') };
+      }
+
+      let creados: number | undefined;
+      try {
+        const parsed = JSON.parse(raw) as { creados?: unknown };
+        if (typeof parsed.creados === 'number') creados = parsed.creados;
+      } catch {
+        /* cuerpo no JSON */
+      }
+
       return {
-        ok: false,
-        error:
-          'App móvil: ruta no encontrada (404). En VPS no existe /mobile-ingest. ' +
-          'Usa la URL pública del Django: …/v0.1/ingesta/eventos (ngrok o backend desplegado). ' +
-          `Intentado: ${endpoint}`,
+        ok: true,
+        error: null,
+        creados,
+        sinDestinatario: creados === 0,
       };
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : 'No se pudo conectar con la app móvil';
+      if (attempt === 0) await sleep(400);
     }
-    if (!response.ok && response.status !== 202) {
-      return { ok: false, error: friendlyWaError(raw, response.status, 'App móvil') };
-    }
-    return { ok: true, error: null };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'No se pudo conectar con la app móvil';
-    return { ok: false, error: friendlyWaError(message, undefined, 'App móvil') };
   }
+  return { ok: false, error: friendlyWaError(lastError || 'Error de red', undefined, 'App móvil') };
 }
 
 async function sendViaNotifyQueue(
@@ -794,7 +824,7 @@ export async function notifyParentArrival(
   student: Student,
   record: ArrivalRecord,
   opts?: NotifyOpts,
-): Promise<{ ok: boolean; error: string | null; chatId?: string; skipped?: boolean }> {
+): Promise<NotifyResult> {
   return notifyParentEvent(student, record, 'arrival', opts);
 }
 
@@ -806,7 +836,7 @@ export async function notifyParentDeparture(
   student: Student,
   record: ArrivalRecord,
   opts?: NotifyOpts,
-): Promise<{ ok: boolean; error: string | null; chatId?: string; skipped?: boolean }> {
+): Promise<NotifyResult> {
   return notifyParentEvent(student, record, 'departure', opts);
 }
 
@@ -819,7 +849,7 @@ export async function notifyParentIncident(
   incident: Incident,
   fault: FaultType,
   opts?: NotifyOpts,
-): Promise<{ ok: boolean; error: string | null; chatId?: string; skipped?: boolean }> {
+): Promise<NotifyResult> {
   if (!WHATSAPP_ENABLED) {
     return { ok: false, error: 'WhatsApp desactivado' };
   }
@@ -834,7 +864,7 @@ export async function notifyParentIncident(
     incidentId: incident.id,
   });
 
-  if (shouldSkipDuplicateNotify(dedupKey)) {
+  if (wasRecentlyNotified(dedupKey)) {
     return {
       ok: true,
       error: null,
@@ -847,6 +877,7 @@ export async function notifyParentIncident(
     const result = await sendViaMobileIngest(
       buildIncidentIngestBody(MOBILE_INGEST_TENANT, student, incident, fault),
     );
+    if (result.ok) markNotified(dedupKey);
     return { ...result, chatId: toWhatsAppChatId(apoderadoPhone) || undefined };
   }
 
@@ -857,20 +888,25 @@ export async function notifyParentIncident(
   }
 
   const messages = buildIncidentNotifyMessages(student, incident, fault, apoderadoPhone, opts);
-  const stubRecord: Partial<ArrivalRecord> = {
+  const stubRecord = {
     id: incident.id,
+    studentId: student.id,
     date: (incident.registeredAt || '').slice(0, 10),
-    status: fault.name,
-  };
+    arrivalTime: '00:00',
+    status: 'A tiempo' as const,
+    registeredBy: 0,
+    createdAt: incident.registeredAt || '',
+  } satisfies ArrivalRecord;
 
   const result = META_WA_ENABLED
-    ? await sendTextsViaMetaWa(wppPhone, student, stubRecord as ArrivalRecord, messages)
+    ? await sendTextsViaMetaWa(wppPhone, student, stubRecord, messages)
     : WPPCONNECT_ENABLED && WPPCONNECT_ROTATION
       ? await sendViaNotifyQueue(wppPhone, student, stubRecord, messages, 'incident')
       : WPPCONNECT_ENABLED
         ? await sendTextsViaWppConnect(wppPhone, messages)
         : await sendTextsViaOpenwa(chatId, messages);
 
+  if (result.ok) markNotified(dedupKey);
   return { ...result, chatId };
 }
 
@@ -918,7 +954,7 @@ export function buildPensionPendingMessage(
 export async function notifyParentPensionPending(
   student: Student,
   input: { periodo: string; monto?: number | null; pensionId?: number },
-): Promise<{ ok: boolean; error: string | null; chatId?: string; skipped?: boolean }> {
+): Promise<NotifyResult> {
   if (!MOBILE_INGEST_ENABLED) {
     return { ok: false, error: 'Notificaciones por aplicación no habilitadas' };
   }
@@ -926,7 +962,7 @@ export async function notifyParentPensionPending(
   const apoderadoPhone = student.contactPhone?.trim() || student.emergencyPhone?.trim() || '';
   const dedupKey = buildNotifyDedupKey('pension', student.id, input.periodo);
 
-  if (shouldSkipDuplicateNotify(dedupKey)) {
+  if (wasRecentlyNotified(dedupKey)) {
     return {
       ok: true,
       error: null,
@@ -942,6 +978,7 @@ export async function notifyParentPensionPending(
       idRegistro: input.pensionId,
     }),
   );
+  if (result.ok) markNotified(dedupKey);
   return { ...result, chatId: toWhatsAppChatId(apoderadoPhone) || undefined };
 }
 
@@ -962,7 +999,7 @@ export async function notifyParentNota(
     registradoEn?: string | null;
     idRegistro?: number;
   },
-): Promise<{ ok: boolean; error: string | null; chatId?: string; skipped?: boolean }> {
+): Promise<NotifyResult> {
   if (!MOBILE_INGEST_ENABLED) {
     return { ok: false, error: 'Notificaciones por aplicación no habilitadas' };
   }
@@ -974,7 +1011,7 @@ export async function notifyParentNota(
     `${input.semanaCodigo}:${input.nota}`,
   );
 
-  if (shouldSkipDuplicateNotify(dedupKey)) {
+  if (wasRecentlyNotified(dedupKey)) {
     return {
       ok: true,
       error: null,
@@ -986,6 +1023,7 @@ export async function notifyParentNota(
   const result = await sendViaMobileIngest(
     buildNotaIngestBody(MOBILE_INGEST_TENANT, student, input),
   );
+  if (result.ok) markNotified(dedupKey);
   return { ...result, chatId: toWhatsAppChatId(apoderadoPhone) || undefined };
 }
 
@@ -1001,7 +1039,7 @@ export async function notifyParentCita(
     hora: string;
     alcance: 'individual' | 'apafa' | 'piso' | 'salon';
   },
-): Promise<{ ok: boolean; error: string | null; chatId?: string; skipped?: boolean }> {
+): Promise<NotifyResult> {
   if (!MOBILE_INGEST_ENABLED) {
     return { ok: false, error: 'Notificaciones por aplicación no habilitadas' };
   }
@@ -1009,7 +1047,7 @@ export async function notifyParentCita(
   const apoderadoPhone = student.contactPhone?.trim() || student.emergencyPhone?.trim() || '';
   const dedupKey = buildNotifyDedupKey('cita', student.id, String(input.citaId));
 
-  if (shouldSkipDuplicateNotify(dedupKey)) {
+  if (wasRecentlyNotified(dedupKey)) {
     return {
       ok: true,
       error: null,
@@ -1021,6 +1059,7 @@ export async function notifyParentCita(
   const result = await sendViaMobileIngest(
     buildCitaIngestBody(MOBILE_INGEST_TENANT, student, input),
   );
+  if (result.ok) markNotified(dedupKey);
   return { ...result, chatId: toWhatsAppChatId(apoderadoPhone) || undefined };
 }
 
@@ -1029,7 +1068,7 @@ async function notifyParentEvent(
   record: ArrivalRecord,
   kind: 'arrival' | 'departure',
   opts?: NotifyOpts,
-): Promise<{ ok: boolean; error: string | null; chatId?: string; skipped?: boolean }> {
+): Promise<NotifyResult> {
   if (!WHATSAPP_ENABLED) {
     return { ok: false, error: 'WhatsApp desactivado' };
   }
@@ -1043,7 +1082,7 @@ async function notifyParentEvent(
     tallerId: opts?.tallerId,
   });
 
-  if (shouldSkipDuplicateNotify(dedupKey)) {
+  if (wasRecentlyNotified(dedupKey)) {
     return {
       ok: true,
       error: null,
@@ -1061,6 +1100,7 @@ async function notifyParentEvent(
             taller: isTaller,
           }),
     );
+    if (result.ok) markNotified(dedupKey);
     return { ...result, chatId: toWhatsAppChatId(apoderadoPhone) || undefined };
   }
 
@@ -1083,6 +1123,7 @@ async function notifyParentEvent(
         ? await sendTextsViaWppConnect(wppPhone, messages)
         : await sendTextsViaOpenwa(chatId, messages);
 
+  if (result.ok) markNotified(dedupKey);
   return { ...result, chatId };
 }
 

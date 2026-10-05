@@ -52,7 +52,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { getLimaNow, getLimaTodayDate } from '@/lib/utils/limaDateTime';
+import { fetchServerLimaClock } from '@/lib/services/serverClock';
 import {
   DEFAULT_ARRIVAL_LIMITS,
   resolveArrivalLimitForLevel,
@@ -429,7 +429,7 @@ export const TutorScanner = () => {
     const limits = await arrivalService.fetchArrivalLimits({ force: true });
     arrivalLimitsRef.current = limits;
     setArrivalLimits(limits);
-    const { date, time } = getLimaNow();
+    const { date, time } = await fetchServerLimaClock();
     const limit = resolveArrivalLimitForLevel(limits, studentLevel);
     const status = resolveArrivalStatusForStudent(time, limits, studentLevel);
     return { date, time, status, limit };
@@ -549,7 +549,7 @@ export const TutorScanner = () => {
       const currentUser = authService.getCurrentUser();
       void arrivalService
         .createArrivalRecord(studentToShow.id, currentUser?.id, arrivalOpts)
-        .then(({ record, error: arrivalError, alreadyRegistered }) => {
+        .then(async ({ record, error: arrivalError, alreadyRegistered }) => {
           if (!isMountedRef.current) return;
 
           inFlightStudentIdsRef.current.delete(studentToShow.id);
@@ -620,14 +620,20 @@ export const TutorScanner = () => {
           }
 
           if (whatsappService.isEnabled()) {
-            void whatsappService.notifyParentArrival(studentToShow, record).then((wa) => {
-              if (!isMountedRef.current) return;
-              if (!wa.ok && wa.error) {
-                toast.warning(`WhatsApp: ${wa.error}`, { duration: 4500 });
-              } else if (wa.skipped) {
-                toast.info('WhatsApp: aviso ya enviado hace poco (sin reenvío)', { duration: 2200 });
-              }
-            });
+            const channel = whatsappService.isAppNotificationsEnabled() ? 'App' : 'WhatsApp';
+            const wa = await whatsappService.notifyParentArrival(studentToShow, record);
+            if (!isMountedRef.current) return;
+            if (!wa.ok && wa.error) {
+              toast.warning(`${channel}: ${wa.error}`, { duration: 4500 });
+            } else if (wa.sinDestinatario) {
+              toast.info(`${channel}: sin cuenta de apoderado (no se creó mensaje)`, {
+                duration: 3500,
+              });
+            } else if (wa.skipped) {
+              toast.info(`${channel}: aviso ya enviado hace poco (sin reenvío)`, {
+                duration: 2200,
+              });
+            }
           }
         })
         .catch((err: unknown) => {
@@ -690,10 +696,17 @@ export const TutorScanner = () => {
         isLatestProfile || foundStudent.id !== displayedStudentIdRef.current;
 
       if (isTallerMode) {
-        const result = await handleTallerScan(foundStudent, user?.id);
+        let result: Awaited<ReturnType<typeof handleTallerScan>>;
+        try {
+          result = await handleTallerScan(foundStudent, user?.id);
+        } catch (error: unknown) {
+          toast.error(error instanceof Error ? error.message : 'No se pudo leer la hora del servidor');
+          releaseScanFocus();
+          return;
+        }
         if (!isMountedRef.current) return;
 
-        if (!result.ok) {
+        if (result.ok === false) {
           toast.error(result.error, { duration: 3200 });
           releaseScanFocus();
           return;
@@ -714,12 +727,24 @@ export const TutorScanner = () => {
 
       // Modo clase — salida (misma regla que talleres: requiere llegada previa)
       if (clasePhase === 'salida') {
+        let clockDate: string;
+        try {
+          clockDate = (await fetchServerLimaClock()).date;
+        } catch (error: unknown) {
+          toast.error(error instanceof Error ? error.message : 'No se pudo leer la hora del servidor');
+          releaseScanFocus();
+          return;
+        }
+
         let todayRecord = todayArrivalsRef.current.get(foundStudent.id) ?? null;
+        if (todayRecord && todayRecord.date.slice(0, 10) !== clockDate) {
+          todayArrivalsRef.current.delete(foundStudent.id);
+          todayRecord = null;
+        }
         if (!todayRecord) {
-          const today = getLimaTodayDate();
           const { record, error } = await arrivalService.getTodayArrivalForStudent(
             foundStudent.id,
-            today,
+            clockDate,
           );
           if (!isMountedRef.current) return;
           if (error) {
@@ -800,31 +825,49 @@ export const TutorScanner = () => {
         }
 
         if (whatsappService.isEnabled()) {
-          void whatsappService.notifyParentDeparture(foundStudent, updated).then((wa) => {
-            if (!isMountedRef.current) return;
-            if (!wa.ok && wa.error) {
-              toast.warning(`WhatsApp: ${wa.error}`, { duration: 4500 });
-            } else if (wa.skipped) {
-              toast.info('WhatsApp: aviso ya enviado hace poco (sin reenvío)', {
-                duration: 2200,
-              });
-            }
-          });
+          const channel = whatsappService.isAppNotificationsEnabled() ? 'App' : 'WhatsApp';
+          const wa = await whatsappService.notifyParentDeparture(foundStudent, updated);
+          if (!isMountedRef.current) return;
+          if (!wa.ok && wa.error) {
+            toast.warning(`${channel}: ${wa.error}`, { duration: 4500 });
+          } else if (wa.sinDestinatario) {
+            toast.info(`${channel}: sin cuenta de apoderado (no se creó mensaje)`, {
+              duration: 3500,
+            });
+          } else if (wa.skipped) {
+            toast.info(`${channel}: aviso ya enviado hace poco (sin reenvío)`, {
+              duration: 2200,
+            });
+          }
         }
 
         releaseScanFocus();
         return;
       }
 
+      let serverDate: string;
+      try {
+        serverDate = (await fetchServerLimaClock()).date;
+      } catch (error: unknown) {
+        toast.error(error instanceof Error ? error.message : 'No se pudo leer la hora del servidor');
+        releaseScanFocus();
+        return;
+      }
+
       const cachedToday = todayArrivalsRef.current.get(foundStudent.id);
-      if (cachedToday) {
+      if (cachedToday && cachedToday.date.slice(0, 10) !== serverDate) {
+        todayArrivalsRef.current.delete(foundStudent.id);
+      }
+      const cachedSameDay =
+        cachedToday && cachedToday.date.slice(0, 10) === serverDate ? cachedToday : undefined;
+      if (cachedSameDay) {
         if (shouldUpdateProfile) {
-          applyScanSuccess(foundStudent, cachedToday, { countInSession: false, duplicate: true });
+          applyScanSuccess(foundStudent, cachedSameDay, { countInSession: false, duplicate: true });
         }
         toast.info(
-          cachedToday.departureTime
+          cachedSameDay.departureTime
             ? `${foundStudent.fullName} ya tiene ingreso y salida hoy.`
-            : `${foundStudent.fullName} ya fue registrado hoy a las ${cachedToday.arrivalTime ?? '—'}. Para salida, elija Salida.`,
+            : `${foundStudent.fullName} ya fue registrado hoy a las ${cachedSameDay.arrivalTime ?? '—'}. Para salida, elija Salida.`,
           { duration: 2800 }
         );
         releaseScanFocus();
@@ -839,7 +882,15 @@ export const TutorScanner = () => {
         return;
       }
 
-      const { date, time, status } = await resolveArrivalSnapshot(foundStudent.level);
+      let snapshot: Awaited<ReturnType<typeof resolveArrivalSnapshot>>;
+      try {
+        snapshot = await resolveArrivalSnapshot(foundStudent.level);
+      } catch (error: unknown) {
+        toast.error(error instanceof Error ? error.message : 'No se pudo leer la hora del servidor');
+        releaseScanFocus();
+        return;
+      }
+      const { date, time, status } = snapshot;
       if (!isMountedRef.current) return;
 
       const arrivalOpts: CreateArrivalOptions = {
@@ -1151,26 +1202,28 @@ export const TutorScanner = () => {
     }
 
     if (whatsappService.isEnabled() && faultForWa) {
-      void whatsappService
-        .notifyParentIncident(
-          studentForWa,
-          {
-            ...incident,
-            student: studentForWa,
-            faultType: faultForWa,
-          },
-          faultForWa,
-        )
-        .then((wa) => {
-          if (!isMountedRef.current) return;
-          if (!wa.ok && wa.error) {
-            toast.warning(`WhatsApp: ${wa.error}`, { duration: 4500 });
-          } else if (wa.skipped) {
-            toast.info('WhatsApp: aviso de incidencia ya enviado hace poco', {
-              duration: 2200,
-            });
-          }
+      const channel = whatsappService.isAppNotificationsEnabled() ? 'App' : 'WhatsApp';
+      const wa = await whatsappService.notifyParentIncident(
+        studentForWa,
+        {
+          ...incident,
+          student: studentForWa,
+          faultType: faultForWa,
+        },
+        faultForWa,
+      );
+      if (!isMountedRef.current) return false;
+      if (!wa.ok && wa.error) {
+        toast.warning(`${channel}: ${wa.error}`, { duration: 4500 });
+      } else if (wa.sinDestinatario) {
+        toast.info(`${channel}: sin cuenta de apoderado (no se creó mensaje)`, {
+          duration: 3500,
         });
+      } else if (wa.skipped) {
+        toast.info(`${channel}: aviso de incidencia ya enviado hace poco`, {
+          duration: 2200,
+        });
+      }
     }
 
     toast.success('Incidencia registrada');
@@ -1327,11 +1380,11 @@ export const TutorScanner = () => {
         <div className="tutor-header__inner">
           <div className="tutor-header__brand">
             <div className="tutor-header__shield p-1" aria-hidden>
-              <GuardyMark size="sm" />
+              <GuardyMark size="md" />
             </div>
             <div className="min-w-0">
               <p className="tutor-header__title">Control de asistencia</p>
-              <p className="tutor-header__subtitle hidden sm:block">SIE — Sistema de Incidencias Escolares</p>
+              <p className="tutor-header__subtitle hidden sm:block">SIE Asis Academy</p>
             </div>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">

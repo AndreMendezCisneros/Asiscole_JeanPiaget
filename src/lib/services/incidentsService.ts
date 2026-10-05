@@ -217,6 +217,7 @@ export const incidentsService = {
   ): Promise<{ incident: Incident | null; error: string | null }> {
     try {
       const includeTallerCol = shouldIncludeTallerEmbed(isTalleresEnabled());
+      // fecha_hora_registro la pone la base (default now()). El navegador no envía la hora.
       const insertQuery = supabase.from('incidencias').insert({
         id_estudiante: incident.studentId,
         id_falta: incident.faultTypeId,
