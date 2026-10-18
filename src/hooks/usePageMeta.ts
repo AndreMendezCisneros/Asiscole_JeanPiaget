@@ -6,6 +6,7 @@ import {
   WHATSAPP_PREVIEW_IMAGE,
   PUBLIC_ROUTE_META,
   ARRIVAL_ROUTE_META,
+  SCHOOL_NAME,
 } from '@/config/siteSeo';
 
 function upsertMeta(name: string, content: string, attr: 'name' | 'property' = 'name') {
@@ -64,14 +65,14 @@ export function usePageMeta() {
     upsertMeta('og:title', meta.title, 'property');
     upsertMeta('og:description', meta.description, 'property');
     upsertMeta('og:url', pageUrl, 'property');
-    upsertMeta('og:site_name', 'Asiscole', 'property');
+    upsertMeta('og:site_name', 'Mariscal Cáceres', 'property');
     upsertMeta('og:type', 'website', 'property');
     upsertMeta('og:image', WHATSAPP_PREVIEW_IMAGE, 'property');
     upsertMeta('og:image:secure_url', WHATSAPP_PREVIEW_IMAGE, 'property');
     upsertMeta('og:image:type', 'image/jpeg', 'property');
     upsertMeta('og:image:width', '1200', 'property');
     upsertMeta('og:image:height', '630', 'property');
-    upsertMeta('og:image:alt', 'SIE Asiscole — Sistema de Incidencias Escolares, Colegio Jean Piaget', 'property');
+    upsertMeta('og:image:alt', `SIE — Sistema de Incidencias Escolares, ${SCHOOL_NAME}`, 'property');
     upsertMeta('twitter:card', 'summary_large_image');
     upsertMeta('twitter:title', meta.title);
     upsertMeta('twitter:description', meta.description);

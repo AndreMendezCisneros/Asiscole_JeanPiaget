@@ -8,9 +8,9 @@
   :root {
     /* Superficies (Apple Fog + Paper) */
     /* Ajuste ejecutivo: blancos más limpios, menos gris */
-    --background: 210 40% 98%;
-    --background-alt: 210 24% 96%;
-    --background-warm: 210 30% 97%;
+    --background: 40 33% 97%;
+    --background-alt: 40 22% 95%;
+    --background-warm: 40 28% 96%;
     --foreground: 222 47% 11%;
 
     --card: 0 0% 100%;
@@ -20,19 +20,19 @@
     --popover: 0 0% 100%;
     --popover-foreground: 240 4% 12%;
 
-    /* Acción principal — navy Colegio Jean Piaget (#1A305E) */
-    --primary: 221 56% 24%;
+    /* Acción principal — granate Mariscal Cáceres (#B8292D) */
+    --primary: 358 64% 44%;
     --primary-foreground: 0 0% 100%;
 
-    /* Secundario — navy más claro */
-    --secondary: 221 42% 36%;
+    /* Secundario — granate más profundo */
+    --secondary: 356 48% 32%;
     --secondary-foreground: 0 0% 100%;
 
     --muted: 210 26% 96%;
     --muted-foreground: 215 16% 47%;
 
-    /* Acento — rojo Jean Piaget (#B11E2A) */
-    --accent: 355 71% 41%;
+    /* Acento — dorado del carnet */
+    --accent: 40 46% 48%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 72% 48%;
@@ -40,51 +40,51 @@
 
     --border: 214 20% 90%;
     --input: 0 0% 100%;
-    --ring: 221 56% 28%;
+    --ring: 358 64% 40%;
 
     /* Semáforo */
     --success: 152 55% 38%;
     --success-foreground: 0 0% 100%;
     --warning: 32 90% 48%;
     --warning-foreground: 0 0% 100%;
-    --info: 221 48% 36%;
+    --info: 358 40% 38%;
     --info-foreground: 0 0% 100%;
     --danger: 0 72% 48%;
     --danger-foreground: 0 0% 100%;
 
     --radius: 0.75rem;
 
-    /* Sidebar — navy Jean Piaget */
-    --sidebar-background: 221 56% 18%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 221 45% 72%;
-    --sidebar-primary-foreground: 221 56% 16%;
-    --sidebar-accent: 221 40% 26%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 221 35% 28%;
-    --sidebar-ring: 221 45% 72%;
+    /* Sidebar — granate Mariscal Cáceres */
+    --sidebar-background: 356 46% 18%;
+    --sidebar-foreground: 40 30% 96%;
+    --sidebar-primary: 40 46% 62%;
+    --sidebar-primary-foreground: 356 48% 16%;
+    --sidebar-accent: 356 36% 26%;
+    --sidebar-accent-foreground: 40 30% 96%;
+    --sidebar-border: 356 30% 28%;
+    --sidebar-ring: 40 46% 62%;
 
     /* Tokens de marca (login) */
-    --brand-accent: 221 56% 24%;
-    --brand-accent-dark: 221 60% 18%;
-    --brand-accent-light: 221 40% 94%;
-    --brand-link: 221 48% 42%;
+    --brand-accent: 358 64% 44%;
+    --brand-accent-dark: 356 55% 28%;
+    --brand-accent-light: 40 40% 94%;
+    --brand-link: 356 55% 38%;
     --canvas-ice: 220 14% 92%;
     --ink: 0 0% 0%;
     --fog: 240 5% 96%;
     --silver-mist: 240 7% 91%;
 
-    /* Login — navy / rojo Jean Piaget */
-    --login-deep: 221 40% 5%;
-    --login-surface: 221 28% 9%;
-    --login-elevated: 221 22% 13%;
-    --login-border: 221 16% 26%;
-    --login-foreground: 210 30% 98%;
-    --login-muted: 216 20% 83%;
-    --login-caption: 216 16% 75%;
-    --login-placeholder: 216 14% 65%;
-    --login-accent: 355 71% 48%;
-    --login-glow: 221 55% 58%;
+    /* Login — granate / dorado Mariscal Cáceres */
+    --login-deep: 356 42% 7%;
+    --login-surface: 356 30% 11%;
+    --login-elevated: 356 24% 15%;
+    --login-border: 356 18% 28%;
+    --login-foreground: 40 30% 96%;
+    --login-muted: 30 18% 78%;
+    --login-caption: 30 14% 70%;
+    --login-placeholder: 30 12% 60%;
+    --login-accent: 40 50% 58%;
+    --login-glow: 358 55% 48%;
   }
 
   .dark {
@@ -94,19 +94,19 @@
     --card-foreground: 0 0% 98%;
     --popover: 0 0% 14%;
     --popover-foreground: 0 0% 98%;
-    --primary: 221 45% 52%;
+    --primary: 358 55% 58%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 221 38% 46%;
+    --secondary: 356 42% 46%;
     --secondary-foreground: 0 0% 100%;
     --muted: 0 0% 20%;
     --muted-foreground: 0 0% 65%;
-    --accent: 355 65% 52%;
+    --accent: 40 50% 58%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 70% 52%;
     --destructive-foreground: 0 0% 100%;
     --border: 0 0% 22%;
     --input: 0 0% 18%;
-    --ring: 221 45% 52%;
+    --ring: 358 55% 58%;
     --success: 152 50% 45%;
     --warning: 32 85% 52%;
     --info: 217 45% 52%;
@@ -694,7 +694,7 @@
   .login-hero-visual,
   .login-carnet-scene {
     @apply relative w-full mx-auto;
-    width: min(100%, 380px);
+    width: min(100%, 456px);
     filter: drop-shadow(0 24px 48px hsl(var(--login-deep) / 0.55));
   }
 
@@ -715,9 +715,9 @@
 
   .login-carnet-scene__glow-ring {
     position: absolute;
-    inset: 14% 10%;
-    border-radius: 1.25rem;
-    border: 1px solid hsl(var(--login-glow) / 0.18);
+    inset: -6px;
+    border-radius: 1.5rem;
+    border: 1px solid hsl(var(--login-glow) / 0.22);
     box-shadow: 0 0 32px hsl(var(--login-glow) / 0.08);
     pointer-events: none;
     will-change: transform, opacity;
@@ -731,21 +731,23 @@
 
   .login-carnet-scanner {
     @apply relative mx-auto flex flex-col items-center;
-    width: min(100%, 272px);
-    padding: 0.75rem 0.5rem 0.25rem;
+    width: min(100%, 336px);
+    padding: 0.7rem 0.45rem;
     perspective: 1100px;
   }
 
   .login-carnet-scanner__frame {
-    @apply pointer-events-none absolute inset-x-1 top-1 bottom-14;
+    @apply pointer-events-none absolute;
+    inset: -7px;
+    z-index: 3;
   }
 
   .login-carnet-scanner__corner {
     @apply absolute block;
-    width: 1.125rem;
-    height: 1.125rem;
+    width: 1.7rem;
+    height: 1.7rem;
     border-color: hsl(var(--login-glow));
-    opacity: 0.85;
+    opacity: 0.9;
   }
 
   .login-carnet-scanner__corner--tl {
@@ -753,7 +755,7 @@
     left: 0;
     border-top: 2px solid;
     border-left: 2px solid;
-    border-top-left-radius: 0.35rem;
+    border-top-left-radius: 1.55rem;
   }
 
   .login-carnet-scanner__corner--tr {
@@ -761,7 +763,7 @@
     right: 0;
     border-top: 2px solid;
     border-right: 2px solid;
-    border-top-right-radius: 0.35rem;
+    border-top-right-radius: 1.55rem;
   }
 
   .login-carnet-scanner__corner--bl {
@@ -769,7 +771,7 @@
     left: 0;
     border-bottom: 2px solid;
     border-left: 2px solid;
-    border-bottom-left-radius: 0.35rem;
+    border-bottom-left-radius: 1.55rem;
   }
 
   .login-carnet-scanner__corner--br {
@@ -777,15 +779,15 @@
     right: 0;
     border-bottom: 2px solid;
     border-right: 2px solid;
-    border-bottom-right-radius: 0.35rem;
+    border-bottom-right-radius: 1.55rem;
   }
 
   .login-carnet-scene__pulse {
     position: absolute;
-    inset: 6% 8%;
-    border-radius: 1.5rem;
-    border: 1px solid hsl(var(--login-glow) / 0.15);
-    box-shadow: 0 0 60px hsl(var(--login-accent) / 0.12);
+    inset: -11px;
+    border-radius: 1.7rem;
+    border: 1px solid hsl(var(--login-glow) / 0.12);
+    box-shadow: 0 0 40px hsl(var(--login-accent) / 0.1);
     pointer-events: none;
     will-change: transform, opacity;
   }
@@ -1012,7 +1014,7 @@
   .login-carnet-card {
     @apply relative mx-auto rounded-[1.35rem] border;
     width: 100%;
-    max-width: 272px;
+    max-width: 336px;
     border-color: hsl(var(--login-glow) / 0.45);
     background: transparent;
     box-shadow:
@@ -1028,21 +1030,22 @@
     transform-origin: center center;
   }
 
-  /* Carnet real (imagen Jean Piaget) en login */
+  /* Carnet institucional en login */
   .login-carnet-replica--photo {
-    max-width: min(280px, 72vw);
+    max-width: min(336px, 78vw);
     min-height: 0;
     border: none;
     background: transparent;
     box-shadow:
       0 0 48px hsl(var(--login-glow) / 0.18),
       0 28px 56px hsl(var(--login-deep) / 0.55);
-    overflow: hidden;
+    overflow: visible;
     border-radius: 1.15rem;
   }
 
   .login-carnet-replica__photo-card {
-    @apply relative w-full;
+    @apply relative w-full overflow-hidden;
+    border-radius: 1.15rem;
   }
 
   .login-carnet-replica__photo-card-img {

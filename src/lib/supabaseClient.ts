@@ -1,18 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 import { sessionService } from './services/sessionService';
 
-const supabaseUrl =
-  import.meta.env.VITE_SUPABASE_URL || 'https://kelylvvoebneugnajiwv.supabase.co';
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() || '';
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() || '';
+const supabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
-const supabaseAnonKey =
-  import.meta.env.VITE_SUPABASE_ANON_KEY ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtlbHlsdnZvZWJuZXVnbmFqaXd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxMzU2NjgsImV4cCI6MjA5OTcxMTY2OH0.eoTMUz-DZcfy0s6odz2zLa3K2V_ayFZwB1HpXpKEyUc';
-
-if (!import.meta.env.VITE_SUPABASE_URL && import.meta.env.PROD) {
-  console.warn('[SIE] VITE_SUPABASE_URL no definida; usando valor por defecto del proyecto.');
-}
-
-if (import.meta.env.DEV) {
+if (!supabaseConfigured) {
+  console.warn(
+    '[SIE] Falta VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY. La base de datos no está configurada.',
+  );
+} else if (import.meta.env.DEV) {
   const host = supabaseUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
   console.info(`[SIE] Supabase: ${host}`);
 }
@@ -61,7 +58,10 @@ function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise
  * Todas las peticiones tienen un timeout de REQUEST_TIMEOUT_MS para evitar
  * que se queden colgadas indefinidamente (cold-start de Supabase/Postgres).
  */
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient(
+  supabaseConfigured ? supabaseUrl : 'http://127.0.0.1:9',
+  supabaseConfigured ? supabaseAnonKey : 'anon-key-not-configured',
+  {
   global: {
     fetch: (input, init) => {
       const apiToken = sessionService.getApiToken();

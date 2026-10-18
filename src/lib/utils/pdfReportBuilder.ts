@@ -7,8 +7,8 @@ import { drawPdfReportLogo, drawPdfWatermark } from '@/lib/utils/reportLogo';
 
 /** Paleta corporativa SIE (RGB) */
 export const PDF_THEME = {
-  primary: [30, 74, 122] as [number, number, number],
-  primaryLight: [219, 228, 240] as [number, number, number],
+  primary: [184, 41, 45] as [number, number, number],
+  primaryLight: [248, 241, 228] as [number, number, number],
   text: [15, 23, 42] as [number, number, number],
   textMuted: [100, 116, 139] as [number, number, number],
   border: [226, 232, 240] as [number, number, number],
@@ -90,7 +90,7 @@ export class PdfReportDocument {
     this.pdf.text('SIE — Sistema de Incidencias Escolares', this.pageWidth - this.margin, 30, {
       align: 'right',
     });
-    this.pdf.text('Powered by Guardy', this.pageWidth - this.margin, 34, { align: 'right' });
+    this.pdf.text('Mariscal Cáceres', this.pageWidth - this.margin, 34, { align: 'right' });
 
     this.y = bandH + 10;
     this.pdf.setTextColor(...PDF_THEME.text);
@@ -296,7 +296,7 @@ export class PdfReportDocument {
     this.pdf.setFont('helvetica', 'normal');
     this.pdf.setFontSize(7.5);
     this.pdf.setTextColor(...PDF_THEME.textMuted);
-    this.pdf.text('SIE — Sistema de Incidencias Escolares · Guardy', this.margin, y);
+    this.pdf.text('SIE — Sistema de Incidencias Escolares', this.margin, y);
     this.pdf.text(`Página ${page} de ${total}`, this.pageWidth - this.margin, y, { align: 'right' });
     this.pdf.text(
       format(new Date(), "dd/MM/yyyy HH:mm", { locale: es }),

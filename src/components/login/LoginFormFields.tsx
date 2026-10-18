@@ -118,12 +118,12 @@ export function LoginFormFields({ form, lite = false }: LoginFormFieldsProps) {
 
       <p className="login-form-card__footer text-center text-[11px] leading-relaxed text-muted-foreground">
         <span className="block mb-2">
-          SIE Asiscole — plataforma de incidencias disciplinarias y control de asistencia del{' '}
+          SIE — sistema de incidencias disciplinarias y control de asistencia de la{' '}
           {SCHOOL_NAME}.
         </span>
         <img
           src={BRAND_LOGIN_LOGO}
-          alt="Asiscole"
+          alt="Mariscal Cáceres"
           className="login-form-card__footer-logo mx-auto"
           width={40}
           height={40}

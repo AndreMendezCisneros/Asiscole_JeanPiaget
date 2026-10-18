@@ -9,6 +9,9 @@ lerna-debug.log*
 
 node_modules
 dist
+
+# Secretos locales. .env.local ya queda fuera por *.local.
+.env
 dist-ssr
 *.local
 .wrangler

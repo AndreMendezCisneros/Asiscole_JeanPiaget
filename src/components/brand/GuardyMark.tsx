@@ -15,11 +15,11 @@ interface GuardyMarkProps {
   className?: string;
   /** Solo el escudo (recomendado en UI compacta) */
   iconOnly?: boolean;
-  /** Muestra “Guardy” al lado — solo en cabeceras amplias */
+  /** Muestra “SIE” al lado — solo en cabeceras amplias */
   showWordmark?: boolean;
 }
 
-/** Marca Asiscole — escudo con A y birrete */
+/** Escudo de Mariscal Cáceres */
 export const GuardyMark = ({
   size = 'md',
   className,
@@ -34,16 +34,18 @@ export const GuardyMark = ({
       className={cn('inline-flex items-center gap-2 shrink-0', className)}
       aria-hidden={iconOnly && !showWordmark}
     >
-      <img
-        src={src}
-        alt=""
-        width={s.img}
-        height={s.img}
-        className={cn(s.box, 'object-contain')}
-        draggable={false}
-      />
+      <span className={cn(s.box, 'inline-flex items-center justify-center rounded-full bg-primary')}>
+        <img
+          src={src}
+          alt=""
+          width={s.img}
+          height={s.img}
+          className="h-[78%] w-[78%] object-contain"
+          draggable={false}
+        />
+      </span>
       {showWordmark && (
-        <span className="text-sm font-semibold tracking-tight text-inherit">Guardy</span>
+        <span className="text-sm font-semibold tracking-tight text-inherit">SIE</span>
       )}
     </span>
   );

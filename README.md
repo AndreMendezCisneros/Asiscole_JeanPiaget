@@ -1,8 +1,8 @@
-# SIE Asiscole — Colegio Jean Piaget
+# SIE — Institución Educativa Emblemática Mariscal Cáceres
 
-Sistema de Incidencias y Asistencia Escolar (SIE) para el **Colegio Jean Piaget**. Frontend React + Vite; backend **Supabase** (Postgres, Storage, RPC) y canal móvil vía `/canal-api` en el VPS.
+Sistema de Incidencias y Asistencia Escolar (SIE) para **Mariscal Cáceres**. Frontend React + Vite; backend **Supabase** (Postgres, Storage, RPC) y canal móvil vía `/canal-api`.
 
-**Producción:** [jeanpiaget.asiscole.com](https://jeanpiaget.asiscole.com/)
+**Dominio previsto:** [mariscalcaceres.asiscole.com](https://mariscalcaceres.asiscole.com/). Esta rama no despliega al servidor.
 
 ## Stack
 
@@ -15,7 +15,7 @@ Sistema de Incidencias y Asistencia Escolar (SIE) para el **Colegio Jean Piaget*
 ## Estructura del repositorio
 
 ```
-Asiscole_JeanPiaget/
+asiscole_mariscalcaceres/
 ├── src/                 # Código de la aplicación (páginas, componentes, servicios)
 ├── public/              # Assets estáticos y favicons
 ├── database/sql/        # Scripts SQL por categoría (crear, actualizar, funciones, …)
@@ -38,29 +38,29 @@ Asiscole_JeanPiaget/
 ### Instalación
 
 ```bash
-git clone https://github.com/AndreMendezCisneros/Asiscole_JeanPiaget.git
-cd Asiscole_JeanPiaget
+git clone https://github.com/AndreMendezCisneros/asiscole_mariscalcaceres.git
+cd asiscole_mariscalcaceres
 npm install
 ```
 
 ### Variables de entorno
 
-Copia `.env.example` a `.env.local` y completa los valores. En Jean Piaget el VPS guarda el build en `/opt/sie-jp/.env.build`.
+Copia `.env.example` a `.env.local` y completa los valores cuando exista el proyecto Supabase del colegio. Hasta entonces la URL y la anon key quedan vacías.
 
 ```env
 VITE_SUPABASE_URL=https://tu-proyecto.supabase.co
 VITE_SUPABASE_ANON_KEY=tu_anon_key
 VITE_APP_URL=http://localhost:8080
-VITE_SCHOOL_NAME=Colegio Jean Piaget
+VITE_SCHOOL_NAME=Institución Educativa Emblemática Mariscal Cáceres
 VITE_TALLERES_ENABLED=true
 VITE_PENSIONES_ENABLED=true
 VITE_MOBILE_INGEST_ENABLED=true
 VITE_MOBILE_INGEST_URL=/canal-api
 VITE_MOBILE_INGEST_KEY=tu_clave_ingesta
-VITE_MOBILE_INGEST_TENANT=jean_piaget
+VITE_MOBILE_INGEST_TENANT=mariscal_caceres
 ```
 
-Para notificaciones al aplicativo en local, Vite proxifica `/canal-api` al VPS (ver `vite.config.ts`).
+Para notificaciones al aplicativo en local, Vite proxifica `/canal-api` hacia `mariscalcaceres.asiscole.com` (ver `vite.config.ts`). Ese dominio aún no está publicado.
 
 ### Arrancar
 
@@ -68,7 +68,7 @@ Para notificaciones al aplicativo en local, Vite proxifica `/canal-api` al VPS (
 npm run dev
 ```
 
-Abre [http://localhost:8080](http://localhost:8080). En consola del navegador verás el host Supabase activo (`[SIE] Supabase: …`).
+Abre [http://localhost:8080](http://localhost:8080). Si faltan las variables de Supabase, la consola avisa que la base no está configurada.
 
 ## Scripts npm útiles
 
@@ -88,11 +88,9 @@ Los scripts SQL están en `database/sql/` (ver `database/README.md`). Las funcio
 
 Documentación de configuración: `docs/configuracion/CONFIGURACION_BD.md`.
 
-## Despliegue (VPS Hetzner)
+## Despliegue
 
-Rama `main` → workflow `.github/workflows/deploy-jeanpiaget.yml` sincroniza a `/opt/sie-jp/app` y publica en `/opt/sie-jp/dist`. Variables en `/opt/sie-jp/.env.build`. Caddy sirve `jeanpiaget.asiscole.com`.
-
-Despliegue alternativo en Cloudflare Workers: ver `AGENTS.md` y `wrangler.toml`.
+Esta rama no se publica. El workflow de Jean Piaget sigue en el repositorio y solo corre en `main`; no se usa desde aquí. El dominio previsto es `mariscalcaceres.asiscole.com`.
 
 ## Documentación
 
@@ -102,4 +100,4 @@ Despliegue alternativo en Cloudflare Workers: ver `AGENTS.md` y `wrangler.toml`.
 
 ## Licencia
 
-Proyecto privado — Colegio Jean Piaget / Asiscole.
+Proyecto privado — Institución Educativa Emblemática Mariscal Cáceres.

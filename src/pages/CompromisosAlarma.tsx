@@ -148,7 +148,8 @@ export const CompromisosAlarma = () => {
 
   const user = authService.getCurrentUser();
   const schoolName =
-    (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() || 'Colegio Jean Piaget';
+    (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() ||
+    'Institución Educativa Emblemática Mariscal Cáceres';
 
   const alerts = useMemo(
     () =>

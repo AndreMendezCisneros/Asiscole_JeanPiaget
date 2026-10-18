@@ -23,7 +23,7 @@ export function useLoginAmbientAnimation(scopeRef: RefObject<HTMLElement | null>
 
       const scanLoop = gsap.timeline({ repeat: -1, repeatDelay: 3.2, delay: SCAN_DELAY });
       addToIf(scanLoop, '.login-carnet-scanner__corner', {
-        opacity: 1, scale: 1.1, duration: 0.5, stagger: 0.05, yoyo: true, repeat: 1, ease: 'sine.inOut',
+        opacity: 1, scale: 1.03, duration: 0.5, stagger: 0.05, yoyo: true, repeat: 1, ease: 'sine.inOut',
       }, 0);
       addToIf(scanLoop, '[data-login-visual-scan-overlay]', { autoAlpha: 0.3, duration: 0.3, ease: 'sine.inOut' }, 0.25);
       addSetIf(scanLoop, '[data-login-visual-card-scanline]', { top: '0%', autoAlpha: 0.9 }, 0.35);
@@ -55,10 +55,10 @@ export function useLoginAmbientAnimation(scopeRef: RefObject<HTMLElement | null>
         scale: 1.22, opacity: 0.9, duration: 3.6, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: IDLE_DELAY,
       });
       toIf('[data-login-visual-glow-ring]', {
-        scale: 1.12, opacity: 0.8, duration: 3.0, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: IDLE_DELAY,
+        scale: 1.015, opacity: 0.8, duration: 3.0, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: IDLE_DELAY,
       });
       toIf('[data-login-visual-pulse-ring]', {
-        scale: 1.24, opacity: 0.55, duration: 3.2, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: IDLE_DELAY,
+        scale: 1.02, opacity: 0.55, duration: 3.2, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: IDLE_DELAY,
       });
 
       /* ── Esquinas con brillo tenue ──────────────────────────── */

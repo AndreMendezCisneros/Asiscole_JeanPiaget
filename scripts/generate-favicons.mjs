@@ -27,7 +27,7 @@ function resolveSourceBuffer() {
   process.exit(1);
 }
 
-const BG = '#1e3a5f';
+const BG = '#C22E2E';
 
 async function renderPng(source, size, outName, padding = 0.18) {
   const inner = Math.round(size * (1 - padding * 2));
@@ -72,11 +72,9 @@ async function renderOgImage(source) {
 
 /** Vista previa de enlaces en WhatsApp — JPEG ligero, siempre la misma imagen. */
 async function renderWhatsappPreview() {
-  const branded = resolve(publicDir, 'og-asiscole.png');
-  const fallback = resolve(publicDir, 'og-image.png');
-  const input = existsSync(branded) ? branded : fallback;
+  const input = resolve(publicDir, 'og-image.png');
   if (!existsSync(input)) {
-    console.warn('⚠ Sin og-asiscole.png; omitiendo whatsapp-preview.jpg');
+    console.warn('⚠ Sin og-image.png; omitiendo whatsapp-preview.jpg');
     return;
   }
 
@@ -94,18 +92,28 @@ async function renderWhatsappPreview() {
   console.log(`✓ whatsapp-preview.jpg (${Math.round(size / 1024)} KB)`);
 }
 
-async function renderReportAssets(source) {
-  await sharp(source)
-    .resize(420, 420, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+async function renderBadge(source, size, outName) {
+  const icon = await sharp(source)
+    .resize(Math.round(size * 0.86), Math.round(size * 0.86), {
+      fit: 'contain',
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
     .png()
-    .toFile(resolve(publicDir, 'guardy-watermark.png'));
-  console.log('✓ guardy-watermark.png (420×420, fondo transparente)');
+    .toBuffer();
+  const disc = Buffer.from(
+    `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="${BG}"/></svg>`,
+  );
+  const offset = Math.round((size - Math.round(size * 0.86)) / 2);
+  await sharp(disc)
+    .composite([{ input: icon, left: offset, top: offset }])
+    .png()
+    .toFile(resolve(publicDir, outName));
+  console.log(`✓ ${outName} (${size}×${size})`);
+}
 
-  await sharp(source)
-    .resize(280, 280, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-    .png()
-    .toFile(resolve(publicDir, 'guardy-report-logo.png'));
-  console.log('✓ guardy-report-logo.png (280×280)');
+async function renderReportAssets(source) {
+  await renderBadge(source, 420, 'logo-watermark.png');
+  await renderBadge(source, 280, 'logo-report.png');
 }
 
 async function renderIco(source) {
@@ -126,6 +134,12 @@ async function renderIco(source) {
 }
 
 async function main() {
+  const logoPng = resolve(publicDir, 'logo-mariscal.png');
+  if (existsSync(logoPng)) {
+    await sharp(logoPng).png().toFile(sourcePath);
+    console.log('✓ brand-icon-source.png desde logo-mariscal.png\n');
+  }
+
   const source = resolveSourceBuffer();
 
   if (!existsSync(sourcePath) && existsSync(fallbackPath)) {

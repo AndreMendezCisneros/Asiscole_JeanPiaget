@@ -10,7 +10,7 @@ const OPENWA_PREFIX = '/sc-proxy';
 const SOCIAL_CRAWLER_RE =
   /facebookexternalhit|facebot|whatsapp|twitterbot|linkedinbot|telegrambot|slackbot|discordbot|pinterest/i;
 
-const WHATSAPP_PREVIEW_IMAGE = 'https://asiscole.com/whatsapp-preview.jpg?v=1';
+const WHATSAPP_PREVIEW_IMAGE = 'https://mariscalcaceres.asiscole.com/whatsapp-preview.jpg?v=1';
 
 function resolveUpstreamBase(raw?: string): string {
   const base = (raw || 'http://178.104.115.2/api').trim().replace(/\/$/, '');
@@ -91,11 +91,11 @@ function buildSocialPreviewHtml(pathname: string, origin: string): string {
   const pageUrl = `${origin}${pathname}`;
   const isArrival = pathname.startsWith('/llegada/');
   const title = isArrival
-    ? 'Consulta de asistencia | Colegio Jean Piaget — Asiscole'
-    : 'Portal de padres | Consulta de asistencia — Colegio Jean Piaget';
+    ? 'Consulta de asistencia | Mariscal Cáceres — SIE'
+    : 'Portal de padres | Consulta de asistencia — Mariscal Cáceres';
   const description = isArrival
-    ? 'Registro de llegada del estudiante. Consulte la asistencia diaria en el Sistema de Incidencias Escolares del Colegio Jean Piaget.'
-    : 'Consulte la asistencia diaria de su hijo o hija en el Colegio Jean Piaget ingresando el DNI del estudiante.';
+    ? 'Registro de llegada del estudiante. Consulte la asistencia diaria en el Sistema de Incidencias Escolares de Mariscal Cáceres.'
+    : 'Consulte la asistencia diaria de su hijo o hija en Mariscal Cáceres ingresando el número del carnet institucional.';
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -106,7 +106,7 @@ function buildSocialPreviewHtml(pathname: string, origin: string): string {
   <meta property="og:title" content="${escapeHtml(title)}" />
   <meta property="og:description" content="${escapeHtml(description)}" />
   <meta property="og:url" content="${escapeHtml(pageUrl)}" />
-  <meta property="og:site_name" content="Asiscole" />
+  <meta property="og:site_name" content="Mariscal Cáceres" />
   <meta property="og:type" content="website" />
   <meta property="og:locale" content="es_PE" />
   <meta property="og:image" content="${WHATSAPP_PREVIEW_IMAGE}" />
@@ -114,7 +114,7 @@ function buildSocialPreviewHtml(pathname: string, origin: string): string {
   <meta property="og:image:type" content="image/jpeg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="SIE Asiscole — Sistema de Incidencias Escolares, Colegio Jean Piaget" />
+  <meta property="og:image:alt" content="SIE — Sistema de Incidencias Escolares, Mariscal Cáceres" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:image" content="${WHATSAPP_PREVIEW_IMAGE}" />
   <link rel="canonical" href="${escapeHtml(pageUrl)}" />

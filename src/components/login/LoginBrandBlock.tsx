@@ -4,7 +4,7 @@ interface LoginBrandBlockProps {
   compact?: boolean;
 }
 
-/** Marca Asiscole en login. */
+/** Escudo del colegio en el login. */
 export function LoginBrandBlock({ compact = false }: LoginBrandBlockProps) {
   const rootClass = compact ? 'login-brand login-brand--compact' : 'login-brand';
 
@@ -15,7 +15,7 @@ export function LoginBrandBlock({ compact = false }: LoginBrandBlockProps) {
         <div className="login-brand__logo-clip" data-login-brand-mark>
           <img
             src={BRAND_LOGIN_LOGO}
-            alt="Asiscole"
+            alt="Mariscal Cáceres"
             className="login-brand__logo"
             width={132}
             height={132}

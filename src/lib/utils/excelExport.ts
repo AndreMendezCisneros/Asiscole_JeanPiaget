@@ -7,13 +7,13 @@ import { getRoundedReportLogoBuffer, getWatermarkLogoBuffer } from '@/lib/utils/
 
 /** Colores institucionales SIE (ARGB) */
 export const EXCEL_COLORS = {
-  headerBg: 'FF1E4A7A',
+  headerBg: 'FFB8292D',
   headerFg: 'FFFFFFFF',
   title: 'FF0F172A',
   subtitle: 'FF64748B',
   altRow: 'FFF8FAFC',
   border: 'FFDCE3ED',
-  summaryBg: 'FFEFF6FF',
+  summaryBg: 'FFF8F1E4',
 } as const;
 
 function thinBorder(): Partial<ExcelJS.Borders> {
@@ -32,7 +32,7 @@ export function yieldToMain(): Promise<void> {
   });
 }
 
-/** Logo Guardy con esquinas redondeadas para hojas de cálculo */
+/** Escudo del colegio con esquinas redondeadas para hojas de cálculo */
 export async function loadInstitutionLogo(): Promise<{ buffer: ArrayBuffer; extension: 'png' } | null> {
   return getRoundedReportLogoBuffer({ maxWidth: 200, maxHeight: 72, radiusPx: 14 });
 }
@@ -77,7 +77,7 @@ export async function addLogo(
 }
 
 /**
- * Marca de agua Guardy al centro de la hoja (escuela usa el sistema).
+ * Marca de agua del colegio al centro de la hoja.
  * Se coloca detrás visualmente gracias a la opacidad baja del PNG.
  */
 export async function addExcelWatermark(
@@ -103,7 +103,7 @@ export async function addExcelWatermark(
 
   const footRow = sheet.lastRow?.number ? sheet.lastRow.number + 2 : centerRow + 22;
   const foot = sheet.getRow(footRow);
-  foot.getCell(1).value = 'Documento generado con SIE — Sistema Guardy';
+  foot.getCell(1).value = 'Documento generado con SIE — Sistema de Incidencias Escolares';
   foot.getCell(1).font = {
     size: 9,
     italic: true,
@@ -113,7 +113,7 @@ export async function addExcelWatermark(
   foot.getCell(1).alignment = { horizontal: 'center' };
 }
 
-/** Cabecera con logo Guardy + título del reporte */
+/** Cabecera con escudo del colegio y título del reporte */
 export async function addBrandedExcelHeader(
   workbook: ExcelJS.Workbook,
   sheet: ExcelJS.Worksheet,

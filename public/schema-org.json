@@ -3,33 +3,33 @@
   "@graph": [
     {
       "@type": "WebApplication",
-      "name": "SIE Asiscole",
+      "name": "SIE Mariscal Cáceres",
       "alternateName": "Sistema de Incidencias Escolares",
-      "url": "https://asiscole.com/",
+      "url": "https://mariscalcaceres.asiscole.com/",
       "applicationCategory": "EducationalApplication",
       "operatingSystem": "Web",
       "inLanguage": "es-PE",
-      "description": "Plataforma de incidencias, asistencia escolar y reportes para el Colegio Jean Piaget.",
+      "description": "Plataforma de incidencias, asistencia escolar y reportes para Mariscal Cáceres.",
       "provider": {
         "@type": "EducationalOrganization",
-        "name": "Colegio Jean Piaget",
-        "url": "https://asiscole.com/"
+        "name": "Institución Educativa Emblemática Mariscal Cáceres",
+        "url": "https://mariscalcaceres.asiscole.com/"
       }
     },
     {
       "@type": "EducationalOrganization",
-      "@id": "https://asiscole.com/#organization",
-      "name": "Colegio Jean Piaget",
-      "url": "https://asiscole.com/",
-      "sameAs": ["https://asiscole.com/"]
+      "@id": "https://mariscalcaceres.asiscole.com/#organization",
+      "name": "Institución Educativa Emblemática Mariscal Cáceres",
+      "url": "https://mariscalcaceres.asiscole.com/",
+      "sameAs": ["https://mariscalcaceres.asiscole.com/"]
     },
     {
       "@type": "WebSite",
-      "@id": "https://asiscole.com/#website",
-      "url": "https://asiscole.com/",
-      "name": "SIE Asiscole",
+      "@id": "https://mariscalcaceres.asiscole.com/#website",
+      "url": "https://mariscalcaceres.asiscole.com/",
+      "name": "SIE Mariscal Cáceres",
       "description": "Sistema de incidencias y asistencia escolar",
-      "publisher": { "@id": "https://asiscole.com/#organization" },
+      "publisher": { "@id": "https://mariscalcaceres.asiscole.com/#organization" },
       "inLanguage": "es-PE"
     }
   ]

@@ -24,7 +24,7 @@ const MOBILE_INGEST_URL = (
 ).replace(/\/$/, '');
 const MOBILE_INGEST_KEY = import.meta.env.VITE_MOBILE_INGEST_KEY || '';
 const MOBILE_INGEST_TENANT =
-  (import.meta.env.VITE_MOBILE_INGEST_TENANT as string | undefined)?.trim() || 'jean_piaget';
+  (import.meta.env.VITE_MOBILE_INGEST_TENANT as string | undefined)?.trim() || 'mariscal_caceres';
 
 /**
  * URL final del POST. Acepta:
@@ -76,9 +76,10 @@ const WPPCONNECT_NOTIFY_URL = (
 ).replace(/\/$/, '');
 const WPPCONNECT_NOTIFY_KEY = import.meta.env.VITE_WPPCONNECT_NOTIFY_KEY || '';
 
-/** Nombre del colegio en textos WhatsApp (JP: Colegio Jean Piaget). */
+/** Nombre del colegio en textos WhatsApp. */
 const SCHOOL_NAME =
-  (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() || 'Colegio Jean Piaget';
+  (import.meta.env.VITE_SCHOOL_NAME as string | undefined)?.trim() ||
+  'Institución Educativa Emblemática Mariscal Cáceres';
 
 const GREETING_VARIANTS = [
   'Hola,',

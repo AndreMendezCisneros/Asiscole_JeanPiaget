@@ -1,20 +1,20 @@
 /**
  * Colores de marca SIE — reflejan tokens en src/index.css (:root).
  * Fuente canónica: variables CSS (--primary, --success, etc.).
- * Paleta Colegio Jean Piaget: navy + rojo.
+ * Paleta Mariscal Cáceres: granate, crema y dorado.
  */
 export const COLORS = {
-  primary: 'hsl(221, 56%, 24%)',
-  secondary: 'hsl(221, 42%, 36%)',
-  accent: 'hsl(355, 71%, 41%)',
+  primary: 'hsl(358, 64%, 44%)',
+  secondary: 'hsl(356, 48%, 32%)',
+  accent: 'hsl(40, 46%, 48%)',
 
-  primaryLight: 'hsl(221, 40%, 94%)',
-  primaryDark: 'hsl(221, 60%, 18%)',
-  secondaryLight: 'hsl(221, 38%, 48%)',
-  secondaryDark: 'hsl(221, 50%, 22%)',
+  primaryLight: 'hsl(40, 40%, 94%)',
+  primaryDark: 'hsl(356, 55%, 28%)',
+  secondaryLight: 'hsl(356, 42%, 42%)',
+  secondaryDark: 'hsl(356, 50%, 22%)',
 
-  accentLight: 'hsl(355, 55%, 58%)',
-  accentDark: 'hsl(355, 72%, 32%)',
+  accentLight: 'hsl(40, 50%, 64%)',
+  accentDark: 'hsl(40, 48%, 36%)',
 
   white: 'hsl(0, 0%, 100%)',
   offWhite: 'hsl(240, 5%, 98%)',
@@ -31,7 +31,7 @@ export const COLORS = {
   success: 'hsl(152, 48%, 38%)',
   warning: 'hsl(32, 85%, 46%)',
   error: 'hsl(0, 65%, 48%)',
-  info: 'hsl(221, 48%, 42%)',
+  info: 'hsl(358, 40%, 38%)',
 
   background: 'hsl(240, 5%, 96%)',
   backgroundAlt: 'hsl(220, 14%, 92%)',
@@ -54,16 +54,16 @@ export const COLORS = {
   shadowMd: 'none',
   shadowLg: 'none',
 
-  gradientPrimary: 'linear-gradient(135deg, hsl(221, 56%, 24%) 0%, hsl(221, 60%, 18%) 100%)',
-  gradientSecondary: 'linear-gradient(135deg, hsl(221, 42%, 36%) 0%, hsl(221, 38%, 48%) 100%)',
-  gradientAccent: 'linear-gradient(135deg, hsl(355, 71%, 41%) 0%, hsl(355, 55%, 58%) 100%)',
+  gradientPrimary: 'linear-gradient(135deg, hsl(358, 64%, 44%) 0%, hsl(356, 55%, 28%) 100%)',
+  gradientSecondary: 'linear-gradient(135deg, hsl(356, 48%, 32%) 0%, hsl(356, 42%, 42%) 100%)',
+  gradientAccent: 'linear-gradient(135deg, hsl(40, 46%, 48%) 0%, hsl(40, 50%, 64%) 100%)',
   gradientWarm: 'linear-gradient(135deg, hsl(240, 5%, 96%) 0%, hsl(220, 14%, 92%) 100%)',
   gradientHero: 'linear-gradient(135deg, hsl(0, 0%, 0%) 0%, hsl(0, 0%, 18%) 100%)',
 
   overlay: 'rgba(0, 0, 0, 0.5)',
-  primary10: 'hsla(221, 56%, 24%, 0.1)',
-  secondary10: 'hsla(221, 42%, 36%, 0.1)',
-  accent10: 'hsla(355, 71%, 41%, 0.08)',
+  primary10: 'hsla(358, 64%, 44%, 0.1)',
+  secondary10: 'hsla(356, 48%, 32%, 0.1)',
+  accent10: 'hsla(40, 46%, 48%, 0.12)',
 } as const;
 
 export const THEME = {

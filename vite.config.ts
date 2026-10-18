@@ -44,9 +44,9 @@ export default defineConfig(({ mode }) => {
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/sc-proxy/, "/api"),
       },
-      // App móvil (citaciones, pensiones, etc.) — mismo backend que jeanpiaget.asiscole.com
+      // Canal móvil del colegio. No responde hasta que exista mariscalcaceres.asiscole.com.
       "/canal-api": {
-        target: "https://jeanpiaget.asiscole.com",
+        target: "https://mariscalcaceres.asiscole.com",
         changeOrigin: true,
         secure: true,
       },

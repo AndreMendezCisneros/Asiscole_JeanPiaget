@@ -8,8 +8,8 @@ export default {
   secretKey: 'WPPCONNECT_SECRET_PLACEHOLDER',
   host: 'http://127.0.0.1',
   port: '21465',
-  deviceName: 'Asiscole SIE',
-  poweredBy: 'Colegio Jean Piaget',
+  deviceName: 'SIE Mariscal Cáceres',
+  poweredBy: 'Mariscal Cáceres',
   // false: cada chip se inicia bajo demanda (evita colgar al vincular el 2.º celular)
   startAllSession: false,
   tokenStoreType: 'file',

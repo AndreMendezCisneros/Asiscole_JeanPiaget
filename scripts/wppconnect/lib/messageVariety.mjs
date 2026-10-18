@@ -15,7 +15,7 @@ function loadBank() {
   if (bankCache) return bankCache;
   if (!existsSync(BANK_PATH)) {
     throw new Error(
-      `Falta ${BANK_PATH}. Ejecute: node scripts/generar-banco-frases.mjs`,
+      `Falta ${BANK_PATH}.`,
     );
   }
   bankCache = JSON.parse(readFileSync(BANK_PATH, 'utf8'));

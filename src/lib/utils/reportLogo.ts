@@ -3,7 +3,7 @@ import {
   BRAND_REPORT_LOGO,
 } from '@/config/brandAssets';
 
-/** Logo Guardy para reportes Excel (marca de agua) y PDF — solo PNG SIE */
+/** Escudo del colegio para reportes Excel (marca de agua) y PDF */
 
 const WATERMARK_SOURCES = [BRAND_WATERMARK, BRAND_REPORT_LOGO] as const;
 

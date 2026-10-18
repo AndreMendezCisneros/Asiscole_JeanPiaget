@@ -203,7 +203,7 @@ export function buildCitaTextoLibre(
   const fechaTxt = formatCitaFecha(input.fecha);
   const horaTxt = input.hora.slice(0, 5);
   const motivo = input.motivo.trim();
-  const cierre = ' Revise el detalle en la aplicación Asiscole.';
+  const cierre = ' Revise el detalle en la aplicación del colegio.';
   if (input.alcance === 'apafa') {
     return (
       `Se convoca a junta de padres (APAFA) el ${fechaTxt} a las ${horaTxt}. ` +
@@ -275,7 +275,7 @@ export function buildNotaIngestBody(
   const textoLibre =
     `Se registró la nota semanal de ${student.fullName}: ${notaTxt}/20 ` +
     `(${input.semanaEtiqueta}).${carreraTxt}${areaTxt} ` +
-    `Revise el detalle en la aplicación Asiscole.`;
+    `Revise el detalle en la aplicación del colegio.`;
   const idSeed = Number(
     `${String(input.semanaCodigo).replace(/\D/g, '').slice(0, 6) || '0'}${student.id}`,
   );

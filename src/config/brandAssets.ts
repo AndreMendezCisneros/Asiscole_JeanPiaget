@@ -1,12 +1,11 @@
 /**
- * Assets de marca Asiscole.
+ * Assets de marca — Institución Educativa Emblemática Mariscal Cáceres.
  *
- * - UI del sistema: PNG con transparencia (logo_asiscole_sf.png).
+ * - UI del sistema: escudo sin fondo (logo-mariscal.png).
  * - WhatsApp / Open Graph: JPEG (whatsapp-preview.jpg) — el crawler no usa SVG.
  */
-/** Marca oficial (escudo + A + birrete, fondo transparente).
- *  Nombre nuevo: Cloudflare cacheó HTML en `/logo_asiscole_sf.png`. */
-export const BRAND_MARK = '/logo-asiscole.png';
+/** Escudo oficial GUE Mariscal Cáceres. */
+export const BRAND_MARK = '/logo-mariscal.png';
 
 /** Escudo para componentes compactos (sidebar, cabeceras) */
 export const BRAND_ICON_SVG = BRAND_MARK;
@@ -22,5 +21,5 @@ export const BRAND_ICON_MD = '/favicon-512.png';
 export const BRAND_WHATSAPP_PREVIEW = '/whatsapp-preview.jpg';
 
 /** Reportes PDF/Excel */
-export const BRAND_WATERMARK = '/guardy-watermark.png';
-export const BRAND_REPORT_LOGO = '/guardy-report-logo.png';
+export const BRAND_WATERMARK = '/logo-watermark.png';
+export const BRAND_REPORT_LOGO = '/logo-report.png';
