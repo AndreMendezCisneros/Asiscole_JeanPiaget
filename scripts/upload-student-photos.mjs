@@ -34,10 +34,11 @@ function loadEnvLocal() {
 }
 
 async function staffLogin(username, password) {
-  const url = process.env.VITE_SUPABASE_URL || 'https://spdugaykkcgpcfslcpac.supabase.co';
-  const key =
-    process.env.VITE_SUPABASE_ANON_KEY ||
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwZHVnYXlra2NncGNmc2xjcGFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE5NDE5MzAsImV4cCI6MjA3NzUxNzkzMH0.zLC3qHpIeVSA0jsLcA_md87_0SV4-stpDjHF7IvBr28';
+  const url = (process.env.VITE_SUPABASE_URL || '').trim();
+  const key = (process.env.VITE_SUPABASE_ANON_KEY || '').trim();
+  if (!url || !key) {
+    throw new Error('Faltan VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en .env.local');
+  }
   const anon = createClient(url, key);
   const { data, error } = await anon.rpc('sie_iniciar_sesion', {
     p_username: username,
@@ -57,7 +58,8 @@ async function staffLogin(username, password) {
 }
 
 async function getSupabaseClient() {
-  const url = process.env.VITE_SUPABASE_URL || 'https://spdugaykkcgpcfslcpac.supabase.co';
+  const url = (process.env.VITE_SUPABASE_URL || '').trim();
+  if (!url) throw new Error('Falta VITE_SUPABASE_URL en .env.local');
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (serviceKey) {
     console.log('🔑 Usando SUPABASE_SERVICE_ROLE_KEY');
@@ -72,9 +74,8 @@ async function getSupabaseClient() {
   }
 
   console.warn('⚠️  Sin service role ni SIE_ADMIN_USER — la lectura de estudiantes puede devolver 0 filas (RLS).');
-  const key =
-    process.env.VITE_SUPABASE_ANON_KEY ||
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwZHVnYXlra2NncGNmc2xjcGFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE5NDE5MzAsImV4cCI6MjA3NzUxNzkzMH0.zLC3qHpIeVSA0jsLcA_md87_0SV4-stpDjHF7IvBr28';
+  const key = (process.env.VITE_SUPABASE_ANON_KEY || '').trim();
+  if (!key) throw new Error('Falta VITE_SUPABASE_ANON_KEY en .env.local');
   return createClient(url, key);
 }
 

@@ -1,15 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { sessionService } from './services/sessionService';
 
-const supabaseUrl =
-  import.meta.env.VITE_SUPABASE_URL || 'https://kelylvvoebneugnajiwv.supabase.co';
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL ?? '').trim();
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim();
 
-const supabaseAnonKey =
-  import.meta.env.VITE_SUPABASE_ANON_KEY ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtlbHlsdnZvZWJuZXVnbmFqaXd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxMzU2NjgsImV4cCI6MjA5OTcxMTY2OH0.eoTMUz-DZcfy0s6odz2zLa3K2V_ayFZwB1HpXpKEyUc';
-
-if (!import.meta.env.VITE_SUPABASE_URL && import.meta.env.PROD) {
-  console.warn('[SIE] VITE_SUPABASE_URL no definida; usando valor por defecto del proyecto.');
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    'Faltan VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY. Defínelas en .env.local. Ese archivo no se sube a git.',
+  );
 }
 
 if (import.meta.env.DEV) {

@@ -14,6 +14,13 @@ dist-ssr
 .wrangler
 .dev.vars
 
+# Secretos. .env.example se versiona sin claves. .env.production solo lleva flags publicos.
+.env
+.env.build
+.env.wppconnect
+.env.meta-wa
+.env.*.local
+
 # OpenWA (clonar aparte; ver OPENWA_WHATSAPP.md)
 OpenWA/
 

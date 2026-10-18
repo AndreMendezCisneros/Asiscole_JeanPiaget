@@ -37,11 +37,11 @@ export function cspConnectSrcPlugin(): Plugin {
       if (openwaOrigin) origins.add(openwaOrigin);
 
       // Jean Piaget por defecto (no San Ramón)
-      const supabaseOrigin =
-        resolveHttpOrigin(env.VITE_SUPABASE_URL) ||
-        'https://kelylvvoebneugnajiwv.supabase.co';
-      origins.add(supabaseOrigin);
-      origins.add(supabaseOrigin.replace(/^https:/, 'wss:'));
+      const supabaseOrigin = resolveHttpOrigin(env.VITE_SUPABASE_URL);
+      if (supabaseOrigin) {
+        origins.add(supabaseOrigin);
+        origins.add(supabaseOrigin.replace(/^https:/, 'wss:'));
+      }
 
       const connectList = [...origins].join(' ');
       const devCsp = [
