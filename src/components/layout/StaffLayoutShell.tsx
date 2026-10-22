@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Layout } from './Layout';
-import { faultsService, incidentsService } from '@/lib/services';
+import { authService, faultsService, incidentsService } from '@/lib/services';
 import { queryKeys } from '@/lib/query/queryKeys';
 import { ensureSupabaseReady } from '@/lib/supabaseWarmup';
 import {
@@ -19,7 +19,16 @@ export function StaffLayoutShell({ requiredRole }: StaffLayoutShellProps) {
 
   useEffect(() => {
     void (async () => {
+      const role = authService.getCurrentUser()?.role ?? null;
+
+      // Cajero: warmup de pensiones (sin HEAD incidencias) + sin prefetch de faltas.
+      if (role === 'Cajero') {
+        await ensureSupabaseReady();
+        return;
+      }
+
       await ensureSupabaseReady();
+
       await Promise.all([
         queryClient.prefetchQuery({
           queryKey: queryKeys.faults.list(true),

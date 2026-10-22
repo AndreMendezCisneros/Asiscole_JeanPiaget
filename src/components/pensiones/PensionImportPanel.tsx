@@ -31,12 +31,30 @@ type Props = {
 };
 
 async function loadAllActiveStudents(): Promise<{ students: Student[]; error: string | null }> {
-  const lite = await studentsService.listLite({ active: true });
-  if (!lite.error && lite.students.length >= 20) {
-    return { students: lite.students, error: null };
+  // Cajero no pasa RLS/staff de estudiantes; usar RPC de pensiones.
+  const nomina = await pensionesService.listNominaActiva();
+  if (!nomina.error && nomina.students.length > 0) {
+    return {
+      students: nomina.students.map(
+        (s) =>
+          ({
+            id: s.id,
+            fullName: s.fullName,
+            grade: s.grade || '',
+            section: s.section || '',
+            level: (s.level as Student['level']) || 'Secundaria',
+            barcode: s.barcode,
+            active: s.active !== false,
+            contactPhone: s.contactPhone ?? null,
+            emergencyPhone: s.emergencyPhone ?? null,
+          }) satisfies Student,
+      ),
+      error: null,
+    };
   }
+
+  const lite = await studentsService.listLite({ active: true });
   if (!lite.error && lite.students.length > 0) {
-    // Menos de 20 activos: aún así lo aceptamos, no hace falta paginar.
     return { students: lite.students, error: null };
   }
 
@@ -44,7 +62,7 @@ async function loadAllActiveStudents(): Promise<{ students: Student[]; error: st
   let page = 1;
   let total = Number.POSITIVE_INFINITY;
   const all: Student[] = [];
-  let lastError: string | null = lite.error;
+  let lastError: string | null = nomina.error || lite.error;
 
   while (all.length < total && page <= 50) {
     const res = await studentsService.getAll({ active: true, page, pageSize });

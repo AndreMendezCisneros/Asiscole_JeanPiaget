@@ -49,6 +49,56 @@ function mapRow(raw: Record<string, unknown>): PensionRow {
 }
 
 export const pensionesService = {
+  /** Nómina activa mínima para match de Excel (Admin/Director/Cajero). */
+  async listNominaActiva(): Promise<{
+    students: Array<{
+      id: number;
+      barcode: string;
+      fullName: string;
+      grade?: string;
+      section?: string;
+      level?: string;
+      contactPhone?: string | null;
+      emergencyPhone?: string | null;
+      active?: boolean;
+    }>;
+    error: string | null;
+  }> {
+    if (!requireApiToken()) return { students: [], error: 'Sin sesión' };
+    try {
+      const { data, error } = await supabase.rpc('sie_pensiones_nomina');
+      if (error) {
+        return { students: [], error: error.message };
+      }
+      const payload = data as {
+        ok?: boolean;
+        students?: unknown;
+        error?: string;
+      };
+      const rows = Array.isArray(payload?.students) ? payload.students : [];
+      if (!payload?.ok) return { students: [], error: payload?.error || 'Error nómina' };
+      return {
+        students: rows.map((r) => {
+          const raw = r as Record<string, unknown>;
+          return {
+            id: Number(raw.id),
+            barcode: String(raw.barcode ?? ''),
+            fullName: String(raw.fullName ?? ''),
+            grade: raw.grade ? String(raw.grade) : undefined,
+            section: raw.section ? String(raw.section) : undefined,
+            level: raw.level ? String(raw.level) : undefined,
+            contactPhone: (raw.contactPhone as string | null) ?? null,
+            emergencyPhone: (raw.emergencyPhone as string | null) ?? null,
+            active: raw.active !== false,
+          };
+        }),
+        error: null,
+      };
+    } catch (err) {
+      return { students: [], error: err instanceof Error ? err.message : 'Error de red' };
+    }
+  },
+
   async getConfig(): Promise<{ config: PensionConfig | null; error: string | null }> {
     if (!requireApiToken()) return { config: null, error: 'Sin sesión' };
     try {
@@ -77,7 +127,9 @@ export const pensionesService = {
         p_aviso_sonoro_activo: input.avisoSonoroActivo ?? null,
         p_activo: input.activo ?? null,
       });
-      if (error) return { config: null, error: error.message };
+      if (error) {
+        return { config: null, error: error.message };
+      }
       const payload = data as { ok?: boolean; config?: Record<string, unknown>; error?: string };
       if (!payload?.ok) return { config: null, error: payload?.error || 'Error al guardar' };
       return { config: mapConfig(payload.config), error: null };
@@ -107,7 +159,9 @@ export const pensionesService = {
       const { data, error } = await supabase.rpc('sie_pensiones_listar', {
         p_periodo: periodo,
       });
-      if (error) return { rows: [], error: error.message };
+      if (error) {
+        return { rows: [], error: error.message };
+      }
       const payload = data as { ok?: boolean; rows?: unknown; error?: string };
       if (!payload?.ok) return { rows: [], error: payload?.error || 'Error al listar' };
       const rows = Array.isArray(payload.rows)
@@ -165,7 +219,9 @@ export const pensionesService = {
         p_filas_sin_match: input.filasSinMatch ?? 0,
         p_filas_ambiguas: input.filasAmbiguas ?? 0,
       });
-      if (error) return { ok: false, error: error.message };
+      if (error) {
+        return { ok: false, error: error.message };
+      }
       const payload = data as {
         ok?: boolean;
         importId?: number;

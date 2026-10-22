@@ -7,7 +7,7 @@ import { getHomeRouteForRole } from '@/lib/utils/roleRoutes';
 import { ensureSupabaseReady } from '@/lib/supabaseWarmup';
 import { useErrorDialog } from '@/hooks/useErrorDialog';
 
-const STAFF_ROLES = new Set(['Supervisor', 'Director', 'Admin']);
+const STAFF_ROLES = new Set(['Supervisor', 'Director', 'Admin', 'Cajero']);
 
 export function useLoginForm() {
   const navigate = useNavigate();
@@ -73,7 +73,12 @@ export function useLoginForm() {
           return;
         }
         if (STAFF_ROLES.has(user.role)) {
-          await ensureSupabaseReady();
+          try {
+            await ensureSupabaseReady();
+          } catch (warmupErr) {
+            // La sesión ya está guardada; no mostrar "Error de Autenticación".
+            console.warn('Warmup post-login falló:', warmupErr);
+          }
         }
         navigate(getHomeRouteForRole(user.role));
       }

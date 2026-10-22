@@ -1,5 +1,5 @@
 // Tipos que coinciden con el esquema de la base de datos
-export type UserRole = 'Supervisor' | 'Tutor' | 'Director' | 'Admin' | 'Padre';
+export type UserRole = 'Supervisor' | 'Tutor' | 'Director' | 'Admin' | 'Padre' | 'Cajero';
 export type EducationalLevel = 'Primaria' | 'Secundaria';
 
 export type ReincidenceLevel = 0 | 1 | 2 | 3 | 4 | 5;

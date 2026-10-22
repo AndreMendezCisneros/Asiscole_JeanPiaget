@@ -15,6 +15,7 @@ import { PageMetaManager } from "./components/seo/PageMetaManager";
 import { SiteAnalytics } from "./components/seo/SiteAnalytics";
 import { StaffLayoutShell } from "./components/layout/StaffLayoutShell";
 import { lazyPage } from "./lib/lazyPage";
+import { getHomeRouteForRole } from "./lib/utils/roleRoutes";
 import { Dashboard } from "./pages/Dashboard";
 import { RegisterIncident } from "./pages/RegisterIncident";
 import { IncidentsList } from "./pages/IncidentsList";
@@ -33,6 +34,14 @@ import { AuditLogs } from "./pages/AuditLogs";
 import { SystemConfig } from "./pages/SystemConfig";
 import { PensionesAdmin } from "./pages/PensionesAdmin";
 import { isPensionesEnabled } from "./config/features";
+
+/** Staff con panel completo (sin Cajero). */
+const FULL_STAFF = ['Supervisor', 'Director', 'Admin'] as const;
+/** Shell compartido: incluye Cajero (solo rutas anidadas que lo permitan). */
+const STAFF_SHELL = ['Supervisor', 'Director', 'Admin', 'Cajero'] as const;
+const DIRECTOR_ADMIN = ['Director', 'Admin'] as const;
+const PENSIONES_ROLES = ['Director', 'Admin', 'Cajero'] as const;
+const SYSTEM_CONFIG_ROLES = ['Admin', 'Cajero'] as const;
 
 const Login = lazyPage(() => import("./pages/Login").then(m => ({ default: m.Login })));
 const TutorScanner = lazyPage(() => import("./pages/TutorScanner").then(m => ({ default: m.TutorScanner })));
@@ -77,9 +86,7 @@ const RootRoute = () => {
     return <Navigate to="/cambiar-password" replace />;
   }
 
-  if (user.role === 'Tutor') return <Navigate to="/tutor-scanner" replace />;
-  if (user.role === 'Padre') return <Navigate to="/parent-portal" replace />;
-  return <Navigate to="/dashboard" replace />;
+  return <Navigate to={getHomeRouteForRole(user.role)} replace />;
 };
 
 /** Pantalla completa para rutas sin Layout (login, tutor, etc.). */
@@ -107,34 +114,111 @@ const AppContent = () => {
       {/* Panel staff — un solo layout, sin lazy por página (evita Suspense colgado) */}
       <Route
         element={
-          <ProtectedRoute requiredRole={['Supervisor', 'Director', 'Admin']}>
-            <StaffLayoutShell requiredRole={['Supervisor', 'Director', 'Admin']} />
+          <ProtectedRoute requiredRole={[...STAFF_SHELL]}>
+            <StaffLayoutShell requiredRole={[...STAFF_SHELL]} />
           </ProtectedRoute>
         }
       >
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/register" element={<RegisterIncident />} />
-        <Route path="/incidents" element={<IncidentsList />} />
-        <Route path="/students" element={<StudentsList />} />
-        <Route path="/attendance-report" element={<AttendanceReport />} />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/register"
+          element={
+            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+              <RegisterIncident />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/incidents"
+          element={
+            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+              <IncidentsList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/students"
+          element={
+            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+              <StudentsList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/attendance-report"
+          element={
+            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+              <AttendanceReport />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/integral-report"
           element={
-            <ProtectedRoute requiredRole={['Supervisor', 'Director', 'Admin']}>
+            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
               <IntegralStudentReport />
             </ProtectedRoute>
           }
         />
-        <Route path="/arrival-control" element={<ArrivalControl />} />
-        <Route path="/departure-control" element={<DepartureControl />} />
-        <Route path="/justify-attendance" element={<JustifyAttendance />} />
-        <Route path="/compromisos-alarma" element={<CompromisosAlarma />} />
-        <Route path="/parent-meetings" element={<ParentMeetings />} />
-        <Route path="/justify-faults" element={<JustifyFaults />} />
+        <Route
+          path="/arrival-control"
+          element={
+            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+              <ArrivalControl />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/departure-control"
+          element={
+            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+              <DepartureControl />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/justify-attendance"
+          element={
+            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+              <JustifyAttendance />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/compromisos-alarma"
+          element={
+            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+              <CompromisosAlarma />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/parent-meetings"
+          element={
+            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+              <ParentMeetings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/justify-faults"
+          element={
+            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+              <JustifyFaults />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/faults"
           element={
-            <ProtectedRoute requiredRole={['Director', 'Admin']}>
+            <ProtectedRoute requiredRole={[...DIRECTOR_ADMIN]}>
               <FaultsCatalog />
             </ProtectedRoute>
           }
@@ -142,7 +226,7 @@ const AppContent = () => {
         <Route
           path="/reports"
           element={
-            <ProtectedRoute requiredRole={['Director', 'Admin']}>
+            <ProtectedRoute requiredRole={[...DIRECTOR_ADMIN]}>
               <Reports />
             </ProtectedRoute>
           }
@@ -158,7 +242,7 @@ const AppContent = () => {
         <Route
           path="/system-config"
           element={
-            <ProtectedRoute requiredRole={['Admin']}>
+            <ProtectedRoute requiredRole={[...SYSTEM_CONFIG_ROLES]}>
               <SystemConfig />
             </ProtectedRoute>
           }
@@ -167,7 +251,7 @@ const AppContent = () => {
           <Route
             path="/pensiones"
             element={
-              <ProtectedRoute requiredRole={['Director', 'Admin']}>
+              <ProtectedRoute requiredRole={[...PENSIONES_ROLES]}>
                 <PensionesAdmin />
               </ProtectedRoute>
             }

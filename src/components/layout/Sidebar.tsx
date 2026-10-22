@@ -19,6 +19,7 @@ import {
   isStaffNavItemActive,
   type StaffNavItem,
 } from '@/config/staffNavigation';
+import { getHomeRouteForRole } from '@/lib/utils/roleRoutes';
 import { preloadRoute } from '@/lib/routePreloads';
 
 const navItemClass = (active: boolean) =>
@@ -129,7 +130,7 @@ export const Sidebar = () => {
       >
         <div className="border-b border-sidebar-border/60 px-5 pb-5 pt-5">
           <Link
-            to={user?.role === 'Padre' ? '/parent-portal' : '/'}
+            to={user ? getHomeRouteForRole(user.role) : '/'}
             className="group flex flex-col items-center justify-center gap-2.5 text-center"
             onClick={() => setMobileMenuOpen(false)}
           >

@@ -8,5 +8,6 @@ describe('sessionService', () => {
     expect(sessionService.getIdleDurationMs('Padre')).toBe(15 * 60 * 1000);
     expect(sessionService.getIdleDurationMs('Supervisor')).toBe(30 * 60 * 1000);
     expect(sessionService.getIdleDurationMs('Admin')).toBe(30 * 60 * 1000);
+    expect(sessionService.getIdleDurationMs('Cajero')).toBe(30 * 60 * 1000);
   });
 });

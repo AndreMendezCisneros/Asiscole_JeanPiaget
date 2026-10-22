@@ -14,6 +14,8 @@ import { isPensionesEnabled } from '@/config/features';
 export interface StaffNavSubItem {
   path: string;
   label: string;
+  /** Si falta, hereda el acceso del ítem padre. */
+  roles?: string[];
 }
 
 export interface StaffNavItem {
@@ -88,16 +90,16 @@ const ALL_STAFF_NAV_ITEMS: StaffNavItem[] = [
     path: '/pensiones',
     label: 'Pensiones',
     icon: Wallet,
-    roles: ['Director', 'Admin'],
+    roles: ['Director', 'Admin', 'Cajero'],
   },
   {
     path: '/system-config',
     label: 'Administración',
     icon: Settings,
-    roles: ['Admin'],
+    roles: ['Admin', 'Cajero'],
     subItems: [
-      { path: '/audit', label: 'Auditoría' },
-      { path: '/system-config', label: 'Configuración' },
+      { path: '/audit', label: 'Auditoría', roles: ['Admin'] },
+      { path: '/system-config', label: 'Configuración', roles: ['Admin', 'Cajero'] },
     ],
   },
 ];
@@ -108,6 +110,13 @@ export function getStaffNavItems(role?: string | null): StaffNavItem[] {
     if (!item.roles.includes(role)) return false;
     if (item.path === '/pensiones' && !isPensionesEnabled()) return false;
     return true;
+  }).map((item) => {
+    if (!item.subItems?.length) return item;
+    const subItems = item.subItems.filter((sub) => {
+      if (!sub.roles?.length) return true;
+      return sub.roles.includes(role);
+    });
+    return { ...item, subItems };
   });
 }
 

@@ -26,6 +26,20 @@ export function resetSupabaseWarmup(): void {
 }
 
 async function runWarmup(): Promise<void> {
+  const role = sessionService.getSession()?.user.role ?? null;
+
+  // Cajero no usa incidencias/faltas. El HEAD a incidencias devolvía 500 y
+  // el login lo interpretaba como "Error al iniciar sesión" pese a token OK.
+  if (role === 'Cajero') {
+    const { data, error } = await supabase.rpc('sie_pensiones_get_config');
+    if (error) throw new Error(error.message);
+    const payload = data as { ok?: boolean; error?: string } | null;
+    if (payload && payload.ok === false) {
+      throw new Error(payload.error || 'Warmup pensiones falló');
+    }
+    return;
+  }
+
   // 1) Ping mínimo con token RLS (misma ruta que login/sesión)
   const ping = await supabase
     .from('catalogo_faltas')

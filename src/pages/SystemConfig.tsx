@@ -6,8 +6,31 @@ import { ReincidenceSettingsCard } from '@/components/system-config/ReincidenceS
 import { PensionesSettingsCard } from '@/components/system-config/PensionesSettingsCard';
 import { isPensionesEnabled } from '@/config/features';
 import { SYSTEM_SETTINGS } from '@/config/systemSettings';
+import { authService } from '@/lib/services';
 
 export const SystemConfig = () => {
+  const role = authService.getCurrentUser()?.role;
+  const isCajero = role === 'Cajero';
+
+  if (isCajero) {
+    return (
+      <div className="app-page app-page-shell space-y-6">
+        <PageHeader
+          icon={Settings}
+          eyebrow="Administración"
+          title="Configuración de pensiones"
+          description="Día de vencimiento, monto referencial y aviso sonoro del colegio"
+          accent="secondary"
+        />
+        {isPensionesEnabled() ? (
+          <PensionesSettingsCard />
+        ) : (
+          <p className="text-sm text-muted-foreground">El módulo de pensiones no está habilitado.</p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="app-page app-page-shell space-y-6">
       <PageHeader

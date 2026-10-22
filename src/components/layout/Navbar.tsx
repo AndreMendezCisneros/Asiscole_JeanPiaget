@@ -13,7 +13,8 @@ import {
   Settings,
   Clock,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Wallet,
 } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { authService } from '@/lib/services';
@@ -56,7 +57,7 @@ export const Navbar = () => {
     label: string;
     icon: any;
     roles: string[];
-    subItems?: { path: string; label: string }[];
+    subItems?: { path: string; label: string; roles?: string[] }[];
   }
 
   const getNavItems = (): NavItem[] => {
@@ -77,6 +78,7 @@ export const Navbar = () => {
       ];
     }
 
+    const role = user?.role || '';
     const allItems: NavItem[] = [
       {
         path: '/',
@@ -137,18 +139,32 @@ export const Navbar = () => {
         ],
       },
       {
+        path: '/pensiones',
+        label: 'Pensiones',
+        icon: Wallet,
+        roles: ['Director', 'Admin', 'Cajero'],
+      },
+      {
         path: '/system-config',
         label: 'Administración',
         icon: Settings,
-        roles: ['Admin'],
+        roles: ['Admin', 'Cajero'],
         subItems: [
-          { path: '/audit', label: 'Auditoría' },
-          { path: '/system-config', label: 'Configuración' },
+          { path: '/audit', label: 'Auditoría', roles: ['Admin'] },
+          { path: '/system-config', label: 'Configuración', roles: ['Admin', 'Cajero'] },
         ],
       },
     ];
 
-    return allItems.filter(item => item.roles.includes(user?.role || ''));
+    return allItems
+      .filter((item) => item.roles.includes(role))
+      .map((item) => {
+        if (!item.subItems?.length) return item;
+        return {
+          ...item,
+          subItems: item.subItems.filter((sub) => !sub.roles?.length || sub.roles.includes(role)),
+        };
+      });
   };
 
   const navItems = getNavItems();
