@@ -28,6 +28,7 @@ import {
   StaffDataPanelHeader,
   StaffEmptyState,
   StaffKpiStat,
+  StaffTablePagination,
   StaffToolbar,
 } from '@/components/staff';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -36,6 +37,8 @@ import { pensionesService, whatsappService } from '@/lib/services';
 import type { PensionConfig, PensionImportLog, PensionRow } from '@/types';
 import { getLimaTodayDate } from '@/lib/utils/limaDateTime';
 import { periodoFromLimaDate } from '@/lib/utils/pensionPeriod';
+import { useTablePagination } from '@/hooks/useTablePagination';
+import { CLASSROOM_FIELD_LABELS } from '@/lib/constants/classrooms';
 
 function estadoBadge(estado: string, pagado: 0 | 1) {
   if (pagado === 1 || estado === 'pagado') {
@@ -56,6 +59,9 @@ export const PensionesAdmin = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [filtroEstado, setFiltroEstado] = useState<string>('all');
+  const [filtroNivel, setFiltroNivel] = useState('all');
+  const [filtroGrado, setFiltroGrado] = useState('all');
+  const [filtroSeccion, setFiltroSeccion] = useState('all');
 
   const loadAll = useCallback(async (silent?: boolean) => {
     if (silent) setRefreshing(true);
@@ -84,6 +90,9 @@ export const PensionesAdmin = () => {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
+      if (filtroNivel !== 'all' && (r.nivel || '') !== filtroNivel) return false;
+      if (filtroGrado !== 'all' && (r.grado || '') !== filtroGrado) return false;
+      if (filtroSeccion !== 'all' && (r.seccion || '') !== filtroSeccion) return false;
       if (filtroEstado === 'pagado' && r.pagado !== 1) return false;
       if (filtroEstado === 'pendiente' && r.estado !== 'pendiente') return false;
       if (filtroEstado === 'moroso' && r.estado !== 'moroso') return false;
@@ -92,14 +101,35 @@ export const PensionesAdmin = () => {
       const hay = `${r.nombreEstudiante || ''} ${r.barcode || ''}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [rows, search, filtroEstado]);
+  }, [rows, search, filtroEstado, filtroNivel, filtroGrado, filtroSeccion]);
 
   const kpis = useMemo(() => {
-    const pagados = rows.filter((r) => r.pagado === 1).length;
-    const morosos = rows.filter((r) => r.estado === 'moroso').length;
-    const pendientes = rows.filter((r) => r.estado === 'pendiente').length;
-    return { total: rows.length, pagados, morosos, pendientes };
-  }, [rows]);
+    const pagados = filtered.filter((r) => r.pagado === 1).length;
+    const morosos = filtered.filter((r) => r.estado === 'moroso').length;
+    const pendientes = filtered.filter((r) => r.estado === 'pendiente').length;
+    return { total: filtered.length, pagados, morosos, pendientes };
+  }, [filtered]);
+
+  const niveles = useMemo(
+    () => [...new Set(rows.map((r) => r.nivel).filter(Boolean) as string[])].sort(),
+    [rows],
+  );
+  const grados = useMemo(
+    () => [...new Set(rows.map((r) => r.grado).filter(Boolean) as string[])].sort(),
+    [rows],
+  );
+  const secciones = useMemo(
+    () => [...new Set(rows.map((r) => r.seccion).filter(Boolean) as string[])].sort(),
+    [rows],
+  );
+
+  const listPage = useTablePagination({ totalItems: filtered.length });
+  useEffect(() => {
+    listPage.resetPage();
+    // Los filtros cambian el total; la página vuelve a 1.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, filtroEstado, filtroNivel, filtroGrado, filtroSeccion, periodo]);
+  const pageRows = filtered.slice(listPage.sliceRange.start, listPage.sliceRange.end);
 
   const markPaid = async (row: PensionRow) => {
     const { error } = await pensionesService.updateManual({ id: row.id, pagado: 1 });
@@ -242,6 +272,39 @@ export const PensionesAdmin = () => {
                   onChange={(e) => setSearch(e.target.value)}
                   className="max-w-xs"
                 />
+                <Select value={filtroNivel} onValueChange={setFiltroNivel}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder={CLASSROOM_FIELD_LABELS.level} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{CLASSROOM_FIELD_LABELS.allLevels}</SelectItem>
+                    {niveles.map((n) => (
+                      <SelectItem key={n} value={n}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={filtroGrado} onValueChange={setFiltroGrado}>
+                  <SelectTrigger className="w-36">
+                    <SelectValue placeholder={CLASSROOM_FIELD_LABELS.grade} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{CLASSROOM_FIELD_LABELS.allGrades}</SelectItem>
+                    {grados.map((n) => (
+                      <SelectItem key={n} value={n}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={filtroSeccion} onValueChange={setFiltroSeccion}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder={CLASSROOM_FIELD_LABELS.section} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{CLASSROOM_FIELD_LABELS.allSections}</SelectItem>
+                    {secciones.map((n) => (
+                      <SelectItem key={n} value={n}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Select value={filtroEstado} onValueChange={setFiltroEstado}>
                   <SelectTrigger className="w-44">
                     <SelectValue placeholder="Estado" />
@@ -268,6 +331,7 @@ export const PensionesAdmin = () => {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Estudiante</TableHead>
+                        <TableHead>Nivel</TableHead>
                         <TableHead>DNI</TableHead>
                         <TableHead>Estado</TableHead>
                         <TableHead>Monto</TableHead>
@@ -276,7 +340,7 @@ export const PensionesAdmin = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filtered.map((row) => (
+                      {pageRows.map((row) => (
                         <TableRow key={row.id}>
                           <TableCell>
                             <div className="font-medium">{row.nombreEstudiante}</div>
@@ -284,6 +348,7 @@ export const PensionesAdmin = () => {
                               {row.grado} {row.seccion}
                             </div>
                           </TableCell>
+                          <TableCell className="text-xs">{row.nivel || '—'}</TableCell>
                           <TableCell className="font-mono text-xs">{row.barcode}</TableCell>
                           <TableCell>{estadoBadge(row.estado, row.pagado)}</TableCell>
                           <TableCell>
@@ -308,6 +373,16 @@ export const PensionesAdmin = () => {
                   </Table>
                 </div>
               )}
+              <StaffTablePagination
+                page={listPage.page}
+                totalPages={listPage.totalPages}
+                pageSize={listPage.pageSize}
+                totalItems={filtered.length}
+                onPrev={listPage.prevPage}
+                onNext={listPage.nextPage}
+                onGoToPage={listPage.goToPage}
+                onPageSizeChange={listPage.changePageSize}
+              />
             </StaffDataPanelBody>
           </StaffDataPanel>
         </TabsContent>

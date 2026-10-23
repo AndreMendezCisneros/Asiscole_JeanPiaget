@@ -42,6 +42,7 @@ function mapRow(raw: Record<string, unknown>): PensionRow {
     nombreEstudiante: raw.nombreEstudiante ? String(raw.nombreEstudiante) : undefined,
     grado: raw.grado ? String(raw.grado) : undefined,
     seccion: raw.seccion ? String(raw.seccion) : undefined,
+    nivel: raw.nivel ? String(raw.nivel) : undefined,
     barcode: raw.barcode ? String(raw.barcode) : undefined,
     contactPhone: (raw.contactPhone as string | null) ?? null,
     emergencyPhone: (raw.emergencyPhone as string | null) ?? null,
@@ -233,6 +234,43 @@ export const pensionesService = {
         ok: true,
         importId: payload.importId,
         filasOk: payload.filasOk,
+        error: null,
+      };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Error de red' };
+    }
+  },
+
+  async reconcileDeudas(input: {
+    anio: number;
+    meses: number[];
+    deudas: Array<{ id_estudiante: number; meses: number[] }>;
+    nombreArchivo: string | null;
+    filasSinMatch?: number;
+    filasAmbiguas?: number;
+  }): Promise<{ ok: boolean; filasOk?: number; cerroAusentes?: boolean; error: string | null }> {
+    if (!requireApiToken()) return { ok: false, error: 'Sin sesión' };
+    try {
+      const { data, error } = await supabase.rpc('sie_pensiones_reconciliar_deudas', {
+        p_anio: input.anio,
+        p_meses: input.meses,
+        p_deudas: input.deudas,
+        p_nombre_archivo: input.nombreArchivo,
+        p_filas_sin_match: input.filasSinMatch ?? 0,
+        p_filas_ambiguas: input.filasAmbiguas ?? 0,
+      });
+      if (error) return { ok: false, error: error.message };
+      const payload = data as {
+        ok?: boolean;
+        filasOk?: number;
+        cerroAusentes?: boolean;
+        error?: string;
+      };
+      if (!payload?.ok) return { ok: false, error: payload?.error || 'Error al conciliar' };
+      return {
+        ok: true,
+        filasOk: payload.filasOk,
+        cerroAusentes: payload.cerroAusentes,
         error: null,
       };
     } catch (err) {

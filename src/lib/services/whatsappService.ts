@@ -1079,16 +1079,23 @@ export function buildPensionPendingMessage(
  */
 export async function notifyParentPensionPending(
   student: Student,
-  input: { periodo: string; monto?: number | null; pensionId?: number },
+  input: {
+    periodo: string;
+    monto?: number | null;
+    pensionId?: number;
+    mesesLabel?: string;
+    /** Cada carga de Excel avisa de nuevo, aunque el mismo periodo se haya enviado hace poco. */
+    skipDedup?: boolean;
+  },
 ): Promise<{ ok: boolean; error: string | null; chatId?: string; skipped?: boolean }> {
   if (!MOBILE_INGEST_ENABLED) {
     return { ok: false, error: 'Notificaciones por aplicación no habilitadas' };
   }
 
   const apoderadoPhone = student.contactPhone?.trim() || student.emergencyPhone?.trim() || '';
-  const dedupKey = buildNotifyDedupKey('pension', student.id, input.periodo);
+  const dedupKey = buildNotifyDedupKey('pension', student.id, input.mesesLabel || input.periodo);
 
-  if (shouldSkipDuplicateNotify(dedupKey)) {
+  if (!input.skipDedup && shouldSkipDuplicateNotify(dedupKey)) {
     return {
       ok: true,
       error: null,
@@ -1097,11 +1104,13 @@ export async function notifyParentPensionPending(
     };
   }
 
+  const stamp = Date.now() % 1_000_000;
   const result = await sendViaMobileIngest(
     buildPensionIngestBody(MOBILE_INGEST_TENANT, student, {
       periodo: input.periodo,
       monto: input.monto,
-      idRegistro: input.pensionId,
+      mesesLabel: input.mesesLabel,
+      idRegistro: input.pensionId ?? student.id * 1_000_000 + stamp,
     }),
   );
   return { ...result, chatId: toWhatsAppChatId(apoderadoPhone) || undefined };

@@ -163,6 +163,7 @@ export interface PensionRow {
   nombreEstudiante?: string;
   grado?: string;
   seccion?: string;
+  nivel?: string;
   barcode?: string;
   contactPhone?: string | null;
   emergencyPhone?: string | null;
@@ -185,6 +186,8 @@ export interface PensionImportPreviewRow {
   matchStatus: 'ok' | 'sin_match' | 'ambiguo';
   idEstudiante: number | null;
   nombreMatched: string | null;
+  /** Meses 1-12 con DEBE. En el Excel plano queda vacío. */
+  mesesDebe: number[];
 }
 
 export interface PensionImportLog {

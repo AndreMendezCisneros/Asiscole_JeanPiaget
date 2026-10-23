@@ -128,7 +128,7 @@ export function buildIncidentIngestBody(
 export function buildPensionIngestBody(
   tenantId: string,
   student: Student,
-  input: { periodo: string; monto?: number | null; idRegistro?: number },
+  input: { periodo: string; monto?: number | null; idRegistro?: number; mesesLabel?: string },
 ): MobileIngestEventBody {
   const [y, m] = input.periodo.split('-');
   const periodoLabel = m && y ? `${m}/${y}` : input.periodo;
@@ -136,8 +136,11 @@ export function buildPensionIngestBody(
     input.monto != null && Number.isFinite(input.monto)
       ? ` Monto referencial: S/ ${Number(input.monto).toFixed(2)}.`
       : '';
+  const deudaTxt = input.mesesLabel
+    ? `los periodos ${input.mesesLabel}`
+    : `el periodo ${periodoLabel}`;
   const textoLibre =
-    `La pensión del periodo ${periodoLabel} de ${student.fullName} figura sin pago. ` +
+    `La pensión de ${student.fullName} figura sin pago en ${deudaTxt}. ` +
     `Por favor regularice el pago en el colegio o entidad bancaria indicada.${montoTxt}`;
   return buildMobileIngestBody({
     tenantId,
