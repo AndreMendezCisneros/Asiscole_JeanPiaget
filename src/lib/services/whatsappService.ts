@@ -43,8 +43,10 @@ function resolveMobileIngestEndpoint(): string {
  * - DNIs en VITE_WPPCONNECT_STUDENT_DNIS → WhatsApp + app
  * - resto → solo app Asiscole
  * Si la lista está vacía y la app está activa → todo por app.
+ * VITE_WPPCONNECT_PAUSED=true deja la lista y la sesión guardadas, sin enviar WhatsApp.
  */
 const WPPCONNECT_FLAG = import.meta.env.VITE_WPPCONNECT_ENABLED === 'true';
+const WPPCONNECT_PAUSED = import.meta.env.VITE_WPPCONNECT_PAUSED === 'true';
 
 const WPPCONNECT_STUDENT_DNIS = new Set(
   String(
@@ -119,6 +121,7 @@ function studentInWaWhitelist(student: Student): boolean {
 
 /** true = también avisar por WPPConnect (lista corta). La app se envía aparte. */
 function shouldNotifyViaWppConnect(student: Student): boolean {
+  if (WPPCONNECT_PAUSED) return false;
   return Boolean(WPPCONNECT_FLAG && studentInWaWhitelist(student));
 }
 
@@ -1323,16 +1326,22 @@ export const whatsappService = {
   isEnabled: () => WHATSAPP_ENABLED,
   /** Push/aviso por backend de la app móvil (canal), no WhatsApp. */
   isAppNotificationsEnabled: () => MOBILE_INGEST_ENABLED,
-  /** Lista corta de DNIs → WhatsApp y app; el resto → solo app. */
-  isWppWhitelistEnabled: () => WPPCONNECT_FLAG && WPPCONNECT_STUDENT_DNIS.size > 0,
+  /** Lista corta de DNIs → WhatsApp y app; el resto → solo app. En pausa no envía WhatsApp. */
+  isWppWhitelistEnabled: () =>
+    WPPCONNECT_FLAG && WPPCONNECT_STUDENT_DNIS.size > 0 && !WPPCONNECT_PAUSED,
   usesWppForStudent: (student: Student) => shouldNotifyViaWppConnect(student),
   /** @deprecated usar usesWppForStudent */
   usesOpenwaForStudent: (student: Student) => shouldNotifyViaWppConnect(student),
-  isOpenwaWhitelistEnabled: () => WPPCONNECT_FLAG && WPPCONNECT_STUDENT_DNIS.size > 0,
+  isOpenwaWhitelistEnabled: () =>
+    WPPCONNECT_FLAG && WPPCONNECT_STUDENT_DNIS.size > 0 && !WPPCONNECT_PAUSED,
   provider: () =>
-    WPPCONNECT_FLAG && WPPCONNECT_STUDENT_DNIS.size > 0 && MOBILE_INGEST_ENABLED
-      ? 'wppconnect+mobile-ingest'
-      : MOBILE_INGEST_ENABLED
+    WPPCONNECT_PAUSED
+      ? MOBILE_INGEST_ENABLED
+        ? 'mobile-ingest'
+        : 'none'
+      : WPPCONNECT_FLAG && WPPCONNECT_STUDENT_DNIS.size > 0 && MOBILE_INGEST_ENABLED
+        ? 'wppconnect+mobile-ingest'
+        : MOBILE_INGEST_ENABLED
         ? 'mobile-ingest'
         : META_WA_ENABLED
           ? 'meta'
