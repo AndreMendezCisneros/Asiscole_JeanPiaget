@@ -37,3 +37,10 @@ scripts/load/reports/
 *.njsproj
 *.sln
 *.sw?
+
+# Python
+__pycache__/
+*.pyc
+
+# Copias locales de trabajo con el VPS (scripts sueltos y volcados de BD: no versionar)
+_vps_sync/
