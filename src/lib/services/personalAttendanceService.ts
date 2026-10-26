@@ -24,11 +24,12 @@ type RegistroPersonalRow = {
   hora_salida: string | null;
   tipo_salida: PersonalDepartureType | null;
   motivo_justificacion: string | null;
+  motivo_salida: string | null;
   registrado_por: number | null;
 };
 
 const SELECT_COLS =
-  'id_registro, id_personal, fecha, hora_llegada, estado, hora_entrada_esperada, hora_salida_esperada, hora_salida, tipo_salida, motivo_justificacion, registrado_por';
+  'id_registro, id_personal, fecha, hora_llegada, estado, hora_entrada_esperada, hora_salida_esperada, hora_salida, tipo_salida, motivo_justificacion, motivo_salida, registrado_por';
 
 /** Hora 00:00 = registro sin llegada real (falta marcada o justificada sin escaneo). */
 const NO_ARRIVAL_TIME = '00:00:00';
@@ -52,6 +53,7 @@ export function mapPersonalArrivalRow(row: RegistroPersonalRow): PersonalArrival
     departureTime: hhmm(row.hora_salida),
     departureType: row.tipo_salida,
     justificationReason: row.motivo_justificacion,
+    departureReason: row.motivo_salida,
     registeredBy: row.registrado_por,
   };
 }
@@ -76,8 +78,10 @@ export const personalAttendanceService = {
   },
 
   /**
-   * Llegada con estado según el horario del día (tarde al minuto siguiente;
-   * día sin horario → "Fuera de horario"). Una por empleado y día.
+   * Llegada con estado según el horario del día: tarde al minuto siguiente de
+   * su entrada; después de su hora de salida → inasistencia (Falta, con la hora
+   * real); día sin horario → "Fuera de horario". Una por empleado y día.
+   * Si la inasistencia automática ya lo marcó, la llegada real la reemplaza.
    */
   async registerArrival(
     personal: Personal,
@@ -87,12 +91,13 @@ export const personalAttendanceService = {
     const { date, time } = at ?? getLimaNow();
     const existing = await this.getRecordForDate(personal.id, date);
     if (existing.error) return { ok: false, error: existing.error };
-    if (existing.record && existing.record.status !== 'Falta') {
+    // Ya marcó (incluye la "Falta" con hora real por llegar después de su salida).
+    if (existing.record && (existing.record.status !== 'Falta' || existing.record.arrivalTime)) {
       return { ok: true, action: 'arrival', record: existing.record, duplicate: true };
     }
 
     const horario = scheduleForDate(personal.schedule, date);
-    const estado = resolvePersonalArrivalStatus(time, horario?.entry ?? null);
+    const estado = resolvePersonalArrivalStatus(time, horario?.entry ?? null, horario?.exit ?? null);
     const payload = {
       id_personal: personal.id,
       fecha: date,
@@ -119,12 +124,16 @@ export const personalAttendanceService = {
     return { ok: true, action: 'arrival', record: mapPersonalArrivalRow(data as RegistroPersonalRow), duplicate: false };
   },
 
-  /** Salida: requiere llegada del día; "Anticipada" si sale antes de su hora de salida. */
+  /**
+   * Salida: requiere llegada del día. Se compara con la hora de salida del
+   * horario VIGENTE (no la foto tomada al llegar). Antes de su hora →
+   * "Anticipada" (sin autorización) o "Autorizada" si se marca con permiso y motivo.
+   */
   async registerDeparture(
     personal: Personal,
     userId: number | undefined,
     at?: { date: string; time: string },
-    departureType?: PersonalDepartureType,
+    permission?: { reason: string },
   ): Promise<PersonalScanResult> {
     const { date, time } = at ?? getLimaNow();
     const existing = await this.getRecordForDate(personal.id, date);
@@ -133,17 +142,33 @@ export const personalAttendanceService = {
     if (!record || !record.arrivalTime) {
       return { ok: false, error: `${personal.fullName} aún no tiene llegada hoy. Registre primero la llegada.` };
     }
+    if (record.status === 'Falta') {
+      return { ok: false, error: `${personal.fullName} llegó después de su hora de salida (inasistencia); no se registra salida.` };
+    }
     if (record.departureTime) {
       return { ok: true, action: 'departure', record, duplicate: true };
     }
-    const tipo = departureType ?? resolvePersonalDepartureType(time, record.expectedExit);
+    if (permission && permission.reason.trim().length < MIN_JUSTIFICATION_REASON_LENGTH) {
+      return { ok: false, error: `El motivo del permiso debe tener al menos ${MIN_JUSTIFICATION_REASON_LENGTH} caracteres.` };
+    }
+    const expectedExit = scheduleForDate(personal.schedule, date)?.exit ?? record.expectedExit;
+    const tipo = resolvePersonalDepartureType(time, expectedExit, Boolean(permission));
+    const authorized = tipo === 'Autorizada';
     const { data, error } = await supabase
       .from('registros_llegada_personal')
       .update({
         hora_salida: time,
         tipo_salida: tipo,
+        hora_salida_esperada: expectedExit,
         registrado_salida_por: userId ?? null,
         fecha_salida: new Date().toISOString(),
+        ...(authorized
+          ? {
+              motivo_salida: permission?.reason.trim(),
+              salida_autorizada_por: userId ?? null,
+              fecha_autorizacion_salida: new Date().toISOString(),
+            }
+          : {}),
       })
       .eq('id_registro', record.id)
       .is('hora_salida', null)
@@ -177,6 +202,31 @@ export const personalAttendanceService = {
       if (rows.length < pageSize) break;
     }
     return { records: all, error: null };
+  },
+
+  /** Autoriza después una salida anticipada (pasa de "sin autorización" a "autorizada"). */
+  async authorizeEarlyDeparture(
+    recordId: number,
+    userId: number,
+    reason: string,
+  ): Promise<{ success: boolean; error: string | null }> {
+    if (reason.trim().length < MIN_JUSTIFICATION_REASON_LENGTH) {
+      return { success: false, error: `El motivo debe tener al menos ${MIN_JUSTIFICATION_REASON_LENGTH} caracteres.` };
+    }
+    const { data, error } = await supabase
+      .from('registros_llegada_personal')
+      .update({
+        tipo_salida: 'Autorizada',
+        motivo_salida: reason.trim(),
+        salida_autorizada_por: userId,
+        fecha_autorizacion_salida: new Date().toISOString(),
+      })
+      .eq('id_registro', recordId)
+      .eq('tipo_salida', 'Anticipada')
+      .select('id_registro');
+    if (error) return { success: false, error: error.message };
+    if (!data?.length) return { success: false, error: 'La salida ya no está como anticipada sin autorización.' };
+    return { success: true, error: null };
   },
 
   async justifyTardiness(

@@ -29,6 +29,8 @@ import { PersonalRegisterIncident } from "./pages/personal/PersonalRegisterIncid
 import { PersonalIncidentReport } from "./pages/personal/PersonalIncidentReport";
 import { PersonalAttendanceReport } from "./pages/personal/PersonalAttendanceReport";
 import { PersonalIntegralReport } from "./pages/personal/PersonalIntegralReport";
+import { PersonalLostTimeReport } from "./pages/personal/PersonalLostTimeReport";
+import { PersonalPromotoria } from "./pages/personal/PersonalPromotoria";
 import { AttendanceReport } from "./pages/AttendanceReport";
 import { IntegralStudentReport } from "./pages/IntegralStudentReport";
 import { ArrivalControl } from "./pages/ArrivalControl";
@@ -47,7 +49,9 @@ import { isPensionesEnabled } from "./config/features";
 /** Staff con panel completo (sin Cajero). */
 const FULL_STAFF = ['Supervisor', 'Director', 'Admin'] as const;
 /** Shell compartido: incluye Cajero (solo rutas anidadas que lo permitan). */
-const STAFF_SHELL = ['Supervisor', 'Director', 'Admin', 'Cajero'] as const;
+const STAFF_SHELL = ['Supervisor', 'Director', 'Admin', 'Cajero', 'RRHH'] as const;
+/** Recursos Humanos: único rol que maneja la sección Personal. */
+const RRHH_ROLES = ['RRHH'] as const;
 const DIRECTOR_ADMIN = ['Director', 'Admin'] as const;
 const PENSIONES_ROLES = ['Director', 'Admin', 'Cajero'] as const;
 const SYSTEM_CONFIG_ROLES = ['Admin', 'Cajero'] as const;
@@ -163,7 +167,7 @@ const AppContent = () => {
         <Route
           path="/personal"
           element={
-            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+            <ProtectedRoute requiredRole={[...RRHH_ROLES]}>
               <PersonalList />
             </ProtectedRoute>
           }
@@ -171,7 +175,7 @@ const AppContent = () => {
         <Route
           path="/personal/llegadas"
           element={
-            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+            <ProtectedRoute requiredRole={[...RRHH_ROLES]}>
               <PersonalArrivalControl />
             </ProtectedRoute>
           }
@@ -179,7 +183,7 @@ const AppContent = () => {
         <Route
           path="/personal/salidas"
           element={
-            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+            <ProtectedRoute requiredRole={[...RRHH_ROLES]}>
               <PersonalDepartureControl />
             </ProtectedRoute>
           }
@@ -187,7 +191,7 @@ const AppContent = () => {
         <Route
           path="/personal/justificar"
           element={
-            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+            <ProtectedRoute requiredRole={[...RRHH_ROLES]}>
               <PersonalJustifyAttendance />
             </ProtectedRoute>
           }
@@ -195,7 +199,7 @@ const AppContent = () => {
         <Route
           path="/personal/incidencias"
           element={
-            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+            <ProtectedRoute requiredRole={[...RRHH_ROLES]}>
               <PersonalIncidentsList />
             </ProtectedRoute>
           }
@@ -203,7 +207,7 @@ const AppContent = () => {
         <Route
           path="/personal/registrar-incidencia"
           element={
-            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+            <ProtectedRoute requiredRole={[...RRHH_ROLES]}>
               <PersonalRegisterIncident />
             </ProtectedRoute>
           }
@@ -211,7 +215,7 @@ const AppContent = () => {
         <Route
           path="/personal/reporte-incidencias"
           element={
-            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+            <ProtectedRoute requiredRole={[...RRHH_ROLES]}>
               <PersonalIncidentReport />
             </ProtectedRoute>
           }
@@ -219,7 +223,7 @@ const AppContent = () => {
         <Route
           path="/personal/reporte-asistencias"
           element={
-            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+            <ProtectedRoute requiredRole={[...RRHH_ROLES]}>
               <PersonalAttendanceReport />
             </ProtectedRoute>
           }
@@ -227,8 +231,24 @@ const AppContent = () => {
         <Route
           path="/personal/reporte-integral"
           element={
-            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+            <ProtectedRoute requiredRole={[...RRHH_ROLES]}>
               <PersonalIntegralReport />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/personal/horas"
+          element={
+            <ProtectedRoute requiredRole={[...RRHH_ROLES]}>
+              <PersonalLostTimeReport />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/personal/promotoria"
+          element={
+            <ProtectedRoute requiredRole={[...RRHH_ROLES]}>
+              <PersonalPromotoria />
             </ProtectedRoute>
           }
         />

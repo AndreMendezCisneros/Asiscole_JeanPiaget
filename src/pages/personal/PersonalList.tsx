@@ -17,7 +17,6 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   Dialog,
@@ -41,6 +40,8 @@ import { PageLoader } from '@/components/ui/page-loader';
 import { StudentPhoto } from '@/components/shared/StudentPhoto';
 import { ScheduleEditor } from '@/components/personal/ScheduleEditor';
 import { PersonalImportDialog } from '@/components/personal/PersonalImportDialog';
+import { DeactivatePersonalDialog } from '@/components/personal/DeactivatePersonalDialog';
+import { BulkScheduleDialog } from '@/components/personal/BulkScheduleDialog';
 import { studentsService } from '@/lib/services';
 import { personalService } from '@/lib/services/personalService';
 import { formatScheduleSummary, validateSchedule } from '@/lib/utils/personalSchedule';
@@ -109,6 +110,9 @@ export const PersonalList = () => {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [toDeactivate, setToDeactivate] = useState<Personal | null>(null);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
 
   const load = useCallback(async (silent = false) => {
     if (silent) setRefreshing(true);
@@ -149,7 +153,7 @@ export const PersonalList = () => {
     return {
       active: active.length,
       inactive: personal.length - active.length,
-      withoutSchedule: active.filter((p) => p.schedule.length === 0).length,
+      withoutSchedule: active.filter((p) => p.schedule.length === 0 || p.schedule.some((h) => !h.exit)).length,
       categories: new Set(active.map((p) => p.category)).size,
     };
   }, [personal]);
@@ -217,13 +221,17 @@ export const PersonalList = () => {
     }
   };
 
-  const toggleActive = async (p: Personal) => {
-    const { error } = await personalService.update(p.id, { active: !p.active });
+  /** Activar es directo; desactivar pasa por la doble confirmación. */
+  const setActive = async (p: Personal, active: boolean) => {
+    setTogglingId(p.id);
+    const { error } = await personalService.update(p.id, { active });
+    setTogglingId(null);
     if (error) {
       toast.error(error);
       return;
     }
-    toast.success(p.active ? 'Empleado desactivado' : 'Empleado activado');
+    toast.success(active ? 'Empleado activado' : 'Empleado desactivado');
+    setToDeactivate(null);
     void load(true);
   };
 
@@ -239,6 +247,10 @@ export const PersonalList = () => {
         accent="info"
       >
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setBulkOpen(true)} disabled={personal.length === 0}>
+            <CalendarClock className="mr-2 h-4 w-4" />
+            Aplicar horario a varios
+          </Button>
           <Button variant="outline-primary" onClick={() => setImportOpen(true)}>
             <FileSpreadsheet className="mr-2 h-4 w-4" />
             Importar Excel
@@ -253,9 +265,9 @@ export const PersonalList = () => {
       <div className="app-kpi-grid !grid-cols-2 sm:!grid-cols-4">
         <StaffKpiStat label="Activos" value={stats.active} hint="Empleados en planilla" icon={UserCheck} tone="info" />
         <StaffKpiStat
-          label="Sin horario"
+          label="Horario incompleto"
           value={stats.withoutSchedule}
-          hint="No se les controla asistencia"
+          hint="Sin horario o sin hora de salida"
           icon={CalendarClock}
           tone={stats.withoutSchedule > 0 ? 'warning' : 'success'}
         />
@@ -390,7 +402,8 @@ export const PersonalList = () => {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => void toggleActive(p)}
+                              onClick={() => (p.active ? setToDeactivate(p) : void setActive(p, true))}
+                              disabled={togglingId === p.id}
                               aria-label={p.active ? `Desactivar ${p.fullName}` : `Activar ${p.fullName}`}
                               title={p.active ? 'Desactivar' : 'Activar'}
                             >
@@ -515,12 +528,6 @@ export const PersonalList = () => {
               <Label htmlFor="p-address">Dirección</Label>
               <Input id="p-address" value={form.address ?? ''} onChange={(e) => patch({ address: e.target.value })} />
             </div>
-            {editing && (
-              <label className="flex items-center gap-3 text-sm font-medium sm:col-span-2">
-                <Switch checked={form.active ?? true} onCheckedChange={(checked) => patch({ active: checked })} />
-                Activo (si está inactivo no se escanea ni se le marcan faltas)
-              </label>
-            )}
             <div className="space-y-2 sm:col-span-2">
               <Label>Horario semanal</Label>
               <ScheduleEditor value={form.schedule} onChange={(schedule) => patch({ schedule })} />
@@ -540,6 +547,13 @@ export const PersonalList = () => {
       </Dialog>
 
       <PersonalImportDialog open={importOpen} onOpenChange={setImportOpen} onImported={() => void load(true)} />
+      <BulkScheduleDialog open={bulkOpen} onOpenChange={setBulkOpen} personal={personal} onApplied={() => void load(true)} />
+      <DeactivatePersonalDialog
+        personal={toDeactivate}
+        busy={togglingId !== null}
+        onCancel={() => setToDeactivate(null)}
+        onConfirm={(p) => void setActive(p, false)}
+      />
     </div>
   );
 };

@@ -37,7 +37,7 @@ import { TABLE_PAGE_SIZE } from '@/lib/constants/tablePagination';
 import { getLimaNow } from '@/lib/utils/limaDateTime';
 import { MIN_JUSTIFICATION_REASON_LENGTH } from '@/lib/utils/attendanceJustification';
 import { scheduleForDate } from '@/lib/utils/personalSchedule';
-import { dateKeysBetween, monthStartOf, PERSONAL_STATUS_BADGE } from '@/lib/utils/personalAttendanceRows';
+import { dateKeysBetween, monthStartOf, PERSONAL_STATUS_BADGE, PERSONAL_STATUS_LABEL } from '@/lib/utils/personalAttendanceRows';
 import type { Personal, PersonalArrivalRecord } from '@/types/personal';
 
 type Kind = 'tardanza' | 'inasistencia';
@@ -80,7 +80,7 @@ export const PersonalJustifyAttendance = () => {
       if (r.status === 'Tarde') {
         items.push({ key: `t-${r.id}`, personal: p, date: r.date, kind: 'tardanza', record: r, label: `Tarde · ${r.arrivalTime} (entrada ${r.expectedEntry})` });
       } else if (r.status === 'Falta') {
-        items.push({ key: `f-${r.id}`, personal: p, date: r.date, kind: 'inasistencia', record: r, label: 'Inasistencia (cierre del día)' });
+        items.push({ key: `f-${r.id}`, personal: p, date: r.date, kind: 'inasistencia', record: r, label: r.arrivalTime ? `Inasistencia · llegó ${r.arrivalTime}, después de su salida` : 'Inasistencia (no marcó)' });
       }
     }
     // Días que le tocaban, ya pasados, sin ningún registro (antes de que corra el cierre).
@@ -255,7 +255,7 @@ export const PersonalJustifyAttendance = () => {
                               <p className="text-xs text-muted-foreground">{p.category}</p>
                             </TableCell>
                             <TableCell>
-                              <Badge variant={PERSONAL_STATUS_BADGE[record.status]}>{record.status}</Badge>
+                              <Badge variant={PERSONAL_STATUS_BADGE[record.status]}>{PERSONAL_STATUS_LABEL[record.status]}</Badge>
                             </TableCell>
                             <TableCell className="max-w-xs text-sm">{record.justificationReason ?? '—'}</TableCell>
                           </TableRow>

@@ -11,6 +11,7 @@ interface ScheduleEditorProps {
 }
 
 const DEFAULT_ENTRY = '07:30';
+const DEFAULT_EXIT = '15:00';
 
 /**
  * Horario semanal del empleado: se marca cada día que asiste con su hora de
@@ -25,7 +26,7 @@ export const ScheduleEditor = ({ value, onChange, disabled }: ScheduleEditorProp
       onChange(others);
       return;
     }
-    const current = byDay.get(day) ?? { day, entry: DEFAULT_ENTRY, exit: null };
+    const current = byDay.get(day) ?? { day, entry: DEFAULT_ENTRY, exit: DEFAULT_EXIT };
     onChange([...others, { ...current, ...patch, day }].sort((a, b) => a.day - b.day));
   };
 
@@ -41,7 +42,7 @@ export const ScheduleEditor = ({ value, onChange, disabled }: ScheduleEditorProp
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
-          Marque los días que asiste. Tarde = un minuto después de su hora de entrada.
+          Marque los días que asiste con su hora de entrada y de salida (obligatoria). Tarde = un minuto después de su entrada.
         </p>
         <Button
           type="button"

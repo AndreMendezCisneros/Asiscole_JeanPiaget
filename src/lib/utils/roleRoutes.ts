@@ -1,6 +1,6 @@
 import type { UserRole } from '@/types';
 
-const STAFF_ROLES: UserRole[] = ['Supervisor', 'Director', 'Admin', 'Cajero'];
+const STAFF_ROLES: UserRole[] = ['Supervisor', 'Director', 'Admin', 'Cajero', 'RRHH'];
 
 export function getHomeRouteForRole(role: UserRole): string {
   switch (role) {
@@ -12,6 +12,8 @@ export function getHomeRouteForRole(role: UserRole): string {
       return '/parent-portal';
     case 'Cajero':
       return '/pensiones';
+    case 'RRHH':
+      return '/personal';
     default:
       return '/dashboard';
   }

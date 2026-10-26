@@ -1,5 +1,10 @@
 // Tipos que coinciden con el esquema de la base de datos
-export type UserRole = 'Supervisor' | 'Tutor' | 'Director' | 'Admin' | 'Padre' | 'Cajero';
+export type UserRole = 'Supervisor' | 'Tutor' | 'Director' | 'Admin' | 'Padre' | 'Cajero' | 'RRHH';
+
+/** Nombre visible del rol (RRHH → "RR.HH."). */
+export function roleLabel(role?: string | null): string {
+  return role === 'RRHH' ? 'RR.HH.' : role ?? '';
+}
 export type EducationalLevel = 'Primaria' | 'Secundaria';
 
 export type ReincidenceLevel = 0 | 1 | 2 | 3 | 4 | 5;

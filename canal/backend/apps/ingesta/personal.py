@@ -73,6 +73,13 @@ def redactar(tipo: str, p: dict[str, Any]) -> str:
         estado = str(p.get("estado") or "").strip()
         esperada = _hhmm(p.get("hora_esperada"))
         if estado == "Falta":
+            if hora and hora != "00:00":
+                salida = _hhmm(p.get("hora_salida_esperada"))
+                limite = f" ({salida})" if salida else ""
+                return (
+                    f"Personal: {quien} llegó a las {hora}, después de su hora de salida{limite}. "
+                    "Quedó como inasistencia."
+                )
             return f"Personal: {quien} no registró ingreso el {fecha}; quedó como inasistencia."
         if estado == "Tarde":
             return (
@@ -88,9 +95,9 @@ def redactar(tipo: str, p: dict[str, Any]) -> str:
         tipo_salida = str(p.get("tipo_salida") or "").strip()
         esperada = _hhmm(p.get("hora_salida_esperada"))
         if tipo_salida == "Anticipada":
-            return f"Personal: {quien} salió a las {hora}, antes de su hora de salida ({esperada})."
+            return f"Personal: {quien} salió a las {hora}, antes de su hora de salida ({esperada}), sin autorización."
         if tipo_salida == "Autorizada":
-            return f"Personal: {quien} salió a las {hora} con permiso."
+            return f"Personal: {quien} salió a las {hora}, antes de su hora de salida, con permiso."
         return f"Personal: {quien} salió a las {hora}."
 
     falta = str(p.get("nombre_falta") or "").strip() or "falta"
@@ -114,10 +121,10 @@ def crear_mensajes_personal(
     """Crea un mensaje por cuenta de Promotoría (idempotente por origen)."""
     tipo = (tipo or "").strip().lower()
     texto = redactar(tipo, payload)
-    # El estado va en el origen: una "Falta" del cierre corregida luego con la
-    # llegada real genera un segundo aviso, no se descarta como duplicado.
+    # Estado y hora van en el origen: una "Falta" automática corregida luego con
+    # la llegada real genera un segundo aviso, no se descarta como duplicado.
     estado = str(payload.get("estado") or payload.get("tipo_salida") or "").strip()
-    origen = f"{tipo}:{int(id_registro)}:{estado}"
+    origen = f"{tipo}:{int(id_registro)}:{estado}:{_hhmm(payload.get('hora'))}"
     metadata = {
         "tipo": TIPO_AVISO,
         "tenant_id": tenant_id,

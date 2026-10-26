@@ -27,7 +27,7 @@ def test_salida_anticipada():
         "personal_salida",
         {"nombre_completo": "PEREZ, Ana", "hora": "12:00", "tipo_salida": "Anticipada", "hora_salida_esperada": "13:00"},
     )
-    assert "antes de su hora de salida (13:00)" in texto
+    assert "antes de su hora de salida (13:00), sin autorización" in texto
 
 
 def test_incidencia_grave():
@@ -36,3 +36,11 @@ def test_incidencia_grave():
         {"nombre_completo": "PEREZ, Ana", "nombre_falta": "Falta", "es_grave": True, "observaciones": "Sin aviso"},
     )
     assert "incidencia grave" in texto and "Observaciones: Sin aviso" in texto
+
+
+def test_llego_despues_de_su_salida():
+    texto = redactar(
+        "personal_entrada",
+        {"nombre_completo": "PEREZ, Ana", "hora": "15:40", "hora_salida_esperada": "15:30", "estado": "Falta"},
+    )
+    assert "después de su hora de salida (15:30)" in texto and "inasistencia" in texto

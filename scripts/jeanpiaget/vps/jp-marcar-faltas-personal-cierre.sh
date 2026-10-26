@@ -1,30 +1,23 @@
 #!/usr/bin/env bash
-# Cron: marca inasistencias del PERSONAL al cierre del día (America/Lima).
-# Solo a quien tenía horario ese día y no registró llegada; omite feriados
-# (calendario_no_lectivo). Idempotente: corre cada 30 min por la noche.
+# Cron (cada 10 min): inasistencias automáticas del PERSONAL.
+#  * Hoy: quien tenía horario y no marcó pasados N min de su entrada
+#    (configuracion_sistema.personal_minutos_inasistencia, por defecto 120).
+#  * Ayer: cierre completo del día (por si el cron no corrió).
+# Omite feriados (calendario_no_lectivo). Idempotente.
 set -euo pipefail
-export TZ=America/Lima
-TODAY=$(date +%F)
-HOUR=$(date +%H%M)
-# Después del cierre (20:00) y antes de medianoche
-if [[ "$HOUR" < "2030" ]]; then
-  echo "skip hour=$HOUR"
-  exit 0
-fi
 
-docker exec -i asiscole_canal_backend python <<PY
+docker exec -i asiscole_canal_backend python <<'PY'
 import os
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 import django
 django.setup()
 from django.db import connections
 from config.db_router import tenant_alias
-from datetime import date
 alias = tenant_alias('jean_piaget')
-d = date.fromisoformat('${TODAY}')
 with connections[alias].cursor() as cur:
-    cur.execute('SELECT * FROM sie_jp_marcar_faltas_personal_dia(%s)', [d])
+    cur.execute('SELECT * FROM sie_jp_marcar_faltas_personal_pendientes()')
     row = cur.fetchone()
-    print('fecha', d, 'personal_marcado', row[0], 'incidencias', row[1])
+    if row[0] or row[1]:
+        print('personal_marcado', row[0], 'incidencias', row[1])
 connections[alias].commit()
 PY

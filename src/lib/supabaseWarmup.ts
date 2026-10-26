@@ -40,6 +40,13 @@ async function runWarmup(): Promise<void> {
     return;
   }
 
+  // RR.HH. solo usa las tablas del personal.
+  if (role === 'RRHH') {
+    const { error } = await supabase.from('personal').select('id_personal').limit(1);
+    if (error) throw new Error(error.message);
+    return;
+  }
+
   // 1) Ping mínimo con token RLS (misma ruta que login/sesión)
   const ping = await supabase
     .from('catalogo_faltas')

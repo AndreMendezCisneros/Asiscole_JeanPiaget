@@ -31,6 +31,7 @@ function rec(date: string, status: PersonalArrivalRecord['status'], extra: Parti
     departureTime: null,
     departureType: null,
     justificationReason: null,
+    departureReason: null,
     registeredBy: 1,
     ...extra,
   } satisfies PersonalArrivalRecord;

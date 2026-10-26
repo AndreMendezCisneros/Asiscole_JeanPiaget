@@ -101,6 +101,17 @@ import { scheduleForDate } from '@/lib/utils/personalSchedule';
 import type { Personal, PersonalArrivalRecord } from '@/types/personal';
 
 const NAME_SEARCH_SCROLL_AFTER = 8;
+
+/** Texto del registro de un empleado en el escáner. */
+function personalScanLabel(action: 'arrival' | 'departure', record: PersonalArrivalRecord): string {
+  if (action === 'departure') {
+    if (record.departureType === 'Anticipada') return 'Salida anticipada (sin autorización)';
+    if (record.departureType === 'Autorizada') return 'Salida anticipada autorizada';
+    return 'Salida';
+  }
+  if (record.status === 'Falta') return 'Inasistencia (llegó después de su salida)';
+  return record.status;
+}
 /** Libera inFlight si la red cuelga (evita “Registrando…” eterno). */
 const IN_FLIGHT_SAFETY_MS = 20_000;
 
@@ -1125,12 +1136,7 @@ export const TutorScanner = () => {
           setPersonalProfile({ personal: found, record, action });
           bumpProfileIdleRef.current();
         }
-        const status =
-          action === 'departure'
-            ? record.departureType === 'Anticipada'
-              ? 'Salida anticipada'
-              : 'Salida'
-            : record.status;
+        const status = personalScanLabel(action, record);
         const time = (action === 'departure' ? record.departureTime : record.arrivalTime) ?? nowHHMM;
         if (duplicate) {
           toast.info(
@@ -2130,13 +2136,9 @@ export const TutorScanner = () => {
               const { personal: staff, record, action } = personalProfile;
               const horarioHoy = scheduleForDate(staff.schedule, record.date);
               const warn =
-                (action === 'arrival' && record.status === 'Tarde') || record.departureType === 'Anticipada';
-              const statusLabel =
-                action === 'departure'
-                  ? record.departureType === 'Anticipada'
-                    ? 'Salida anticipada'
-                    : 'Salida'
-                  : record.status;
+                (action === 'arrival' && (record.status === 'Tarde' || record.status === 'Falta')) ||
+                record.departureType === 'Anticipada';
+              const statusLabel = personalScanLabel(action, record);
               const timeLabel =
                 (action === 'departure' ? record.departureTime : record.arrivalTime) ?? '—:—';
               return (

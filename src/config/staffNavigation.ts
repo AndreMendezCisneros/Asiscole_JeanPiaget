@@ -67,7 +67,7 @@ const ALL_STAFF_NAV_ITEMS: StaffNavItem[] = [
     path: '/personal',
     label: 'Personal',
     icon: Briefcase,
-    roles: ['Supervisor', 'Director', 'Admin'],
+    roles: ['RRHH'],
     subItems: [
       { path: '/personal', label: 'Gestión de Personal' },
       { path: '/personal/llegadas', label: 'Control de Llegadas' },
@@ -78,6 +78,8 @@ const ALL_STAFF_NAV_ITEMS: StaffNavItem[] = [
       { path: '/personal/reporte-incidencias', label: 'Reporte de Incidencias' },
       { path: '/personal/reporte-asistencias', label: 'Reporte de Asistencias' },
       { path: '/personal/reporte-integral', label: 'Reporte Integral' },
+      { path: '/personal/horas', label: 'Horas no trabajadas' },
+      { path: '/personal/promotoria', label: 'Promotoría (avisos)' },
     ],
   },
   {

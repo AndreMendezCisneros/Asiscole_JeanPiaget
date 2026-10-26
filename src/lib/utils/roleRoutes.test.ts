@@ -31,3 +31,21 @@ describe('staffNavigation Cajero', () => {
     expect(admin?.subItems?.map((s) => s.label)).toEqual(['Auditoría', 'Configuración']);
   });
 });
+
+describe('rol RR.HH.', () => {
+  it('es staff, entra a /personal y no a estudiantes', () => {
+    expect(isStaffRole('RRHH')).toBe(true);
+    expect(getHomeRouteForRole('RRHH')).toBe('/personal');
+    expect(canAccessStaffRoute('RRHH', ['RRHH'])).toBe(true);
+    expect(canAccessStaffRoute('RRHH', ['Supervisor', 'Director', 'Admin'])).toBe(false);
+    expect(canAccessStaffRoute('Admin', ['RRHH'])).toBe(false);
+  });
+
+  it('solo RR.HH. ve el menú Personal', () => {
+    expect(getStaffNavItems('RRHH').map((i) => i.label)).toEqual(['Personal']);
+    expect(getStaffNavItems('Admin').some((i) => i.label === 'Personal')).toBe(false);
+    const subs = getStaffNavItems('RRHH')[0].subItems?.map((s) => s.path) ?? [];
+    expect(subs).toContain('/personal/horas');
+    expect(subs).toContain('/personal/promotoria');
+  });
+});

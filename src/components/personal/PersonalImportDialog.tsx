@@ -33,7 +33,7 @@ const MAX_BYTES = 8 * 1024 * 1024;
 const DEFAULT_SCHEDULE: HorarioDia[] = ([1, 2, 3, 4, 5] as DiaSemana[]).map((day) => ({
   day,
   entry: '07:30',
-  exit: null,
+  exit: '15:00',
 }));
 
 export const PersonalImportDialog = ({ open, onOpenChange, onImported }: PersonalImportDialogProps) => {

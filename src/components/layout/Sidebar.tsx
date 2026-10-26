@@ -1,3 +1,4 @@
+import { roleLabel } from '@/types';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import {
@@ -252,7 +253,7 @@ export const Sidebar = () => {
               <p className="truncate text-sm font-medium text-sidebar-foreground">
                 {user?.fullName}
               </p>
-              <p className="truncate text-[11px] text-sidebar-foreground/55">{user?.role}</p>
+              <p className="truncate text-[11px] text-sidebar-foreground/55">{roleLabel(user?.role)}</p>
             </div>
           </div>
           <Button

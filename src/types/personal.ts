@@ -94,6 +94,8 @@ export interface PersonalArrivalRecord {
   departureTime: string | null;
   departureType: PersonalDepartureType | null;
   justificationReason: string | null;
+  /** Motivo de la salida anticipada autorizada. */
+  departureReason: string | null;
   registeredBy: number | null;
 }
 

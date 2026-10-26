@@ -28,6 +28,7 @@ import { TABLE_PAGE_SIZE } from '@/lib/constants/tablePagination';
 import { getLimaNow } from '@/lib/utils/limaDateTime';
 import {
   PERSONAL_STATUS_BADGE,
+  PERSONAL_STATUS_LABEL,
   buildPersonalDayRows,
   type PersonalDayRow,
   type PersonalDayStatus,
@@ -48,17 +49,17 @@ const STATUS_OPTIONS: PersonalDayStatus[] = [
 export const PersonalArrivalControl = () => {
   const now = getLimaNow();
   const [date, setDate] = useState(now.date);
-  const { personal, records, loading, refreshing, reload } = usePersonalAttendance(date, date);
+  const { personal, records, absenceAfterMin, loading, refreshing, reload } = usePersonalAttendance(date, date);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<CategoryFilter>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | PersonalDayStatus>('all');
   const [busyId, setBusyId] = useState<number | null>(null);
 
   const rows = useMemo(
-    () => buildPersonalDayRows(personal, records, date, now.date, now.time),
+    () => buildPersonalDayRows(personal, records, date, now.date, now.time, absenceAfterMin),
     // now cambia cada render; basta con recalcular al cambiar datos o fecha
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [personal, records, date],
+    [personal, records, date, absenceAfterMin],
   );
 
   const filtered = rows.filter(
@@ -73,7 +74,8 @@ export const PersonalArrivalControl = () => {
       expected: expected.length,
       onTime: rows.filter((r) => r.status === 'A tiempo').length,
       late: rows.filter((r) => r.status === 'Tarde' || r.status === 'Tarde justificada').length,
-      missing: rows.filter((r) => r.status === 'Sin llegada' || r.status === 'Falta').length,
+      pending: rows.filter((r) => r.status === 'Sin llegada').length,
+      missing: rows.filter((r) => r.status === 'Falta').length,
     };
   }, [rows]);
 
@@ -99,7 +101,7 @@ export const PersonalArrivalControl = () => {
       toast.error(result.error);
       return;
     }
-    toast.success(`${row.personal.fullName}: ${result.record.status} (${result.record.arrivalTime})`);
+    toast.success(`${row.personal.fullName}: ${PERSONAL_STATUS_LABEL[result.record.status]} (${result.record.arrivalTime})`);
     void reload(true);
   };
 
@@ -119,7 +121,13 @@ export const PersonalArrivalControl = () => {
         <StaffKpiStat label="Deben asistir" value={stats.expected} hint="Tienen horario ese día" icon={Clock} tone="info" />
         <StaffKpiStat label="A tiempo" value={stats.onTime} hint="Hasta su hora de entrada" icon={CheckCircle2} tone="success" />
         <StaffKpiStat label="Tarde" value={stats.late} hint="Desde el minuto siguiente" icon={AlertTriangle} tone="warning" />
-        <StaffKpiStat label="Sin llegada" value={stats.missing} hint="Debían asistir y no marcaron" icon={UserX} tone="accent" />
+        <StaffKpiStat
+          label="Inasistencias"
+          value={stats.missing}
+          hint={`${stats.pending} aún sin marcar · inasistencia a los ${absenceAfterMin} min`}
+          icon={UserX}
+          tone="accent"
+        />
       </div>
 
       <StaffToolbar title="Filtros" description="Fecha, nombre, categoría o estado">
@@ -139,7 +147,7 @@ export const PersonalArrivalControl = () => {
               <SelectItem value="all">Todos</SelectItem>
               {STATUS_OPTIONS.map((s) => (
                 <SelectItem key={s} value={s}>
-                  {s}
+                  {PERSONAL_STATUS_LABEL[s]}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -193,7 +201,7 @@ export const PersonalArrivalControl = () => {
                         </TableCell>
                         <TableCell className="font-mono text-sm">{row.record?.arrivalTime ?? '—'}</TableCell>
                         <TableCell>
-                          <Badge variant={PERSONAL_STATUS_BADGE[row.status]}>{row.status}</Badge>
+                          <Badge variant={PERSONAL_STATUS_BADGE[row.status]}>{PERSONAL_STATUS_LABEL[row.status]}</Badge>
                         </TableCell>
                         <TableCell>
                           {row.record?.arrivalTime ? (

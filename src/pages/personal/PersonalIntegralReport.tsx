@@ -15,7 +15,9 @@ import { personalService } from '@/lib/services/personalService';
 import { personalAttendanceService } from '@/lib/services/personalAttendanceService';
 import { personalIncidentsService, type PersonalIncident } from '@/lib/services/personalIncidentsService';
 import { getLimaTodayDate } from '@/lib/utils/limaDateTime';
-import { monthStartOf, PERSONAL_STATUS_BADGE } from '@/lib/utils/personalAttendanceRows';
+import { DEPARTURE_STATUS_LABEL, monthStartOf, PERSONAL_STATUS_BADGE, PERSONAL_STATUS_LABEL } from '@/lib/utils/personalAttendanceRows';
+import { computeLostTime, formatMinutes } from '@/lib/utils/personalLostTime';
+import { getLimaNow } from '@/lib/utils/limaDateTime';
 import { formatScheduleSummary } from '@/lib/utils/personalSchedule';
 import { formatLimaDateTime, summarizePersonalAttendance } from '@/lib/utils/personalReportStats';
 import { PdfReportDocument, buildFilterSubtitle } from '@/lib/utils/pdfReportBuilder';
@@ -72,6 +74,12 @@ export const PersonalIntegralReport = () => {
     [selected, records, from, to, today],
   );
   const activeIncidents = incidents.filter((i) => i.status !== 'Anulada');
+  const lost = useMemo(() => {
+    if (!selected) return null;
+    const now = getLimaNow();
+    return computeLostTime([selected], records, from, to, today, now.time)[0];
+     
+  }, [selected, records, from, to, today]);
 
   const exportPdf = async () => {
     if (!selected || !summary) return;
@@ -97,6 +105,13 @@ export const PersonalIntegralReport = () => {
       { label: 'Faltas', value: summary.absent + summary.noRecord, tone: 'error' },
       { label: 'Puntualidad', value: summary.punctuality == null ? '—' : `${summary.punctuality}%`, tone: 'info' },
     ]);
+    if (lost) {
+      doc.drawKeyValueList([
+        { label: 'Tiempo no trabajado (total)', value: formatMinutes(lost.lostTotalMin) },
+        { label: 'Justificado', value: formatMinutes(lost.lostJustifiedMin) },
+        { label: 'No trabajado sin justificar', value: formatMinutes(lost.lostNetMin) },
+      ]);
+    }
     doc.drawTable(
       [
         { header: 'Fecha', dataKey: 'fecha', width: 24 },
@@ -111,8 +126,8 @@ export const PersonalIntegralReport = () => {
         esperada: r.expectedEntry ?? '—',
         llego: r.arrivalTime ?? '—',
         salio: r.departureTime ? `${r.departureTime}${r.departureType === 'Anticipada' ? ' (antic.)' : ''}` : '—',
-        estado: r.status,
-        motivo: r.justificationReason ?? '',
+        estado: PERSONAL_STATUS_LABEL[r.status],
+        motivo: r.justificationReason ?? r.departureReason ?? '',
       })),
       { fontSize: 7.5 },
     );
@@ -218,6 +233,23 @@ export const PersonalIntegralReport = () => {
             <StaffKpiStat label="Incidencias" value={activeIncidents.length} hint={`Puntualidad ${summary.punctuality ?? '—'}%`} icon={FileText} tone="info" />
           </div>
 
+          {lost && (
+            <StaffDataPanel>
+              <StaffDataPanelHeader title="Tiempo no trabajado" description="Tardanzas, inasistencias (jornada completa) y salidas anticipadas" />
+              <div className="grid gap-3 p-4 pt-0 text-sm sm:grid-cols-3 sm:p-5 sm:pt-0">
+                <p>
+                  Total: <strong>{formatMinutes(lost.lostTotalMin)}</strong>
+                </p>
+                <p>
+                  Justificado: <strong>{formatMinutes(lost.lostJustifiedMin)}</strong>
+                </p>
+                <p>
+                  Sin justificar: <strong>{formatMinutes(lost.lostNetMin)}</strong>
+                </p>
+              </div>
+            </StaffDataPanel>
+          )}
+
           <StaffDataPanel>
             <StaffDataPanelHeader title={`Asistencia (${records.length} registros)`} />
             <div className="p-4 pt-0 sm:p-5 sm:pt-0">
@@ -244,16 +276,16 @@ export const PersonalIntegralReport = () => {
                           <TableCell className="font-mono text-sm">{r.arrivalTime ?? '—'}</TableCell>
                           <TableCell className="font-mono text-sm">
                             {r.departureTime ?? '—'}
-                            {r.departureType === 'Anticipada' && (
-                              <Badge variant="warning" className="ml-2">
-                                Anticipada
+                            {(r.departureType === 'Anticipada' || r.departureType === 'Autorizada') && (
+                              <Badge variant={r.departureType === 'Anticipada' ? 'destructive' : 'info'} className="ml-2">
+                                {DEPARTURE_STATUS_LABEL[r.departureType]}
                               </Badge>
                             )}
                           </TableCell>
                           <TableCell>
-                            <Badge variant={PERSONAL_STATUS_BADGE[r.status]}>{r.status}</Badge>
+                            <Badge variant={PERSONAL_STATUS_BADGE[r.status]}>{PERSONAL_STATUS_LABEL[r.status]}</Badge>
                           </TableCell>
-                          <TableCell className="max-w-xs text-sm">{r.justificationReason ?? ''}</TableCell>
+                          <TableCell className="max-w-xs text-sm">{r.justificationReason ?? r.departureReason ?? ''}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

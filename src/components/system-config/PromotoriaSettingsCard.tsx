@@ -49,14 +49,14 @@ export function PromotoriaSettingsCard() {
 
   const save = async () => {
     setSaving(true);
-    const { error } = await configService.upsertByKey({
-      key: PROMOTORIA_KEY,
-      value: [...selected].sort((a, b) => a - b).join(','),
-      description: 'IDs de usuarios que reciben en la app los avisos del personal',
+    const { data, error } = await supabase.rpc('sie_promotoria_guardar', {
+      p_token: sessionService.getApiToken(),
+      p_ids: [...selected].sort((a, b) => a - b),
     });
     setSaving(false);
-    if (error) {
-      toast.error(error);
+    const payload = data as { ok: boolean; error: string | null } | null;
+    if (error || !payload?.ok) {
+      toast.error(error?.message ?? payload?.error ?? 'No se pudo guardar');
       return;
     }
     toast.success('Promotoría guardada');

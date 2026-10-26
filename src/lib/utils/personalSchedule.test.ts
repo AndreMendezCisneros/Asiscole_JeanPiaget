@@ -33,13 +33,20 @@ describe('personalSchedule', () => {
     expect(resolvePersonalArrivalStatus('07:01', '07:00')).toBe('Tarde');
   });
 
+  it('tarde aunque sean horas, inasistencia si llega después de su salida', () => {
+    expect(resolvePersonalArrivalStatus('10:00', '07:00', '13:00')).toBe('Tarde');
+    expect(resolvePersonalArrivalStatus('13:00', '07:00', '13:00')).toBe('Tarde');
+    expect(resolvePersonalArrivalStatus('13:01', '07:00', '13:00')).toBe('Falta');
+  });
+
   it('día sin horario queda fuera de horario', () => {
     expect(resolvePersonalArrivalStatus('09:00', null)).toBe('Fuera de horario');
   });
 
-  it('detecta salida anticipada', () => {
+  it('detecta salida anticipada con o sin autorización', () => {
     expect(resolvePersonalDepartureType('12:59', '13:00')).toBe('Anticipada');
-    expect(resolvePersonalDepartureType('13:00', '13:00')).toBe('Normal');
+    expect(resolvePersonalDepartureType('12:59', '13:00', true)).toBe('Autorizada');
+    expect(resolvePersonalDepartureType('13:00', '13:00', true)).toBe('Normal');
     expect(resolvePersonalDepartureType('12:00', null)).toBe('Normal');
   });
 
@@ -53,6 +60,7 @@ describe('personalSchedule', () => {
   it('valida el horario', () => {
     expect(validateSchedule(horario)).toBeNull();
     expect(validateSchedule([{ day: 1, entry: '08:00', exit: '07:00' }])).toMatch(/posterior/);
-    expect(validateSchedule([{ day: 1, entry: '8:00', exit: null }])).toMatch(/entrada/);
+    expect(validateSchedule([{ day: 1, entry: '8:00', exit: '13:00' }])).toMatch(/entrada/);
+    expect(validateSchedule([{ day: 1, entry: '08:00', exit: null }])).toMatch(/salida/);
   });
 });

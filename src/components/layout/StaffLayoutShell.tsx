@@ -22,7 +22,7 @@ export function StaffLayoutShell({ requiredRole }: StaffLayoutShellProps) {
       const role = authService.getCurrentUser()?.role ?? null;
 
       // Cajero: warmup de pensiones (sin HEAD incidencias) + sin prefetch de faltas.
-      if (role === 'Cajero') {
+      if (role === 'Cajero' || role === 'RRHH') {
         await ensureSupabaseReady();
         return;
       }

@@ -23,25 +23,39 @@ export function scheduleForDate(schedule: HorarioDia[], dateKey: string): Horari
   return schedule.find((h) => h.day === day) ?? null;
 }
 
+/** Minutos sin marcar después de su entrada para quedar como inasistencia (configurable). */
+export const DEFAULT_ABSENCE_AFTER_MIN = 120;
+
+export function minutesOf(hhmm: string): number {
+  return toMinutes(hhmm);
+}
+
 /**
- * Estado de llegada: tarde desde el minuto siguiente a su hora de entrada.
- * Sin horario ese día → "Fuera de horario".
+ * Estado de llegada según el horario del día:
+ * ≤ entrada → A tiempo; después de su entrada → Tarde (aunque sean horas);
+ * después de su hora de salida → Falta (inasistencia); sin horario → Fuera de horario.
  */
 export function resolvePersonalArrivalStatus(
   arrivalTime: string,
   expectedEntry: string | null,
+  expectedExit: string | null = null,
 ): PersonalArrivalEstado {
   if (!expectedEntry) return 'Fuera de horario';
+  if (expectedExit && toMinutes(arrivalTime) > toMinutes(expectedExit)) return 'Falta';
   return toMinutes(arrivalTime) <= toMinutes(expectedEntry) ? 'A tiempo' : 'Tarde';
 }
 
-/** Salida antes de su hora de salida → "Anticipada". */
+/**
+ * Salida antes de su hora de salida → "Anticipada" (sin autorización) o
+ * "Autorizada" si se registró con permiso. A su hora o después → "Normal".
+ */
 export function resolvePersonalDepartureType(
   departureTime: string,
   expectedExit: string | null,
+  withPermission = false,
 ): PersonalDepartureType {
-  if (!expectedExit) return 'Normal';
-  return toMinutes(departureTime) < toMinutes(expectedExit) ? 'Anticipada' : 'Normal';
+  if (!expectedExit || toMinutes(departureTime) >= toMinutes(expectedExit)) return 'Normal';
+  return withPermission ? 'Autorizada' : 'Anticipada';
 }
 
 /** Texto corto del horario semanal, p. ej. "Lun–Vie 07:30" o "Mar 07:00 · Mié 08:00". */
@@ -65,11 +79,10 @@ export function validateSchedule(schedule: HorarioDia[]): string | null {
     if (seen.has(h.day)) return 'Hay un día repetido en el horario.';
     seen.add(h.day);
     if (!timeRe.test(h.entry)) return 'Hora de entrada inválida.';
-    if (h.exit != null) {
-      if (!timeRe.test(h.exit)) return 'Hora de salida inválida.';
-      if (toMinutes(h.exit) <= toMinutes(h.entry)) {
-        return 'La hora de salida debe ser posterior a la de entrada.';
-      }
+    if (!h.exit) return 'Cada día marcado necesita su hora de salida.';
+    if (!timeRe.test(h.exit)) return 'Hora de salida inválida.';
+    if (toMinutes(h.exit) <= toMinutes(h.entry)) {
+      return 'La hora de salida debe ser posterior a la de entrada.';
     }
   }
   return null;

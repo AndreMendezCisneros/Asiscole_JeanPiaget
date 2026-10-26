@@ -7,7 +7,7 @@ import { getHomeRouteForRole } from '@/lib/utils/roleRoutes';
 import { ensureSupabaseReady } from '@/lib/supabaseWarmup';
 import { useErrorDialog } from '@/hooks/useErrorDialog';
 
-const STAFF_ROLES = new Set(['Supervisor', 'Director', 'Admin', 'Cajero']);
+const STAFF_ROLES = new Set(['Supervisor', 'Director', 'Admin', 'Cajero', 'RRHH']);
 
 export function useLoginForm() {
   const navigate = useNavigate();
