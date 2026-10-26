@@ -14,7 +14,7 @@ import {
 } from '@/components/staff';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { PageLoader } from '@/components/ui/page-loader';
-import { PersonalCategorySelect, PersonalSearchField } from '@/components/personal/PersonalFilters';
+import { PersonalCategorySelect, PersonalEmployeeFilter, PersonalSearchField } from '@/components/personal/PersonalFilters';
 import { matchesPersonalFilter, type CategoryFilter } from '@/lib/utils/personalFilter';
 import { usePersonalAttendance } from '@/hooks/usePersonalAttendance';
 import { useTablePagination } from '@/hooks/useTablePagination';
@@ -46,17 +46,18 @@ export const PersonalAttendanceReport = () => {
   const { personal, records, loading, refreshing, reload } = usePersonalAttendance(from, to);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<CategoryFilter>('all');
+  const [employeeId, setEmployeeId] = useState<number | null>(null);
 
   const summary = useMemo(
     () =>
       summarizePersonalAttendance(
-        personal.filter((p) => matchesPersonalFilter(p, search, category)),
+        personal.filter((p) => matchesPersonalFilter(p, search, category, employeeId)),
         records,
         from,
         to,
         today,
       ),
-    [personal, records, from, to, today, search, category],
+    [personal, records, from, to, today, search, category, employeeId],
   );
   const totals = totalsOf(summary);
 
@@ -65,7 +66,7 @@ export const PersonalAttendanceReport = () => {
 
   useEffect(() => {
     resetPage();
-  }, [search, category, from, to]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, category, employeeId, from, to]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pageRows = summary.slice((page - 1) * pageSize, page * pageSize);
   const subtitle = buildFilterSubtitle([`Del ${from} al ${to}`, category !== 'all' && category]);
@@ -188,6 +189,7 @@ export const PersonalAttendanceReport = () => {
           <Input id="par-to" type="date" value={to} min={from} onChange={(e) => setTo(e.target.value || to)} />
         </div>
         <PersonalSearchField id="par-search" value={search} onChange={setSearch} />
+        <PersonalEmployeeFilter employees={personal} value={employeeId} onChange={setEmployeeId} />
         <PersonalCategorySelect value={category} onChange={setCategory} />
         <div className="flex items-end">
           <Button variant="outline" onClick={() => void reload(true)} className="w-full" disabled={refreshing}>

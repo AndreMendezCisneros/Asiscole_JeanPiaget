@@ -18,7 +18,7 @@ import {
 import { PageHeader } from '@/components/layout/PageHeader';
 import { PageLoader } from '@/components/ui/page-loader';
 import { StudentPhoto } from '@/components/shared/StudentPhoto';
-import { PersonalCategorySelect, PersonalSearchField } from '@/components/personal/PersonalFilters';
+import { PersonalCategorySelect, PersonalEmployeeFilter, PersonalSearchField } from '@/components/personal/PersonalFilters';
 import { matchesPersonalFilter, type CategoryFilter } from '@/lib/utils/personalFilter';
 import { authService } from '@/lib/services';
 import { personalAttendanceService } from '@/lib/services/personalAttendanceService';
@@ -52,6 +52,7 @@ export const PersonalArrivalControl = () => {
   const { personal, records, absenceAfterMin, loading, refreshing, reload } = usePersonalAttendance(date, date);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<CategoryFilter>('all');
+  const [employeeId, setEmployeeId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | PersonalDayStatus>('all');
   const [busyId, setBusyId] = useState<number | null>(null);
 
@@ -64,7 +65,7 @@ export const PersonalArrivalControl = () => {
 
   const filtered = rows.filter(
     (r) =>
-      matchesPersonalFilter(r.personal, search, category) &&
+      matchesPersonalFilter(r.personal, search, category, employeeId) &&
       (statusFilter === 'all' || r.status === statusFilter),
   );
 
@@ -84,7 +85,7 @@ export const PersonalArrivalControl = () => {
 
   useEffect(() => {
     resetPage();
-  }, [search, category, statusFilter, date]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, category, employeeId, statusFilter, date]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
   const isToday = date === now.date;
@@ -136,6 +137,7 @@ export const PersonalArrivalControl = () => {
           <Input id="pa-date" type="date" value={date} max={now.date} onChange={(e) => setDate(e.target.value || now.date)} />
         </div>
         <PersonalSearchField id="pa-search" value={search} onChange={setSearch} />
+        <PersonalEmployeeFilter employees={personal} value={employeeId} onChange={setEmployeeId} />
         <PersonalCategorySelect value={category} onChange={setCategory} />
         <div className="space-y-2">
           <Label>Estado</Label>

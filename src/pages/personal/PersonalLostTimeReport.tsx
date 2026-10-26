@@ -27,7 +27,7 @@ import {
 } from '@/components/staff';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { PageLoader } from '@/components/ui/page-loader';
-import { PersonalCategorySelect, PersonalSearchField } from '@/components/personal/PersonalFilters';
+import { PersonalCategorySelect, PersonalEmployeeFilter, PersonalSearchField } from '@/components/personal/PersonalFilters';
 import { matchesPersonalFilter, type CategoryFilter } from '@/lib/utils/personalFilter';
 import { usePersonalAttendance } from '@/hooks/usePersonalAttendance';
 import { useTablePagination } from '@/hooks/useTablePagination';
@@ -62,13 +62,14 @@ export const PersonalLostTimeReport = () => {
   const { personal, records, absenceAfterMin, loading, refreshing, reload } = usePersonalAttendance(from, to);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<CategoryFilter>('all');
+  const [employeeId, setEmployeeId] = useState<number | null>(null);
   const [view, setView] = useState<LostTimeView>('total');
   const [expanded, setExpanded] = useState<number | null>(null);
 
   const summary = useMemo(
     () =>
       computeLostTime(
-        personal.filter((p) => matchesPersonalFilter(p, search, category)),
+        personal.filter((p) => matchesPersonalFilter(p, search, category, employeeId)),
         records,
         from,
         to,
@@ -77,7 +78,7 @@ export const PersonalLostTimeReport = () => {
         absenceAfterMin,
       ).sort((a, b) => lostFor(b, view) - lostFor(a, view) || a.personal.fullName.localeCompare(b.personal.fullName)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [personal, records, from, to, search, category, view, absenceAfterMin],
+    [personal, records, from, to, search, category, employeeId, view, absenceAfterMin],
   );
 
   const totals = useMemo(
@@ -102,7 +103,7 @@ export const PersonalLostTimeReport = () => {
 
   useEffect(() => {
     resetPage();
-  }, [search, category, from, to, view]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, category, employeeId, from, to, view]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pageRows = summary.slice((page - 1) * pageSize, page * pageSize);
   const subtitle = buildFilterSubtitle([`Del ${from} al ${to}`, category !== 'all' && category, VIEW_LABEL[view]]);
@@ -112,7 +113,7 @@ export const PersonalLostTimeReport = () => {
     categoria: s.personal.category,
     programado: formatMinutes(s.scheduledMin),
     tardanza: formatMinutes(s.lateMin),
-    inasistencia: `${formatMinutes(s.absenceMin)} (${s.absenceDays} d)`,
+    inasistencia: `${formatMinutes(s.absenceMin)} (${s.absenceDays} ${s.absenceDays === 1 ? 'día' : 'días'})`,
     anticipada: formatMinutes(s.earlyMin),
     justificado: formatMinutes(s.lostJustifiedMin),
     perdido: formatMinutes(lostFor(s, view)),
@@ -245,6 +246,7 @@ export const PersonalLostTimeReport = () => {
           <Input id="plt-to" type="date" value={to} min={from} onChange={(e) => setTo(e.target.value || to)} />
         </div>
         <PersonalSearchField id="plt-search" value={search} onChange={setSearch} />
+        <PersonalEmployeeFilter employees={personal} value={employeeId} onChange={setEmployeeId} />
         <PersonalCategorySelect value={category} onChange={setCategory} />
         <div className="flex items-end">
           <Button variant="outline" onClick={() => void reload(true)} className="w-full" disabled={refreshing}>
@@ -297,7 +299,7 @@ export const PersonalLostTimeReport = () => {
                                   <p className="text-xs text-muted-foreground">{s.personal.category}</p>
                                   {s.daysWithoutExit > 0 && (
                                     <Badge variant="outline" className="mt-1 border-warning text-warning">
-                                      {s.daysWithoutExit} días sin hora de salida
+                                      {s.daysWithoutExit} {s.daysWithoutExit === 1 ? 'día' : 'días'} sin hora de salida
                                     </Badge>
                                   )}
                                   {s.noDepartureDays > 0 && (
@@ -312,7 +314,7 @@ export const PersonalLostTimeReport = () => {
                             <TableCell className="text-center">{formatMinutes(s.lateMin)}</TableCell>
                             <TableCell className="text-center">
                               {formatMinutes(s.absenceMin)}
-                              {s.absenceDays > 0 && <span className="block text-xs text-muted-foreground">{s.absenceDays} días</span>}
+                              {s.absenceDays > 0 && <span className="block text-xs text-muted-foreground">{s.absenceDays} {s.absenceDays === 1 ? 'día' : 'días'}</span>}
                             </TableCell>
                             <TableCell className="text-center">{formatMinutes(s.earlyMin)}</TableCell>
                             <TableCell className="text-center text-muted-foreground">{formatMinutes(s.lostJustifiedMin)}</TableCell>

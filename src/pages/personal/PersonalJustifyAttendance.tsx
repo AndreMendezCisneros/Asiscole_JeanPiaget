@@ -27,7 +27,7 @@ import {
 } from '@/components/staff';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { PageLoader } from '@/components/ui/page-loader';
-import { PersonalCategorySelect, PersonalSearchField } from '@/components/personal/PersonalFilters';
+import { PersonalCategorySelect, PersonalEmployeeFilter, PersonalSearchField } from '@/components/personal/PersonalFilters';
 import { matchesPersonalFilter, type CategoryFilter } from '@/lib/utils/personalFilter';
 import { authService } from '@/lib/services';
 import { personalAttendanceService } from '@/lib/services/personalAttendanceService';
@@ -70,6 +70,8 @@ export const PersonalJustifyAttendance = () => {
   const [view, setView] = useState<'pending' | 'done'>('pending');
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<CategoryFilter>('all');
+  const [employeeId, setEmployeeId] = useState<number | null>(null);
+  const [kind, setKind] = useState<'all' | Kind>('all');
   const [target, setTarget] = useState<JustifyItem | null>(null);
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
@@ -121,8 +123,14 @@ export const PersonalJustifyAttendance = () => {
     [records, personal],
   );
 
-  const pendingFiltered = pending.filter((i) => matchesPersonalFilter(i.personal, search, category));
-  const doneFiltered = done.filter((i) => matchesPersonalFilter(i.personal, search, category));
+  const pendingFiltered = pending.filter(
+    (i) => matchesPersonalFilter(i.personal, search, category, employeeId) && (kind === 'all' || i.kind === kind),
+  );
+  const doneFiltered = done.filter(
+    (i) =>
+      matchesPersonalFilter(i.personal, search, category, employeeId) &&
+      (kind === 'all' || (kind === 'tardanza') === (i.record.status === 'Tarde justificada')),
+  );
   const listLength = view === 'pending' ? pendingFiltered.length : doneFiltered.length;
 
   const { page, pageSize, totalPages, goToPage, nextPage, prevPage, changePageSize, resetPage } =
@@ -130,7 +138,7 @@ export const PersonalJustifyAttendance = () => {
 
   useEffect(() => {
     resetPage();
-  }, [search, category, view, from, to]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, category, employeeId, kind, view, from, to]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const slice = <T,>(items: T[]) => items.slice((page - 1) * pageSize, page * pageSize);
 
@@ -194,7 +202,7 @@ export const PersonalJustifyAttendance = () => {
         <StaffKpiStat label="Justificadas" value={done.length} hint="En el rango" icon={CheckCircle2} tone="success" />
       </div>
 
-      <StaffToolbar title="Filtros" description="Rango de fechas, nombre o categoría">
+      <StaffToolbar title="Filtros" description="Rango de fechas, nombre, empleado, categoría o tipo">
         <div className="space-y-2">
           <Label htmlFor="pj-from">Desde</Label>
           <Input id="pj-from" type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value || from)} />
@@ -204,7 +212,21 @@ export const PersonalJustifyAttendance = () => {
           <Input id="pj-to" type="date" value={to} min={from} onChange={(e) => setTo(e.target.value || to)} />
         </div>
         <PersonalSearchField id="pj-search" value={search} onChange={setSearch} />
+        <PersonalEmployeeFilter employees={personal} value={employeeId} onChange={setEmployeeId} />
         <PersonalCategorySelect value={category} onChange={setCategory} />
+        <div className="space-y-2">
+          <Label>Tipo</Label>
+          <Select value={kind} onValueChange={(v) => setKind(v as typeof kind)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tardanzas e inasistencias</SelectItem>
+              <SelectItem value="tardanza">Solo tardanzas</SelectItem>
+              <SelectItem value="inasistencia">Solo inasistencias</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <div className="flex items-end">
           <Button variant="outline" onClick={() => void reload(true)} className="w-full" disabled={refreshing}>
             <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />

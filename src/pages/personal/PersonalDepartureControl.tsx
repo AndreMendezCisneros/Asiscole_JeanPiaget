@@ -27,7 +27,7 @@ import {
 import { PageHeader } from '@/components/layout/PageHeader';
 import { PageLoader } from '@/components/ui/page-loader';
 import { StudentPhoto } from '@/components/shared/StudentPhoto';
-import { PersonalCategorySelect, PersonalSearchField } from '@/components/personal/PersonalFilters';
+import { PersonalCategorySelect, PersonalEmployeeFilter, PersonalSearchField } from '@/components/personal/PersonalFilters';
 import { matchesPersonalFilter, type CategoryFilter } from '@/lib/utils/personalFilter';
 import { authService } from '@/lib/services';
 import { personalAttendanceService } from '@/lib/services/personalAttendanceService';
@@ -62,6 +62,7 @@ export const PersonalDepartureControl = () => {
   const { personal, records, loading, refreshing, reload } = usePersonalAttendance(date, date);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<CategoryFilter>('all');
+  const [employeeId, setEmployeeId] = useState<number | null>(null);
   const [filter, setFilter] = useState<DepartureFilter>('all');
   const [busyId, setBusyId] = useState<number | null>(null);
   const [target, setTarget] = useState<PermissionTarget | null>(null);
@@ -86,7 +87,7 @@ export const PersonalDepartureControl = () => {
   );
 
   const filtered = rows.filter(
-    (r) => matchesPersonalFilter(r.personal, search, category) && (filter === 'all' || r.departure === filter),
+    (r) => matchesPersonalFilter(r.personal, search, category, employeeId) && (filter === 'all' || r.departure === filter),
   );
 
   const stats = useMemo(
@@ -105,7 +106,7 @@ export const PersonalDepartureControl = () => {
 
   useEffect(() => {
     resetPage();
-  }, [search, category, filter, date]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, category, employeeId, filter, date]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
   const isToday = date === now.date;
@@ -179,6 +180,7 @@ export const PersonalDepartureControl = () => {
           <Input id="pd-date" type="date" value={date} max={now.date} onChange={(e) => setDate(e.target.value || now.date)} />
         </div>
         <PersonalSearchField id="pd-search" value={search} onChange={setSearch} />
+        <PersonalEmployeeFilter employees={personal} value={employeeId} onChange={setEmployeeId} />
         <PersonalCategorySelect value={category} onChange={setCategory} />
         <div className="space-y-2">
           <Label>Salida</Label>

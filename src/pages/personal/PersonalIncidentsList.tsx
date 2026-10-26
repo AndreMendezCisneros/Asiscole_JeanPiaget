@@ -26,7 +26,7 @@ import {
 } from '@/components/staff';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { PageLoader } from '@/components/ui/page-loader';
-import { PersonalCategorySelect, PersonalSearchField } from '@/components/personal/PersonalFilters';
+import { PersonalCategorySelect, PersonalEmployeeFilter, PersonalSearchField } from '@/components/personal/PersonalFilters';
 import { type CategoryFilter } from '@/lib/utils/personalFilter';
 import { authService } from '@/lib/services';
 import { personalIncidentsService, type PersonalIncident } from '@/lib/services/personalIncidentsService';
@@ -59,6 +59,7 @@ export const PersonalIncidentsList = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<CategoryFilter>('all');
+  const [employeeId, setEmployeeId] = useState<number | null>(null);
   const [status, setStatus] = useState<'all' | EstadoIncidencia>('all');
   const [target, setTarget] = useState<{ incident: PersonalIncident; action: 'Justificada' | 'Anulada' } | null>(null);
   const [reason, setReason] = useState('');
@@ -85,12 +86,21 @@ export const PersonalIncidentsList = () => {
     const terms = fold(search.trim()).split(/\s+/).filter(Boolean);
     return incidents.filter((i) => {
       if (status !== 'all' && i.status !== status) return false;
+      if (employeeId !== null && i.personalId !== employeeId) return false;
       if (category !== 'all' && i.personalCategory !== category) return false;
       if (terms.length === 0) return true;
       const hay = fold(`${i.personalName} ${i.personalBarcode} ${i.faultName}`);
       return terms.every((t) => hay.includes(t));
     });
-  }, [incidents, search, category, status]);
+  }, [incidents, search, category, employeeId, status]);
+
+  const employees = useMemo(() => {
+    const map = new Map<number, { id: number; fullName: string; category: string }>();
+    for (const i of incidents) {
+      map.set(i.personalId, { id: i.personalId, fullName: i.personalName, category: i.personalCategory ?? '' });
+    }
+    return [...map.values()];
+  }, [incidents]);
 
   const stats = useMemo(
     () => ({
@@ -107,7 +117,7 @@ export const PersonalIncidentsList = () => {
 
   useEffect(() => {
     resetPage();
-  }, [search, category, status, from, to]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, category, employeeId, status, from, to]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
 
@@ -185,6 +195,7 @@ export const PersonalIncidentsList = () => {
           <Input id="pil-to" type="date" value={to} min={from} onChange={(e) => setTo(e.target.value || to)} />
         </div>
         <PersonalSearchField id="pil-search" value={search} onChange={setSearch} />
+        <PersonalEmployeeFilter employees={employees} value={employeeId} onChange={setEmployeeId} />
         <PersonalCategorySelect value={category} onChange={setCategory} />
         <div className="space-y-2">
           <Label>Estado</Label>
