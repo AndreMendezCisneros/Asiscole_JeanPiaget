@@ -99,14 +99,14 @@ export const PersonalAttendanceReport = () => {
       [
         { header: 'Empleado', dataKey: 'empleado' },
         { header: 'Categoría', dataKey: 'categoria', width: 40 },
-        { header: 'Prog.', dataKey: 'programados', width: 14, align: 'center' },
+        { header: 'Días programados', dataKey: 'programados', width: 22, align: 'center' },
         { header: 'A tiempo', dataKey: 'atiempo', width: 16, align: 'center' },
         { header: 'Tarde', dataKey: 'tarde', width: 14, align: 'center' },
         { header: 'TJ', dataKey: 'tj', width: 12, align: 'center' },
         { header: 'Faltas', dataKey: 'faltas', width: 14, align: 'center' },
         { header: 'FJ', dataKey: 'fj', width: 12, align: 'center' },
-        { header: 'F. horario', dataKey: 'fh', width: 18, align: 'center' },
-        { header: 'Sal. antic.', dataKey: 'anticipadas', width: 18, align: 'center' },
+        { header: 'Fuera de horario', dataKey: 'fh', width: 22, align: 'center' },
+        { header: 'Salidas anticipadas', dataKey: 'anticipadas', width: 24, align: 'center' },
         { header: 'Puntualidad', dataKey: 'puntualidad', width: 22, align: 'center' },
       ],
       summary.map(summaryRow),
@@ -212,14 +212,14 @@ export const PersonalAttendanceReport = () => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Empleado</TableHead>
-                      <TableHead className="text-center">Prog.</TableHead>
+                      <TableHead className="text-center">Días programados</TableHead>
                       <TableHead className="text-center">A tiempo</TableHead>
                       <TableHead className="text-center">Tarde</TableHead>
                       <TableHead className="text-center">TJ</TableHead>
                       <TableHead className="text-center">Faltas</TableHead>
                       <TableHead className="text-center">FJ</TableHead>
-                      <TableHead className="text-center">F. horario</TableHead>
-                      <TableHead className="text-center">Sal. antic.</TableHead>
+                      <TableHead className="text-center">Fuera de horario</TableHead>
+                      <TableHead className="text-center">Salidas anticipadas</TableHead>
                       <TableHead className="text-center">Puntualidad</TableHead>
                     </TableRow>
                   </TableHeader>
