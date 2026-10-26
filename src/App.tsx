@@ -20,6 +20,15 @@ import { Dashboard } from "./pages/Dashboard";
 import { RegisterIncident } from "./pages/RegisterIncident";
 import { IncidentsList } from "./pages/IncidentsList";
 import { StudentsList } from "./pages/StudentsList";
+import { PersonalList } from "./pages/personal/PersonalList";
+import { PersonalArrivalControl } from "./pages/personal/PersonalArrivalControl";
+import { PersonalDepartureControl } from "./pages/personal/PersonalDepartureControl";
+import { PersonalJustifyAttendance } from "./pages/personal/PersonalJustifyAttendance";
+import { PersonalIncidentsList } from "./pages/personal/PersonalIncidentsList";
+import { PersonalRegisterIncident } from "./pages/personal/PersonalRegisterIncident";
+import { PersonalIncidentReport } from "./pages/personal/PersonalIncidentReport";
+import { PersonalAttendanceReport } from "./pages/personal/PersonalAttendanceReport";
+import { PersonalIntegralReport } from "./pages/personal/PersonalIntegralReport";
 import { AttendanceReport } from "./pages/AttendanceReport";
 import { IntegralStudentReport } from "./pages/IntegralStudentReport";
 import { ArrivalControl } from "./pages/ArrivalControl";
@@ -148,6 +157,78 @@ const AppContent = () => {
           element={
             <ProtectedRoute requiredRole={[...FULL_STAFF]}>
               <StudentsList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/personal"
+          element={
+            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+              <PersonalList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/personal/llegadas"
+          element={
+            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+              <PersonalArrivalControl />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/personal/salidas"
+          element={
+            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+              <PersonalDepartureControl />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/personal/justificar"
+          element={
+            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+              <PersonalJustifyAttendance />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/personal/incidencias"
+          element={
+            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+              <PersonalIncidentsList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/personal/registrar-incidencia"
+          element={
+            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+              <PersonalRegisterIncident />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/personal/reporte-incidencias"
+          element={
+            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+              <PersonalIncidentReport />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/personal/reporte-asistencias"
+          element={
+            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+              <PersonalAttendanceReport />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/personal/reporte-integral"
+          element={
+            <ProtectedRoute requiredRole={[...FULL_STAFF]}>
+              <PersonalIntegralReport />
             </ProtectedRoute>
           }
         />

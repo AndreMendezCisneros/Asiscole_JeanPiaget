@@ -9,6 +9,7 @@ import {
   Clock,
   CalendarDays,
   Wallet,
+  Briefcase,
 } from 'lucide-react';
 import { isPensionesEnabled } from '@/config/features';
 export interface StaffNavSubItem {
@@ -61,6 +62,23 @@ const ALL_STAFF_NAV_ITEMS: StaffNavItem[] = [
     label: 'Estudiantes',
     icon: Users,
     roles: ['Supervisor', 'Director', 'Admin'],
+  },
+  {
+    path: '/personal',
+    label: 'Personal',
+    icon: Briefcase,
+    roles: ['Supervisor', 'Director', 'Admin'],
+    subItems: [
+      { path: '/personal', label: 'Gestión de Personal' },
+      { path: '/personal/llegadas', label: 'Control de Llegadas' },
+      { path: '/personal/salidas', label: 'Control de Salida' },
+      { path: '/personal/justificar', label: 'Justificar asistencia' },
+      { path: '/personal/incidencias', label: 'Lista de Incidencias' },
+      { path: '/personal/registrar-incidencia', label: 'Registrar Incidencia' },
+      { path: '/personal/reporte-incidencias', label: 'Reporte de Incidencias' },
+      { path: '/personal/reporte-asistencias', label: 'Reporte de Asistencias' },
+      { path: '/personal/reporte-integral', label: 'Reporte Integral' },
+    ],
   },
   {
     path: '/parent-meetings',

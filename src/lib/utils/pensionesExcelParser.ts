@@ -66,7 +66,7 @@ const NAME_KEYS = [
 const MONTO_KEYS = ['monto', 'importe', 'monto pagado', 'soles', 'monto pag.'];
 const FECHA_KEYS = ['fecha', 'fecha pago', 'fecha de pago', 'fechapago'];
 
-function foldHeader(raw: unknown): string {
+export function foldHeader(raw: unknown): string {
   return String(raw ?? '')
     .normalize('NFD')
     .replace(/\p{M}/gu, '')
@@ -94,7 +94,7 @@ function classifyHeader(h: string): 'id' | 'nombre' | 'monto' | 'fecha' | null {
   return null;
 }
 
-function cellToString(value: unknown): string | null {
+export function cellToString(value: unknown): string | null {
   if (value == null || value === '') return null;
   if (typeof value === 'number' && Number.isFinite(value)) {
     return String(Math.trunc(value));

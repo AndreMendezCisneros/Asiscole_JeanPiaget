@@ -95,6 +95,10 @@ import {
   saveTodayArrivals,
   updatePendingScan,
 } from '@/lib/utils/tutorScannerStorage';
+import { personalService } from '@/lib/services/personalService';
+import { personalAttendanceService } from '@/lib/services/personalAttendanceService';
+import { scheduleForDate } from '@/lib/utils/personalSchedule';
+import type { Personal, PersonalArrivalRecord } from '@/types/personal';
 
 const NAME_SEARCH_SCROLL_AFTER = 8;
 /** Libera inFlight si la red cuelga (evita “Registrando…” eterno). */
@@ -139,6 +143,14 @@ export const TutorScanner = () => {
     Array<{ id: string; name: string; time: string; status: 'A tiempo' | 'Tarde' | string }>
   >([]);
   const [studentSchedule, setStudentSchedule] = useState<StudentScheduleStatus | null>(null);
+  /** Perfil de un empleado escaneado (personal del colegio, no estudiante). */
+  const [personalProfile, setPersonalProfile] = useState<{
+    personal: Personal;
+    record: PersonalArrivalRecord;
+    action: 'arrival' | 'departure';
+  } | null>(null);
+  const [personalSearchResults, setPersonalSearchResults] = useState<Personal[]>([]);
+  const inFlightPersonalIdsRef = useRef<Set<number>>(new Set());
   const [quickFaultId, setQuickFaultId] = useState<number | null>(null);
   const [barcodeKeyboard, setBarcodeKeyboard] = useState(false);
   const isMountedRef = useRef(true);
@@ -179,7 +191,7 @@ export const TutorScanner = () => {
     ? nameSearchResults.length > NAME_SEARCH_SCROLL_AFTER
     : nameSearchResults.length > 0;
 
-  useTutorViewport(showStudentProfile && touchTablet);
+  useTutorViewport((showStudentProfile || personalProfile !== null) && touchTablet);
 
   useEffect(() => {
     showStudentProfileRef.current = showStudentProfile;
@@ -374,7 +386,7 @@ export const TutorScanner = () => {
   }, [showStudentProfile, showIncidentDialog, focusBarcodeInput]);
 
   const bumpProfileIdle = useTutorProfileIdle({
-    active: showStudentProfile && !showIncidentDialog,
+    active: (showStudentProfile || personalProfile !== null) && !showIncidentDialog,
     onIdle: () => {
       clearScanRef.current();
       toast.message('Pantalla limpiada por inactividad', { duration: 2500 });
@@ -388,6 +400,7 @@ export const TutorScanner = () => {
   useEffect(() => {
     if (nameSearch.trim().length < 2) {
       setNameSearchResults([]);
+      setPersonalSearchResults([]);
       setNameSearching(false);
       setNameSearchError(null);
       setNameSearchEmpty(false);
@@ -400,15 +413,19 @@ export const TutorScanner = () => {
     setNameSearchEmpty(false);
 
     const timeoutId = window.setTimeout(async () => {
-      const { students, error } = await studentsService.searchForTutorScanner(nameSearch.trim());
+      const [{ students, error }, staff] = await Promise.all([
+        studentsService.searchForTutorScanner(nameSearch.trim()),
+        personalService.searchByName(nameSearch.trim()),
+      ]);
       if (cancelled || !isMountedRef.current) return;
+      setPersonalSearchResults(staff.personal);
       if (error) {
         setNameSearchResults([]);
         setNameSearchError(error);
         setNameSearchEmpty(false);
       } else {
         setNameSearchResults(students);
-        setNameSearchEmpty(students.length === 0);
+        setNameSearchEmpty(students.length === 0 && staff.personal.length === 0);
       }
       setNameSearching(false);
     }, 280);
@@ -530,6 +547,7 @@ export const TutorScanner = () => {
       // Mostrar siempre el estado de la BD (no recalcular en el cliente).
       showStudentProfileRef.current = true;
       displayedStudentIdRef.current = studentToShow.id;
+      setPersonalProfile(null);
       setStudent(studentToShow);
       setArrivalRecord(record);
       setShowStudentProfile(true);
@@ -1073,6 +1091,85 @@ export const TutorScanner = () => {
     ]
   );
 
+  /** Llegada/salida de un empleado: estado según su horario del día. */
+  const processPersonal = useCallback(
+    async (found: Personal, scanSeq: number) => {
+      if (!isMountedRef.current) return;
+      if (isTallerMode) {
+        toast.error('El personal se registra en modo Clase.', { duration: 3200 });
+        releaseScanFocus();
+        return;
+      }
+      if (inFlightPersonalIdsRef.current.has(found.id)) {
+        releaseScanFocus();
+        return;
+      }
+      inFlightPersonalIdsRef.current.add(found.id);
+      try {
+        const result =
+          clasePhase === 'salida'
+            ? await personalAttendanceService.registerDeparture(found, user?.id)
+            : await personalAttendanceService.registerArrival(found, user?.id);
+        if (!isMountedRef.current) return;
+        if ('error' in result) {
+          toast.error(result.error, { duration: 3200 });
+          return;
+        }
+        const { record, action, duplicate } = result;
+        if (scanSeq === latestProfileScanRef.current) {
+          showStudentProfileRef.current = false;
+          displayedStudentIdRef.current = null;
+          setShowStudentProfile(false);
+          setStudent(null);
+          setArrivalRecord(null);
+          setPersonalProfile({ personal: found, record, action });
+          bumpProfileIdleRef.current();
+        }
+        const status =
+          action === 'departure'
+            ? record.departureType === 'Anticipada'
+              ? 'Salida anticipada'
+              : 'Salida'
+            : record.status;
+        const time = (action === 'departure' ? record.departureTime : record.arrivalTime) ?? nowHHMM;
+        if (duplicate) {
+          toast.info(
+            action === 'departure'
+              ? `${found.fullName} ya tiene salida registrada hoy (${time}).`
+              : `${found.fullName} ya registró su llegada hoy a las ${time}. Para salida, elija Salida.`,
+            { duration: 2800 },
+          );
+        } else {
+          setSessionCount((prev) => ({
+            total: prev.total + 1,
+            onTime: prev.onTime + (action === 'arrival' && record.status === 'A tiempo' ? 1 : 0),
+            late: prev.late + (action === 'arrival' && record.status === 'Tarde' ? 1 : 0),
+          }));
+          setRecentScans((prev) =>
+            [
+              { id: `${Date.now()}-p${found.id}`, name: `${found.fullName} (personal)`, time, status },
+              ...prev,
+            ].slice(0, 6),
+          );
+        }
+        setScanAnnouncement(`${found.fullName}, personal: ${status}, hora ${time}`);
+      } finally {
+        inFlightPersonalIdsRef.current.delete(found.id);
+        releaseScanFocus();
+      }
+    },
+    [clasePhase, isTallerMode, nowHHMM, releaseScanFocus, user?.id]
+  );
+
+  const handlePersonalSearchSelect = (selected: Personal) => {
+    prepareForHardwareScan();
+    setNameSearch('');
+    setNameSearchResults([]);
+    setPersonalSearchResults([]);
+    setNameSearchEmpty(false);
+    void processPersonal(selected, ++latestProfileScanRef.current);
+  };
+
   const processScanCode = useCallback(
     async (rawInput: string, scanSeq: number) => {
       const raw = rawInput.replace(/\r?\n/g, '').trim();
@@ -1097,14 +1194,33 @@ export const TutorScanner = () => {
       }
 
       if (!foundStudent) {
-        toast.error('Estudiante no encontrado');
+        let staff: Personal | null = null;
+        setLookupBusy(true);
+        try {
+          staff = (await personalService.getByBarcode(raw)).personal;
+        } finally {
+          setLookupBusy(false);
+        }
+        if (!isMountedRef.current) return;
+        if (staff) {
+          void processPersonal(staff, scanSeq);
+          return;
+        }
+        toast.error('Estudiante o personal no encontrado');
         focusBarcodeInput();
         return;
       }
 
       void processStudent(foundStudent, scanSeq);
     },
-    [focusBarcodeInput, pensionesEnabled, processStudent, resolveStudentByBarcode, setLookupBusy]
+    [
+      focusBarcodeInput,
+      pensionesEnabled,
+      processPersonal,
+      processStudent,
+      resolveStudentByBarcode,
+      setLookupBusy,
+    ]
   );
 
   const startScan = useCallback(
@@ -1204,8 +1320,12 @@ export const TutorScanner = () => {
     const q = nameSearch.trim();
     if (q.length < 2) return;
 
-    if (nameSearchResults.length === 1) {
+    if (nameSearchResults.length === 1 && personalSearchResults.length === 0) {
       void handleNameSearchSelect(nameSearchResults[0]);
+      return;
+    }
+    if (nameSearchResults.length === 0 && personalSearchResults.length === 1) {
+      handlePersonalSearchSelect(personalSearchResults[0]);
       return;
     }
 
@@ -1240,7 +1360,12 @@ export const TutorScanner = () => {
         } else if (dniError) {
           toast.error(dniError);
         } else {
-          setNameSearchEmpty(true);
+          const { personal: staff } = await personalService.getByBarcode(q);
+          if (staff) {
+            handlePersonalSearchSelect(staff);
+          } else {
+            setNameSearchEmpty(true);
+          }
         }
       } else {
         setNameSearchResults([]);
@@ -1439,6 +1564,8 @@ export const TutorScanner = () => {
     setBarcode('');
     setNameSearch('');
     setNameSearchResults([]);
+    setPersonalSearchResults([]);
+    setPersonalProfile(null);
     setStudent(null);
     displayedStudentIdRef.current = null;
     showStudentProfileRef.current = false;
@@ -1457,6 +1584,8 @@ export const TutorScanner = () => {
   };
 
   const closeStudentProfile = () => {
+    setPersonalProfile(null);
+    setPersonalSearchResults([]);
     showStudentProfileRef.current = false;
     displayedStudentIdRef.current = null;
     setShowStudentProfile(false);
@@ -1500,7 +1629,7 @@ export const TutorScanner = () => {
       className={cn(
         'tutor-page',
         touchTablet && 'tutor-page--touch',
-        showStudentProfile && touchTablet && 'tutor-page--profile-open',
+        (showStudentProfile || personalProfile !== null) && touchTablet && 'tutor-page--profile-open',
       )}
     >
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
@@ -1634,7 +1763,7 @@ export const TutorScanner = () => {
                           : 'Escanear llegada a taller'
                         : isClaseSalida
                           ? 'Escanear salida de clase'
-                          : 'Escanear o buscar estudiante'}
+                          : 'Escanear o buscar estudiante o personal'}
                     </h2>
                     <p className="text-sm text-muted-foreground leading-relaxed hidden sm:block">
                       {isTallerMode
@@ -1876,7 +2005,7 @@ export const TutorScanner = () => {
                       </p>
                     )}
                     {nameSearchEmpty && !nameSearching && (
-                      <p className="text-xs text-muted-foreground">No se encontraron estudiantes activos.</p>
+                      <p className="text-xs text-muted-foreground">No se encontraron estudiantes ni personal activos.</p>
                     )}
                     {nameSearchResults.length > 0 && (
                       <div
@@ -1913,6 +2042,43 @@ export const TutorScanner = () => {
                                 <span>
                                   {result.level} · {result.grade} &apos;{result.section}&apos;
                                 </span>
+                              </span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {personalSearchResults.length > 0 && (
+                      <div
+                        role="listbox"
+                        aria-label="Personal encontrado"
+                        className="tutor-name-search-results w-full rounded-xl border border-border bg-popover shadow-xl"
+                      >
+                        <p className="px-3 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:px-4">
+                          Personal del colegio
+                        </p>
+                        {personalSearchResults.map((result) => (
+                          <button
+                            key={`p-${result.id}`}
+                            type="button"
+                            role="option"
+                            onClick={() => handlePersonalSearchSelect(result)}
+                            className="tutor-name-search-results__row flex w-full items-center gap-3 px-3 py-3.5 text-left transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none sm:px-4 sm:py-4"
+                          >
+                            <StudentPhoto
+                              src={result.profilePhoto}
+                              name={result.fullName}
+                              className="tutor-name-search-results__photo h-16 w-16 shrink-0 rounded-xl sm:h-[4.5rem] sm:w-[4.5rem]"
+                              imageClassName="object-cover object-center"
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block font-semibold text-base leading-snug text-foreground sm:text-lg">
+                                {result.fullName}
+                              </span>
+                              <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-muted-foreground">
+                                <span className="font-mono font-semibold text-foreground/90">DNI {result.barcode}</span>
+                                <span aria-hidden>·</span>
+                                <span>Personal · {result.category}</span>
                               </span>
                             </span>
                           </button>
@@ -1960,6 +2126,93 @@ export const TutorScanner = () => {
           </section>
 
           <aside className="tutor-right">
+            {!showStudentProfile && personalProfile && (() => {
+              const { personal: staff, record, action } = personalProfile;
+              const horarioHoy = scheduleForDate(staff.schedule, record.date);
+              const warn =
+                (action === 'arrival' && record.status === 'Tarde') || record.departureType === 'Anticipada';
+              const statusLabel =
+                action === 'departure'
+                  ? record.departureType === 'Anticipada'
+                    ? 'Salida anticipada'
+                    : 'Salida'
+                  : record.status;
+              const timeLabel =
+                (action === 'departure' ? record.departureTime : record.arrivalTime) ?? '—:—';
+              return (
+                <>
+                  <button
+                    type="button"
+                    className={cn('tutor-student-backdrop', !touchTablet && 'lg:hidden')}
+                    aria-label="Cerrar perfil del personal"
+                    onClick={closeStudentProfile}
+                  />
+                  <div
+                    key={`p-${staff.id}`}
+                    className={`tutor-student-card ${warn ? 'tutor-student-card--late' : 'tutor-student-card--ontime'}`}
+                    role="region"
+                    aria-label={`Registro de ${staff.fullName}`}
+                  >
+                    <div className="tutor-student-card__banner" aria-hidden />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="tutor-student-card__close"
+                      onClick={closeStudentProfile}
+                    >
+                      <X className="h-5 w-5" />
+                      <span className="sr-only">Cerrar</span>
+                    </Button>
+                    <div className="tutor-student-card__scroll">
+                      <div className="tutor-student-card__hero-sticky">
+                        <div className="tutor-identity tutor-identity--sheet">
+                          <div className="tutor-identity__photo-frame">
+                            <StudentPhoto
+                              src={staff.profilePhoto}
+                              name={staff.fullName}
+                              priority="auto"
+                              className="h-full w-full rounded-2xl"
+                              imageClassName="object-cover object-[center_20%]"
+                            />
+                          </div>
+                          <div className="tutor-identity__meta">
+                            <Badge variant={warn ? 'warning' : 'success'} className="tutor-student-card__status">
+                              {statusLabel} · {timeLabel}
+                            </Badge>
+                            <h3 className="tutor-identity__name">{staff.fullName}</h3>
+                            <p className="tutor-identity__grade">Personal · {staff.category}</p>
+                            <p className="tutor-identity__dni font-mono">{staff.barcode}</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="tutor-schedule" aria-label="Horario de hoy">
+                        <div className="tutor-schedule__head">
+                          <CalendarClock className="h-4 w-4 shrink-0" aria-hidden />
+                          <span className="font-semibold text-sm">Horario de hoy</span>
+                        </div>
+                        <p className="text-sm">
+                          {horarioHoy
+                            ? `Entrada ${horarioHoy.entry}${horarioHoy.exit ? ` · Salida ${horarioHoy.exit}` : ''}`
+                            : 'Hoy no le toca asistir (fuera de horario).'}
+                        </p>
+                      </div>
+                      <div className="tutor-student-card__actions">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="lg"
+                          onClick={closeStudentProfile}
+                          className="tutor-student-card__btn-next"
+                        >
+                          Siguiente
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
             {showStudentProfile && student && (
               <>
                 <button

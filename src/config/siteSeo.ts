@@ -65,6 +65,7 @@ export const NOINDEX_PREFIXES = [
   '/register',
   '/incidents',
   '/students',
+  '/personal',
   '/faults',
   '/reports',
   '/attendance-report',

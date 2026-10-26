@@ -4,6 +4,7 @@ import { StaffKpiStat } from '@/components/staff';
 import { AttendanceSettingsCard } from '@/components/system-config/AttendanceSettingsCard';
 import { ReincidenceSettingsCard } from '@/components/system-config/ReincidenceSettingsCard';
 import { PensionesSettingsCard } from '@/components/system-config/PensionesSettingsCard';
+import { PromotoriaSettingsCard } from '@/components/system-config/PromotoriaSettingsCard';
 import { isPensionesEnabled } from '@/config/features';
 import { SYSTEM_SETTINGS } from '@/config/systemSettings';
 import { authService } from '@/lib/services';
@@ -61,6 +62,7 @@ export const SystemConfig = () => {
       <AttendanceSettingsCard />
       <ReincidenceSettingsCard />
       {isPensionesEnabled() && <PensionesSettingsCard />}
+      {role === 'Admin' && <PromotoriaSettingsCard />}
     </div>
   );
 };

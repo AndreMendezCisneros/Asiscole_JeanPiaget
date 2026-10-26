@@ -44,3 +44,6 @@ __pycache__/
 
 # Copias locales de trabajo con el VPS (scripts sueltos y volcados de BD: no versionar)
 _vps_sync/
+
+# Excel con datos personales (DNI) del colegio: no versionar
+/*.xlsx
