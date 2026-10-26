@@ -37,7 +37,13 @@ import { TABLE_PAGE_SIZE } from '@/lib/constants/tablePagination';
 import { getLimaNow } from '@/lib/utils/limaDateTime';
 import { MIN_JUSTIFICATION_REASON_LENGTH } from '@/lib/utils/attendanceJustification';
 import { scheduleForDate } from '@/lib/utils/personalSchedule';
-import { dateKeysBetween, monthStartOf, PERSONAL_STATUS_BADGE, PERSONAL_STATUS_LABEL } from '@/lib/utils/personalAttendanceRows';
+import {
+  dateKeysBetween,
+  monthStartOf,
+  PERSONAL_STATUS_BADGE,
+  PERSONAL_STATUS_LABEL,
+  resolveDayStatus,
+} from '@/lib/utils/personalAttendanceRows';
 import type { Personal, PersonalArrivalRecord } from '@/types/personal';
 
 type Kind = 'tardanza' | 'inasistencia';
@@ -60,7 +66,7 @@ export const PersonalJustifyAttendance = () => {
   const now = getLimaNow();
   const [from, setFrom] = useState(monthStartOf(now.date));
   const [to, setTo] = useState(now.date);
-  const { personal, records, loading, refreshing, reload } = usePersonalAttendance(from, to);
+  const { personal, records, absenceAfterMin, loading, refreshing, reload } = usePersonalAttendance(from, to);
   const [view, setView] = useState<'pending' | 'done'>('pending');
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<CategoryFilter>('all');
@@ -83,17 +89,27 @@ export const PersonalJustifyAttendance = () => {
         items.push({ key: `f-${r.id}`, personal: p, date: r.date, kind: 'inasistencia', record: r, label: r.arrivalTime ? `Inasistencia · llegó ${r.arrivalTime}, después de su salida` : 'Inasistencia (no marcó)' });
       }
     }
-    // Días que le tocaban, ya pasados, sin ningún registro (antes de que corra el cierre).
+    // Días que le tocaban sin ningún registro: días pasados, y hoy si ya pasó el
+    // margen de inasistencia (N min después de su entrada) aunque el cierre no haya corrido.
     for (const date of dateKeysBetween(from, to)) {
-      if (date >= now.date) continue;
+      if (date > now.date) continue;
       for (const p of personal) {
-        if (date < p.createdAt || !scheduleForDate(p.schedule, date) || recordKey.has(`${p.id}|${date}`)) continue;
-        items.push({ key: `s-${p.id}-${date}`, personal: p, date, kind: 'inasistencia', record: null, label: 'Sin llegada registrada' });
+        const horario = scheduleForDate(p.schedule, date);
+        if (date < p.createdAt || !horario || recordKey.has(`${p.id}|${date}`)) continue;
+        if (resolveDayStatus(horario, null, date, now.date, now.time, absenceAfterMin) !== 'Falta') continue;
+        items.push({
+          key: `s-${p.id}-${date}`,
+          personal: p,
+          date,
+          kind: 'inasistencia',
+          record: null,
+          label: `Inasistencia · no marcó (entrada ${horario.entry})`,
+        });
       }
     }
     return items.sort((a, b) => b.date.localeCompare(a.date) || a.personal.fullName.localeCompare(b.personal.fullName));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [personal, records, from, to]);
+  }, [personal, records, from, to, absenceAfterMin]);
 
   const done = useMemo(
     () =>
