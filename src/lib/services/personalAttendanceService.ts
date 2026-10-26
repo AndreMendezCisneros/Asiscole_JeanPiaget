@@ -179,25 +179,6 @@ export const personalAttendanceService = {
     return { records: all, error: null };
   },
 
-  /** Corrige la hora de llegada (recalcula el estado con la hora esperada guardada). */
-  async updateArrivalTime(
-    record: PersonalArrivalRecord,
-    newTime: string,
-  ): Promise<{ record: PersonalArrivalRecord | null; error: string | null }> {
-    if (record.status === 'Tarde justificada' || record.status === 'Falta justificada') {
-      return { record: null, error: 'El registro ya está justificado.' };
-    }
-    const estado = resolvePersonalArrivalStatus(newTime, record.expectedEntry);
-    const { data, error } = await supabase
-      .from('registros_llegada_personal')
-      .update({ hora_llegada: newTime, estado })
-      .eq('id_registro', record.id)
-      .select(SELECT_COLS)
-      .single();
-    if (error) return { record: null, error: error.message };
-    return { record: mapPersonalArrivalRow(data as RegistroPersonalRow), error: null };
-  },
-
   async justifyTardiness(
     recordId: number,
     userId: number,

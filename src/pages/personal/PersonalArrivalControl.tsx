@@ -1,19 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { AlertTriangle, CheckCircle2, Clock, Edit, Loader2, LogIn, RefreshCw, UserX } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Loader2, LogIn, Lock, RefreshCw, UserX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   StaffDataPanel,
@@ -61,9 +53,6 @@ export const PersonalArrivalControl = () => {
   const [category, setCategory] = useState<CategoryFilter>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | PersonalDayStatus>('all');
   const [busyId, setBusyId] = useState<number | null>(null);
-  const [editing, setEditing] = useState<PersonalDayRow | null>(null);
-  const [editTime, setEditTime] = useState('');
-  const [savingTime, setSavingTime] = useState(false);
 
   const rows = useMemo(
     () => buildPersonalDayRows(personal, records, date, now.date, now.time),
@@ -111,29 +100,6 @@ export const PersonalArrivalControl = () => {
       return;
     }
     toast.success(`${row.personal.fullName}: ${result.record.status} (${result.record.arrivalTime})`);
-    void reload(true);
-  };
-
-  const openEdit = (row: PersonalDayRow) => {
-    setEditing(row);
-    setEditTime(row.record?.arrivalTime ?? row.horario?.entry ?? now.time);
-  };
-
-  const saveTime = async () => {
-    if (!editing?.record) return;
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(editTime)) {
-      toast.error('Hora inválida');
-      return;
-    }
-    setSavingTime(true);
-    const { error } = await personalAttendanceService.updateArrivalTime(editing.record, editTime);
-    setSavingTime(false);
-    if (error) {
-      toast.error(error);
-      return;
-    }
-    toast.success('Hora corregida');
-    setEditing(null);
     void reload(true);
   };
 
@@ -190,7 +156,7 @@ export const PersonalArrivalControl = () => {
       <StaffDataPanel>
         <StaffDataPanelHeader
           title={`Personal (${filtered.length})`}
-          description="El tutor registra con el escáner; aquí se puede registrar o corregir a mano"
+          description="El tutor registra con el escáner. Una llegada registrada no se puede modificar."
         />
         <div className="p-4 pt-0 sm:p-5 sm:pt-0">
           {filtered.length === 0 ? (
@@ -231,16 +197,13 @@ export const PersonalArrivalControl = () => {
                         </TableCell>
                         <TableCell>
                           {row.record?.arrivalTime ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openEdit(row)}
-                              disabled={row.status === 'Tarde justificada'}
-                              title="Corregir hora"
-                              aria-label={`Corregir hora de ${row.personal.fullName}`}
+                            <span
+                              className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+                              title="La hora de llegada del personal no se puede modificar"
                             >
-                              <Edit className="h-4 w-4" aria-hidden="true" />
-                            </Button>
+                              <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+                              Registrada
+                            </span>
                           ) : row.status !== 'Falta justificada' ? (
                             <Button
                               variant="outline"
@@ -280,26 +243,6 @@ export const PersonalArrivalControl = () => {
         </div>
       </StaffDataPanel>
 
-      <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Corregir hora de llegada</DialogTitle>
-            <DialogDescription>
-              {editing?.personal.fullName} · entrada esperada {editing?.record?.expectedEntry ?? 'sin horario'}. El estado se recalcula.
-            </DialogDescription>
-          </DialogHeader>
-          <Input type="time" value={editTime} onChange={(e) => setEditTime(e.target.value)} aria-label="Hora de llegada" />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditing(null)} disabled={savingTime}>
-              Cancelar
-            </Button>
-            <Button variant="info" onClick={() => void saveTime()} disabled={savingTime}>
-              {savingTime && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Guardar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
