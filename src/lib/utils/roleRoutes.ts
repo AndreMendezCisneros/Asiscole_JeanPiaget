@@ -8,6 +8,8 @@ export function getHomeRouteForRole(role: UserRole): string {
       return '/tutor-scanner';
     case 'Docente':
       return '/docente-scanner';
+    case 'DocenteTutor':
+      return '/aula';
     case 'Padre':
       return '/parent-portal';
     case 'Cajero':

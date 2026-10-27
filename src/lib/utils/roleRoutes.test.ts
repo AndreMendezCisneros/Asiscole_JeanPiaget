@@ -49,3 +49,19 @@ describe('rol RR.HH.', () => {
     expect(subs).toContain('/personal/promotoria');
   });
 });
+
+describe('rol DocenteTutor', () => {
+  it('no es staff y entra solo a /aula', () => {
+    expect(isStaffRole('DocenteTutor')).toBe(false);
+    expect(getHomeRouteForRole('DocenteTutor')).toBe('/aula');
+    expect(canAccessStaffRoute('DocenteTutor', ['DocenteTutor'])).toBe(true);
+    expect(canAccessStaffRoute('DocenteTutor', ['Supervisor', 'Director', 'Admin'])).toBe(false);
+    expect(canAccessStaffRoute('DocenteTutor', ['RRHH'])).toBe(false);
+    expect(canAccessStaffRoute('DocenteTutor', ['Tutor'])).toBe(false);
+    expect(canAccessStaffRoute('DocenteTutor')).toBe(false);
+  });
+
+  it('no ve menú del staff', () => {
+    expect(getStaffNavItems('DocenteTutor')).toEqual([]);
+  });
+});

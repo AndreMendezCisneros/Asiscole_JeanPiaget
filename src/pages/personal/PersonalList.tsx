@@ -5,6 +5,7 @@ import {
   CalendarClock,
   Edit,
   FileSpreadsheet,
+  GraduationCap,
   Loader2,
   RefreshCw,
   Search,
@@ -42,8 +43,10 @@ import { ScheduleEditor } from '@/components/personal/ScheduleEditor';
 import { PersonalImportDialog } from '@/components/personal/PersonalImportDialog';
 import { DeactivatePersonalDialog } from '@/components/personal/DeactivatePersonalDialog';
 import { BulkScheduleDialog } from '@/components/personal/BulkScheduleDialog';
+import { TutorAulaDialog } from '@/components/personal/TutorAulaDialog';
 import { studentsService } from '@/lib/services';
 import { personalService } from '@/lib/services/personalService';
+import { tutoriasService } from '@/lib/services/tutoriasService';
 import { formatScheduleSummary, validateSchedule } from '@/lib/utils/personalSchedule';
 import { useTablePagination } from '@/hooks/useTablePagination';
 import { TABLE_PAGE_SIZE } from '@/lib/constants/tablePagination';
@@ -53,6 +56,7 @@ import {
   type PersonalCategoria,
   type PersonalFormData,
 } from '@/types/personal';
+import type { SalonDisponible, Tutoria } from '@/types/tutorAula';
 
 const EMPTY_FORM: PersonalFormData = {
   barcode: '',
@@ -95,6 +99,17 @@ function validateForm(form: PersonalFormData): string | null {
   return validateSchedule(form.schedule);
 }
 
+/** Insignia "Tutor 1ro A · Primaria" en la lista del personal. */
+function TutorBadge({ tutoria }: { tutoria?: Tutoria }) {
+  if (!tutoria) return null;
+  return (
+    <Badge variant={tutoria.active ? 'info' : 'outline'} className="mt-0.5 w-fit text-[10px]">
+      Tutor {tutoria.grade} {tutoria.section} · {tutoria.level}
+      {!tutoria.active && ' (sin acceso)'}
+    </Badge>
+  );
+}
+
 export const PersonalList = () => {
   const [personal, setPersonal] = useState<Personal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,15 +128,25 @@ export const PersonalList = () => {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [toDeactivate, setToDeactivate] = useState<Personal | null>(null);
   const [togglingId, setTogglingId] = useState<number | null>(null);
+  const [tutorias, setTutorias] = useState<Tutoria[]>([]);
+  const [salones, setSalones] = useState<SalonDisponible[]>([]);
+  const [tutorFor, setTutorFor] = useState<Personal | null>(null);
 
   const load = useCallback(async (silent = false) => {
     if (silent) setRefreshing(true);
-    const { personal: rows, error } = await personalService.getAll();
+    const [{ personal: rows, error }, tut] = await Promise.all([personalService.getAll(), tutoriasService.list()]);
     if (error) toast.error(error);
     else setPersonal(rows);
+    // Sin PATCH_DOCENTE_TUTOR.sql la lista viene vacía: la página sigue funcionando.
+    if (tut.error) console.warn('Tutores de aula:', tut.error);
+    setTutorias(tut.tutorias);
+    setSalones(tut.salones);
     setLoading(false);
     setRefreshing(false);
   }, []);
+
+  const tutoriaByPersonal = useMemo(() => new Map(tutorias.map((t) => [t.personalId, t])), [tutorias]);
+  const personalNames = useMemo(() => new Map(personal.map((p) => [p.id, p.fullName])), [personal]);
 
   useEffect(() => {
     void load();
@@ -366,7 +391,10 @@ export const PersonalList = () => {
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <StudentPhoto src={p.profilePhoto} name={p.fullName} className="h-9 w-9 shrink-0" />
-                            <span className="font-medium">{p.fullName}</span>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{p.fullName}</span>
+                              <TutorBadge tutoria={tutoriaByPersonal.get(p.id)} />
+                            </div>
                           </div>
                         </TableCell>
                         <TableCell className="font-mono text-sm">{p.barcode}</TableCell>
@@ -399,6 +427,17 @@ export const PersonalList = () => {
                             >
                               <Edit className="h-4 w-4" aria-hidden="true" />
                             </Button>
+                            {p.active && salones.length > 0 && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setTutorFor(p)}
+                                aria-label={`Tutor de aula: ${p.fullName}`}
+                                title="Tutor de aula (usuario y salón)"
+                              >
+                                <GraduationCap className="h-4 w-4" aria-hidden="true" />
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"
@@ -548,6 +587,17 @@ export const PersonalList = () => {
 
       <PersonalImportDialog open={importOpen} onOpenChange={setImportOpen} onImported={() => void load(true)} />
       <BulkScheduleDialog open={bulkOpen} onOpenChange={setBulkOpen} personal={personal} onApplied={() => void load(true)} />
+      <TutorAulaDialog
+        personal={tutorFor}
+        tutorias={tutorias}
+        salones={salones}
+        personalNames={personalNames}
+        onClose={() => setTutorFor(null)}
+        onSaved={() => {
+          setTutorFor(null);
+          void load(true);
+        }}
+      />
       <DeactivatePersonalDialog
         personal={toDeactivate}
         busy={togglingId !== null}

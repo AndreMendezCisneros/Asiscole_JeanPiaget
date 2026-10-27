@@ -1,9 +1,20 @@
 // Tipos que coinciden con el esquema de la base de datos
-export type UserRole = 'Supervisor' | 'Tutor' | 'Director' | 'Admin' | 'Padre' | 'Cajero' | 'RRHH';
+export type UserRole =
+  | 'Supervisor'
+  | 'Tutor'
+  | 'Docente'
+  | 'DocenteTutor'
+  | 'Director'
+  | 'Admin'
+  | 'Padre'
+  | 'Cajero'
+  | 'RRHH';
 
 /** Nombre visible del rol (RRHH → "RR.HH."). */
 export function roleLabel(role?: string | null): string {
-  return role === 'RRHH' ? 'RR.HH.' : role ?? '';
+  if (role === 'RRHH') return 'RR.HH.';
+  if (role === 'DocenteTutor') return 'Docente tutor';
+  return role ?? '';
 }
 export type EducationalLevel = 'Primaria' | 'Secundaria';
 

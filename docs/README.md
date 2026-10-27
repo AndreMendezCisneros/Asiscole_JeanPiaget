@@ -13,6 +13,7 @@
 - [CONFIGURACION_COMPLETA.md](configuracion/CONFIGURACION_COMPLETA.md) — Guía de configuración integral
 - [CONFIGURACION_RLS_PADRES.md](configuracion/CONFIGURACION_RLS_PADRES.md) — Políticas RLS del portal padres
 - [INSTRUCCIONES_FUNCION_SQL.md](configuracion/INSTRUCCIONES_FUNCION_SQL.md) — Cómo aplicar funciones RPC
+- [DOCENTE_TUTOR.md](configuracion/DOCENTE_TUTOR.md) — Docente tutor de aula: asignación, seguridad e instalación
 
 ## Manual
 

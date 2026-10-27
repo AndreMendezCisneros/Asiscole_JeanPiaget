@@ -61,6 +61,21 @@ const TutorScanner = lazyPage(() => import("./pages/TutorScanner").then(m => ({ 
 const ParentPortalRoute = lazyPage(() =>
   import("./components/parent/ParentPortalRoute").then((m) => ({ default: m.ParentPortalRoute }))
 );
+const TutorAulaLayout = lazyPage(() =>
+  import("./components/layout/TutorAulaLayout").then(m => ({ default: m.TutorAulaLayout }))
+);
+const TutorAulaLlegada = lazyPage(() =>
+  import("./pages/tutor-aula/TutorAulaDia").then(m => ({ default: m.TutorAulaLlegada }))
+);
+const TutorAulaSalida = lazyPage(() =>
+  import("./pages/tutor-aula/TutorAulaDia").then(m => ({ default: m.TutorAulaSalida }))
+);
+const TutorAulaIncidencias = lazyPage(() =>
+  import("./pages/tutor-aula/TutorAulaIncidencias").then(m => ({ default: m.TutorAulaIncidencias }))
+);
+const TutorAulaAsistencia = lazyPage(() =>
+  import("./pages/tutor-aula/TutorAulaAsistencia").then(m => ({ default: m.TutorAulaAsistencia }))
+);
 const ArrivalView = lazyPage(() => import("./pages/ArrivalView").then(m => ({ default: m.ArrivalView })));
 const ParentDniPortal = lazyPage(() => import("./pages/ParentDniPortal").then(m => ({ default: m.ParentDniPortal })));
 const ChangePassword = lazyPage(() => import("./pages/ChangePassword").then(m => ({ default: m.ChangePassword })));
@@ -370,6 +385,22 @@ const AppContent = () => {
           </ProtectedRoute>
         }
       />
+      {/* Docente tutor de aula: solo lectura de su salón */}
+      <Route
+        path="/aula"
+        element={
+          <ProtectedRoute requiredRole={['DocenteTutor']}>
+            <LazyFullScreen>
+              <TutorAulaLayout />
+            </LazyFullScreen>
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<TutorAulaLlegada />} />
+        <Route path="salida" element={<TutorAulaSalida />} />
+        <Route path="incidencias" element={<TutorAulaIncidencias />} />
+        <Route path="asistencia" element={<TutorAulaAsistencia />} />
+      </Route>
       <Route
         path="/parent-portal"
         element={
