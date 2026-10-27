@@ -16,6 +16,8 @@ export type PensionMatchResult = {
   status: 'ok' | 'sin_match' | 'ambiguo';
   idEstudiante: number | null;
   nombreMatched: string | null;
+  /** Cómo se encontró al alumno. */
+  metodo: 'dni' | 'nombre' | null;
 };
 
 function levenshtein(a: string, b: string): number {
@@ -43,54 +45,79 @@ function similarity(a: string, b: string): number {
   return 1 - levenshtein(a, b) / maxLen;
 }
 
+const SIN_MATCH: PensionMatchResult = {
+  status: 'sin_match',
+  idEstudiante: null,
+  nombreMatched: null,
+  metodo: null,
+};
+const AMBIGUO: PensionMatchResult = { ...SIN_MATCH, status: 'ambiguo' };
+
+function found(s: PensionMatchStudent, metodo: 'dni' | 'nombre'): PensionMatchResult {
+  return { status: 'ok', idEstudiante: s.id, nombreMatched: s.fullName, metodo };
+}
+
+/**
+ * El Excel puede traer menos nombres que el SIE ("PEREZ RUIZ, JUAN" vs "PEREZ RUIZ JUAN CARLOS").
+ * Apellidos al inicio y el resto de palabras dentro del nombre del SIE; así no se cruzan hermanos.
+ */
+function containsAllWords(excel: string[], sie: string[]): boolean {
+  if (excel.length < 3 || excel.length > sie.length) return false;
+  if (excel[0] !== sie[0] || excel[1] !== sie[1]) return false;
+  const rest = sie.slice(2);
+  return excel.slice(2).every((w) => {
+    const i = rest.indexOf(w);
+    if (i < 0) return false;
+    rest.splice(i, 1);
+    return true;
+  });
+}
+
+/** Primero DNI; si no lo encuentra (o hay varios), por nombre; si tampoco, sin match. */
 export function matchPensionCandidate(
   candidate: PensionMatchCandidate,
   students: PensionMatchStudent[],
   fuzzyThreshold = 0.92,
 ): PensionMatchResult {
+  let dniHits: PensionMatchStudent[] = [];
   if (candidate.rawDni) {
     const variants = new Set(buildStudentLookupVariants(candidate.rawDni));
-    const hits = students.filter((s) => {
+    dniHits = students.filter((s) => {
       for (const v of buildStudentLookupVariants(s.barcode)) {
         if (variants.has(v)) return true;
       }
       return false;
     });
-    if (hits.length === 1) {
-      return { status: 'ok', idEstudiante: hits[0].id, nombreMatched: hits[0].fullName };
-    }
-    if (hits.length > 1) {
-      return { status: 'ambiguo', idEstudiante: null, nombreMatched: null };
-    }
+    if (dniHits.length === 1) return found(dniHits[0], 'dni');
   }
 
+  // Con DNI repetido, el nombre decide entre esos alumnos.
+  const pool = dniHits.length > 1 ? dniHits : students;
   const norm = normalizePersonName(candidate.rawNombre);
-  if (norm) {
-    const exact = students.filter((s) => normalizePersonName(s.fullName) === norm);
-    if (exact.length === 1) {
-      return { status: 'ok', idEstudiante: exact[0].id, nombreMatched: exact[0].fullName };
-    }
-    if (exact.length > 1) {
-      return { status: 'ambiguo', idEstudiante: null, nombreMatched: null };
-    }
+  if (!norm) return dniHits.length > 1 ? AMBIGUO : SIN_MATCH;
 
-    const fuzzy = students
-      .map((s) => ({ s, score: similarity(norm, normalizePersonName(s.fullName)) }))
-      .filter((x) => x.score >= fuzzyThreshold)
-      .sort((a, b) => b.score - a.score);
+  const exact = pool.filter((s) => normalizePersonName(s.fullName) === norm);
+  if (exact.length === 1) return found(exact[0], 'nombre');
+  if (exact.length > 1) return AMBIGUO;
 
-    if (fuzzy.length === 1) {
-      return { status: 'ok', idEstudiante: fuzzy[0].s.id, nombreMatched: fuzzy[0].s.fullName };
-    }
-    if (fuzzy.length > 1 && fuzzy[0].score > fuzzy[1].score + 0.02) {
-      return { status: 'ok', idEstudiante: fuzzy[0].s.id, nombreMatched: fuzzy[0].s.fullName };
-    }
-    if (fuzzy.length > 1) {
-      return { status: 'ambiguo', idEstudiante: null, nombreMatched: null };
-    }
+  const fuzzy = pool
+    .map((s) => ({ s, score: similarity(norm, normalizePersonName(s.fullName)) }))
+    .filter((x) => x.score >= fuzzyThreshold)
+    .sort((a, b) => b.score - a.score);
+  if (fuzzy.length === 1) return found(fuzzy[0].s, 'nombre');
+  if (fuzzy.length > 1 && fuzzy[0].score > fuzzy[1].score + 0.02) {
+    return found(fuzzy[0].s, 'nombre');
   }
+  if (fuzzy.length > 1) return AMBIGUO;
 
-  return { status: 'sin_match', idEstudiante: null, nombreMatched: null };
+  const words = norm.split(' ');
+  const byWords = pool.filter((s) =>
+    containsAllWords(words, normalizePersonName(s.fullName).split(' ')),
+  );
+  if (byWords.length === 1) return found(byWords[0], 'nombre');
+  if (byWords.length > 1 || dniHits.length > 1) return AMBIGUO;
+
+  return SIN_MATCH;
 }
 
 export type PensionAusentesResult<T> = {

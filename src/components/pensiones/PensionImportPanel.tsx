@@ -13,6 +13,16 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { StaffTablePagination } from '@/components/staff';
 import type {
   PensionImpago,
@@ -55,6 +65,16 @@ function formatMeses(
 }
 
 type AusenteRow = PensionImpago & { revisar: boolean };
+
+const MESES_LARGOS = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Setiembre', 'Octubre', 'Noviembre', 'Diciembre',
+];
+
+function periodoLargo(periodo: string): string {
+  const mes = MESES_LARGOS[Number(periodo.slice(5, 7)) - 1];
+  return mes ? `${mes} ${periodo.slice(0, 4)}` : periodo;
+}
 
 async function loadAllActiveStudents(): Promise<{ students: Student[]; error: string | null }> {
   const nomina = await pensionesService.listNominaActiva();
@@ -127,6 +147,8 @@ export function PensionImportPanel({
   /** null = no se pudo calcular; se usa la regla antigua del servidor. */
   const [ausentes, setAusentes] = useState<AusenteRow[] | null>(null);
   const [cerrarSel, setCerrarSel] = useState<Set<number>>(new Set());
+  /** La lista simple se guarda entera en un solo mes: se confirma aparte. */
+  const [confirmPlano, setConfirmPlano] = useState(false);
 
   const resetFile = () => {
     setPreview([]);
@@ -196,6 +218,7 @@ export function PensionImportPanel({
           matchStatus: match.status,
           idEstudiante: match.idEstudiante,
           nombreMatched: match.nombreMatched,
+          metodo: match.metodo,
           mesesDebe: row.mesesDebe,
         };
       });
@@ -253,6 +276,8 @@ export function PensionImportPanel({
 
   const counts = {
     ok: preview.filter((r) => r.matchStatus === 'ok').length,
+    porDni: preview.filter((r) => r.metodo === 'dni').length,
+    porNombre: preview.filter((r) => r.metodo === 'nombre').length,
     sin: preview.filter((r) => r.matchStatus === 'sin_match').length,
     amb: preview.filter((r) => r.matchStatus === 'ambiguo').length,
   };
@@ -492,6 +517,9 @@ export function PensionImportPanel({
             >
               OK: {counts.ok}
             </Button>
+            <span className="self-center text-xs text-muted-foreground">
+              por DNI {counts.porDni} · por nombre {counts.porNombre}
+            </span>
             <Button
               type="button"
               size="sm"
@@ -515,6 +543,15 @@ export function PensionImportPanel({
               Ambiguos: {counts.amb}
             </Button>
           </div>
+          {formato === 'plano' && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+              Este archivo no trae columnas de meses (Marzo, Abril…). Se guardará todo en{' '}
+              <strong>{periodoLargo(periodo)}</strong> como{' '}
+              <strong>{modo === 'pagaron' ? 'PAGARON' : 'NO PAGARON'}</strong>. Si es el reporte de
+              deudas del banco, usa el que trae los meses con DEBE.
+            </div>
+          )}
+
           {formato === 'matriz' && counts.sin + counts.amb > 0 && (
             <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
               Hay {counts.sin + counts.amb} filas sin match o ambiguas: no se importan. Revísalas con
@@ -609,6 +646,7 @@ export function PensionImportPanel({
                   <TableHead>DNI</TableHead>
                   <TableHead>Nombre Excel</TableHead>
                   <TableHead>Match</TableHead>
+                  <TableHead>Encontrado por</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Meses que debe</TableHead>
                 </TableRow>
@@ -620,6 +658,9 @@ export function PensionImportPanel({
                     <TableCell className="font-mono text-xs">{r.rawDni || '—'}</TableCell>
                     <TableCell>{r.rawNombre || '—'}</TableCell>
                     <TableCell>{r.nombreMatched || '—'}</TableCell>
+                    <TableCell>
+                      {r.metodo === 'dni' ? 'DNI' : r.metodo === 'nombre' ? 'Nombre' : '—'}
+                    </TableCell>
                     <TableCell>{r.matchStatus}</TableCell>
                     <TableCell>{formatMeses(r.mesesDebe, periodo, formato)}</TableCell>
                   </TableRow>
@@ -638,7 +679,10 @@ export function PensionImportPanel({
             onPageSizeChange={previewPage.changePageSize}
           />
           <div className="flex gap-2">
-            <Button onClick={() => void confirmImport()} disabled={importing || counts.ok === 0}>
+            <Button
+              onClick={() => (formato === 'plano' ? setConfirmPlano(true) : void confirmImport())}
+              disabled={importing || counts.ok === 0}
+            >
               {importing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Confirmar importación ({counts.ok})
             </Button>
@@ -648,6 +692,31 @@ export function PensionImportPanel({
           </div>
         </>
       )}
+
+      <AlertDialog open={confirmPlano} onOpenChange={setConfirmPlano}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Guardar en {periodoLargo(periodo)}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se registrarán {counts.ok} alumnos como{' '}
+              {modo === 'pagaron' ? 'PAGARON' : 'NO PAGARON'} en {periodoLargo(periodo)}. Este
+              archivo no trae columnas de meses; si no corresponde a ese mes, cancela y cambia el
+              periodo arriba.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmPlano(false);
+                void confirmImport();
+              }}
+            >
+              Sí, guardar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

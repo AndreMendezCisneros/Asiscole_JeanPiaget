@@ -202,6 +202,8 @@ export interface PensionImportPreviewRow {
   matchStatus: 'ok' | 'sin_match' | 'ambiguo';
   idEstudiante: number | null;
   nombreMatched: string | null;
+  /** Cómo se encontró al alumno: por DNI o, si falló, por nombre. */
+  metodo: 'dni' | 'nombre' | null;
   /** Meses 1-12 con DEBE. En el Excel plano queda vacío. */
   mesesDebe: number[];
 }
