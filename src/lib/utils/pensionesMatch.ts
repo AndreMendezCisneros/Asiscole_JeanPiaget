@@ -92,3 +92,34 @@ export function matchPensionCandidate(
 
   return { status: 'sin_match', idEstudiante: null, nombreMatched: null };
 }
+
+export type PensionAusentesResult<T> = {
+  /** Ya no salen en el Excel: se pueden poner al día. */
+  ausentes: T[];
+  /** No salen con match, pero su nombre se parece a una fila sin match/ambigua. */
+  protegidos: T[];
+};
+
+/**
+ * Alumnos con meses impagos que ya no aparecen en el Excel de deudas.
+ * Si una fila sin match o ambigua se parece al nombre del alumno, no se cierra:
+ * puede ser el mismo alumno con otro número de documento en el reporte.
+ */
+export function computeAusentes<T extends { idEstudiante: number; nombreEstudiante: string }>(
+  impagos: T[],
+  matchedIds: Iterable<number>,
+  nombresSinMatch: Array<string | null>,
+  fuzzyThreshold = 0.92,
+): PensionAusentesResult<T> {
+  const matched = new Set(matchedIds);
+  const dudosos = nombresSinMatch.map((n) => normalizePersonName(n)).filter(Boolean);
+  const ausentes: T[] = [];
+  const protegidos: T[] = [];
+  for (const row of impagos) {
+    if (matched.has(row.idEstudiante)) continue;
+    const norm = normalizePersonName(row.nombreEstudiante);
+    const parecido = dudosos.some((d) => similarity(norm, d) >= fuzzyThreshold);
+    (parecido ? protegidos : ausentes).push(row);
+  }
+  return { ausentes, protegidos };
+}

@@ -206,6 +206,17 @@ export interface PensionImportPreviewRow {
   mesesDebe: number[];
 }
 
+/** Alumno con meses sin pagar dentro de los periodos del Excel. */
+export interface PensionImpago {
+  idEstudiante: number;
+  nombreEstudiante: string;
+  grado?: string;
+  seccion?: string;
+  nivel?: string;
+  /** Periodos YYYY-MM sin pagar. */
+  periodos: string[];
+}
+
 export interface PensionImportLog {
   id: number;
   periodo: string;

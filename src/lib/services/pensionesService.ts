@@ -2,6 +2,7 @@ import { supabase } from '../supabaseClient';
 import type {
   PensionConfig,
   PensionEstado,
+  PensionImpago,
   PensionImportLog,
   PensionImportModo,
   PensionRow,
@@ -174,6 +175,37 @@ export const pensionesService = {
     }
   },
 
+  /** Alumnos con algún mes sin pagar dentro de los periodos dados (YYYY-MM). */
+  async listImpagosPeriodos(
+    periodos: string[],
+  ): Promise<{ rows: PensionImpago[]; error: string | null }> {
+    if (!requireApiToken()) return { rows: [], error: 'Sin sesión' };
+    try {
+      const { data, error } = await supabase.rpc('sie_pensiones_impagos_periodos', {
+        p_periodos: periodos,
+      });
+      if (error) return { rows: [], error: error.message };
+      const payload = data as { ok?: boolean; rows?: unknown; error?: string };
+      if (!payload?.ok) return { rows: [], error: payload?.error || 'Error al listar impagos' };
+      const rows = Array.isArray(payload.rows)
+        ? payload.rows.map((r) => {
+            const raw = r as Record<string, unknown>;
+            return {
+              idEstudiante: Number(raw.idEstudiante),
+              nombreEstudiante: String(raw.nombreEstudiante ?? ''),
+              grado: raw.grado ? String(raw.grado) : undefined,
+              seccion: raw.seccion ? String(raw.seccion) : undefined,
+              nivel: raw.nivel ? String(raw.nivel) : undefined,
+              periodos: Array.isArray(raw.periodos) ? raw.periodos.map(String) : [],
+            } satisfies PensionImpago;
+          })
+        : [];
+      return { rows, error: null };
+    } catch (err) {
+      return { rows: [], error: err instanceof Error ? err.message : 'Error de red' };
+    }
+  },
+
   async historialAnio(
     idEstudiante: number,
     anio: number,
@@ -248,6 +280,8 @@ export const pensionesService = {
     nombreArchivo: string | null;
     filasSinMatch?: number;
     filasAmbiguas?: number;
+    /** Alumnos que ya no salen en el archivo y se ponen al día (confirmados en la vista previa). */
+    cerrarIds?: number[];
   }): Promise<{ ok: boolean; filasOk?: number; cerroAusentes?: boolean; error: string | null }> {
     if (!requireApiToken()) return { ok: false, error: 'Sin sesión' };
     try {
@@ -258,6 +292,7 @@ export const pensionesService = {
         p_nombre_archivo: input.nombreArchivo,
         p_filas_sin_match: input.filasSinMatch ?? 0,
         p_filas_ambiguas: input.filasAmbiguas ?? 0,
+        p_cerrar_ids: input.cerrarIds ?? null,
       });
       if (error) return { ok: false, error: error.message };
       const payload = data as {

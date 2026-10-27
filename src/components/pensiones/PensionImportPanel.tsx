@@ -14,7 +14,12 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { StaffTablePagination } from '@/components/staff';
-import type { PensionImportModo, PensionImportPreviewRow, Student } from '@/types';
+import type {
+  PensionImpago,
+  PensionImportModo,
+  PensionImportPreviewRow,
+  Student,
+} from '@/types';
 import { pensionesService, studentsService, whatsappService } from '@/lib/services';
 import {
   parsePensionesExcelBuffer,
@@ -22,7 +27,7 @@ import {
   PENSIONES_EXCEL_MAX_BYTES,
   type PensionExcelFormato,
 } from '@/lib/utils/pensionesExcelParser';
-import { matchPensionCandidate } from '@/lib/utils/pensionesMatch';
+import { computeAusentes, matchPensionCandidate } from '@/lib/utils/pensionesMatch';
 import { fechaVencimientoForPeriodo, resolveEstadoPension } from '@/lib/utils/pensionPeriod';
 import { getLimaTodayDate } from '@/lib/utils/limaDateTime';
 import { useTablePagination } from '@/hooks/useTablePagination';
@@ -48,6 +53,8 @@ function formatMeses(
   }
   return meses.map(pensionMonthShort).join(', ');
 }
+
+type AusenteRow = PensionImpago & { revisar: boolean };
 
 async function loadAllActiveStudents(): Promise<{ students: Student[]; error: string | null }> {
   const nomina = await pensionesService.listNominaActiva();
@@ -117,9 +124,14 @@ export function PensionImportPanel({
   const [notifyOnImport, setNotifyOnImport] = useState(true);
   const [notifyProgress, setNotifyProgress] = useState<string | null>(null);
   const [previewFilter, setPreviewFilter] = useState<PreviewFilter>('all');
+  /** null = no se pudo calcular; se usa la regla antigua del servidor. */
+  const [ausentes, setAusentes] = useState<AusenteRow[] | null>(null);
+  const [cerrarSel, setCerrarSel] = useState<Set<number>>(new Set());
 
   const resetFile = () => {
     setPreview([]);
+    setAusentes(null);
+    setCerrarSel(new Set());
     setFormato('plano');
     setMesesCubiertos([]);
     setAnioArchivo(null);
@@ -188,11 +200,37 @@ export function PensionImportPanel({
         };
       });
 
+      let ausentesRows: AusenteRow[] | null = null;
+      if (parsed.formato === 'matriz') {
+        const anioFile = parsed.anioTitulo ?? Number(periodo.slice(0, 4));
+        const periodos = parsed.mesesCubiertos.map(
+          (m) => `${anioFile}-${String(m).padStart(2, '0')}`,
+        );
+        const impagos = await pensionesService.listImpagosPeriodos(periodos);
+        if (impagos.error) {
+          toast.error(`No se pudo calcular quiénes ya no salen: ${impagos.error}`);
+        } else {
+          const { ausentes: aus, protegidos } = computeAusentes(
+            impagos.rows,
+            rows.filter((r) => r.matchStatus === 'ok').map((r) => r.idEstudiante!),
+            rows.filter((r) => r.matchStatus !== 'ok').map((r) => r.rawNombre),
+          );
+          ausentesRows = [
+            ...aus.map((r) => ({ ...r, revisar: false })),
+            ...protegidos.map((r) => ({ ...r, revisar: true })),
+          ];
+        }
+      }
+
       setFormato(parsed.formato);
       setMesesCubiertos(parsed.mesesCubiertos);
       setAnioArchivo(parsed.anioTitulo);
       setPreviewFilter('all');
       setPreview(rows);
+      setAusentes(ausentesRows);
+      setCerrarSel(
+        new Set((ausentesRows ?? []).filter((r) => !r.revisar).map((r) => r.idEstudiante)),
+      );
       const ok = rows.filter((r) => r.matchStatus === 'ok').length;
       const sin = rows.filter((r) => r.matchStatus !== 'ok').length;
       if (ok === 0) {
@@ -294,13 +332,18 @@ export function PensionImportPanel({
           nombreArchivo: fileName,
           filasSinMatch: counts.sin,
           filasAmbiguas: counts.amb,
+          cerrarIds: ausentes ? [...cerrarSel] : undefined,
         });
         if (!result.ok) {
           toast.error(result.error || 'Error al importar');
           return;
         }
-        toast.success(`Deudas actualizadas: ${result.filasOk ?? okRows.length} alumnos`);
-        if (!result.cerroAusentes && counts.sin + counts.amb > 0) {
+        toast.success(
+          ausentes
+            ? `Deudas actualizadas: ${result.filasOk ?? okRows.length} alumnos · Puestos al día: ${cerrarSel.size}`
+            : `Deudas actualizadas: ${result.filasOk ?? okRows.length} alumnos`,
+        );
+        if (!ausentes && !result.cerroAusentes && counts.sin + counts.amb > 0) {
           toast.message(
             'Hay filas sin match: no se marcaron como pagados los alumnos que no aparecen, para no borrar deudas por error.',
           );
@@ -472,6 +515,92 @@ export function PensionImportPanel({
               Ambiguos: {counts.amb}
             </Button>
           </div>
+          {formato === 'matriz' && counts.sin + counts.amb > 0 && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+              Hay {counts.sin + counts.amb} filas sin match o ambiguas: no se importan. Revísalas con
+              el filtro. Los alumnos cuyo nombre se parece a esas filas quedan sin marcar abajo.
+            </div>
+          )}
+
+          {formato === 'matriz' && ausentes && ausentes.length > 0 && (
+            <div className="space-y-2 rounded-md border p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-medium">
+                  Ya no salen en el Excel: se pondrán al día {cerrarSel.size} de {ausentes.length}
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setCerrarSel(new Set(ausentes.map((a) => a.idEstudiante)))}
+                  >
+                    Marcar todos
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setCerrarSel(new Set())}
+                  >
+                    Ninguno
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Tenían meses sin pagar que este archivo ya no muestra como DEBE. Los marcados quedan
+                pagados en esos meses.
+              </p>
+              <div className="max-h-64 overflow-auto rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10" />
+                      <TableHead>Alumno</TableHead>
+                      <TableHead>Grado</TableHead>
+                      <TableHead>Meses que tenía pendientes</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {ausentes.map((a) => (
+                      <TableRow key={a.idEstudiante}>
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            aria-label={`Poner al día a ${a.nombreEstudiante}`}
+                            checked={cerrarSel.has(a.idEstudiante)}
+                            onChange={(e) =>
+                              setCerrarSel((prev) => {
+                                const next = new Set(prev);
+                                if (e.target.checked) next.add(a.idEstudiante);
+                                else next.delete(a.idEstudiante);
+                                return next;
+                              })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {a.nombreEstudiante}
+                          {a.revisar && (
+                            <Badge variant="outline" className="ml-2">
+                              revisar
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {[a.grado, a.seccion].filter(Boolean).join(' ') || '—'}
+                        </TableCell>
+                        <TableCell>
+                          {a.periodos.map((p) => pensionMonthShort(Number(p.slice(5, 7)))).join(', ')}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+
           <div className="overflow-auto rounded-md border">
             <Table>
               <TableHeader>
