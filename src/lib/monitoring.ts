@@ -3,6 +3,7 @@
  *
  * Solo se activa en los colegios cuyo .env.build trae las variables:
  *   VITE_SENTRY_DSN          → errores a Sentry
+ *   VITE_SENTRY_TUNNEL       → p. ej. https://replay.asiscole.com/e/<proyecto> (opcional)
  *   VITE_OPENREPLAY_KEY      → grabaciones a OpenReplay
  *   VITE_OPENREPLAY_INGEST   → p. ej. https://replay.asiscole.com/ingest
  * Sin ellas no se descarga ni se envía nada. Cualquier fallo del monitoreo se ignora:
@@ -18,6 +19,8 @@ type SentryModule = typeof import('@sentry/react');
 type ReplayTracker = import('@openreplay/tracker').default;
 
 const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN?.trim();
+/** Envía los errores por nuestro dominio para que los bloqueadores de anuncios no los corten. */
+const SENTRY_TUNNEL = import.meta.env.VITE_SENTRY_TUNNEL?.trim();
 const REPLAY_KEY = import.meta.env.VITE_OPENREPLAY_KEY?.trim();
 const REPLAY_INGEST = import.meta.env.VITE_OPENREPLAY_INGEST?.trim();
 
@@ -35,6 +38,7 @@ export function initMonitoring(): void {
     .then((mod) => {
       mod.init({
         dsn: SENTRY_DSN,
+        tunnel: SENTRY_TUNNEL || undefined,
         environment: import.meta.env.MODE,
         release: import.meta.env.VITE_BUILD_ID || undefined,
         // Sin IP, cookies, cabeceras, cuerpos ni parámetros de URL.
