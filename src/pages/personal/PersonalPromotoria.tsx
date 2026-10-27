@@ -9,7 +9,7 @@ export const PersonalPromotoria = () => (
       icon={BellRing}
       eyebrow="Personal"
       title="Promotoría (avisos del personal)"
-      description="Quiénes reciben en la app Asiscole las llegadas, tardanzas, inasistencias, salidas e incidencias del personal"
+      description="Celular que recibe en la app Asiscole las llegadas, tardanzas, inasistencias, salidas e incidencias de todo el personal"
       accent="info"
     />
     <PromotoriaSettingsCard />

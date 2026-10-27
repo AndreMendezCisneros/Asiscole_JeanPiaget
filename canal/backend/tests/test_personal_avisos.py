@@ -44,3 +44,11 @@ def test_llego_despues_de_su_salida():
         {"nombre_completo": "PEREZ, Ana", "hora": "15:40", "hora_salida_esperada": "15:30", "estado": "Falta"},
     )
     assert "después de su hora de salida (15:30)" in texto and "inasistencia" in texto
+
+
+def test_id_virtual_del_personal():
+    from apps.ingesta.personal import ID_PERSONAL_OFFSET, es_id_personal, id_virtual
+
+    assert id_virtual(5) == ID_PERSONAL_OFFSET + 5
+    assert es_id_personal(id_virtual(1))
+    assert not es_id_personal(999_999)

@@ -1,101 +1,102 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { BellRing, Loader2, Save } from 'lucide-react';
+import { Loader2, Save, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { StaffDataPanel, StaffDataPanelHeader, StaffDataPanelBody } from '@/components/staff';
-import { configService } from '@/lib/services';
 import { sessionService } from '@/lib/services/sessionService';
 import { supabase } from '@/lib/supabaseClient';
 
-/** Clave en configuracion_sistema que lee el canal para avisar a la Promotoría. */
-export const PROMOTORIA_KEY = 'promotoria_usuarios';
-
-type Candidate = { id: number; username: string; nombre: string; rol: string };
+type PromotoriaConfig = { error: string | null; telefono: string; personal_activo: number };
 
 /**
- * Quiénes reciben en la app Asiscole (modo administración) los avisos del
- * personal: llegadas, tardanzas, inasistencias, salidas e incidencias.
+ * Celular de la Promotoría: queda vinculado en la app Asiscole a todo el
+ * personal activo, igual que un apoderado con sus hijos. Inicia sesión con ese
+ * celular y el DNI de cualquier empleado, y recibe sus llegadas, salidas,
+ * inasistencias e incidencias.
  */
 export function PromotoriaSettingsCard() {
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [telefono, setTelefono] = useState('');
+  const [guardado, setGuardado] = useState('');
+  const [personalActivo, setPersonalActivo] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     void (async () => {
-      const [{ data, error }, cfg] = await Promise.all([
-        supabase.rpc('sie_promotoria_candidatos', { p_token: sessionService.getApiToken() }),
-        configService.getByKeys([PROMOTORIA_KEY]),
-      ]);
-      const payload = data as { error: string | null; usuarios: Candidate[] } | null;
-      if (error || payload?.error) toast.error(error?.message ?? payload?.error ?? 'No se pudo cargar usuarios');
-      setCandidates(payload?.usuarios ?? []);
-      const raw = cfg.configs[PROMOTORIA_KEY]?.value ?? '';
-      setSelected(new Set(raw.split(',').map((x) => Number(x.trim())).filter((n) => Number.isInteger(n) && n > 0)));
+      const { data, error } = await supabase.rpc('sie_promotoria_config', { p_token: sessionService.getApiToken() });
+      const cfg = data as PromotoriaConfig | null;
+      if (error || cfg?.error) toast.error(error?.message ?? cfg?.error ?? 'No se pudo cargar la Promotoría');
+      setTelefono(cfg?.telefono ?? '');
+      setGuardado(cfg?.telefono ?? '');
+      setPersonalActivo(cfg?.personal_activo ?? 0);
       setLoading(false);
     })();
   }, []);
 
-  const toggle = (id: number, on: boolean) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (on) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-
   const save = async () => {
     setSaving(true);
-    const { data, error } = await supabase.rpc('sie_promotoria_guardar', {
+    const { data, error } = await supabase.rpc('sie_promotoria_guardar_telefono', {
       p_token: sessionService.getApiToken(),
-      p_ids: [...selected].sort((a, b) => a - b),
+      p_telefono: telefono,
     });
     setSaving(false);
-    const payload = data as { ok: boolean; error: string | null } | null;
-    if (error || !payload?.ok) {
-      toast.error(error?.message ?? payload?.error ?? 'No se pudo guardar');
+    const res = data as { ok: boolean; error: string | null; telefono?: string } | null;
+    if (error || !res?.ok) {
+      toast.error(error?.message ?? res?.error ?? 'No se pudo guardar');
       return;
     }
-    toast.success('Promotoría guardada');
+    setTelefono(res.telefono ?? '');
+    setGuardado(res.telefono ?? '');
+    toast.success('Celular de Promotoría guardado. La app se actualiza en unos minutos.');
   };
+
+  const primero = guardado.split(',')[0]?.trim();
 
   return (
     <StaffDataPanel>
       <StaffDataPanelHeader
-        title="Promotoría — avisos del personal"
-        description="Reciben en la app Asiscole cada llegada, tardanza, inasistencia, salida e incidencia del personal. Deben iniciar sesión en la app con su usuario del SIE."
+        title="Celular de la Promotoría"
+        description="Ese número queda vinculado en la app Asiscole a todo el personal activo, como un padre con sus hijos."
       />
       <StaffDataPanelBody>
         {loading ? (
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        ) : candidates.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No hay usuarios Admin, Director o Supervisor activos.</p>
         ) : (
           <div className="space-y-4">
-            <div className="grid gap-2 sm:grid-cols-2">
-              {candidates.map((c) => (
-                <label key={c.id} className="flex items-center gap-3 rounded-lg border p-3 text-sm">
-                  <Checkbox checked={selected.has(c.id)} onCheckedChange={(on) => toggle(c.id, Boolean(on))} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-medium">{c.nombre}</span>
-                    <span className="text-xs text-muted-foreground">{c.username}</span>
-                  </span>
-                  <Badge variant="outline">{c.rol}</Badge>
-                </label>
-              ))}
+            <div className="space-y-2">
+              <Label htmlFor="promotoria-tel">Celular (9 dígitos; varios separados por coma)</Label>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  id="promotoria-tel"
+                  inputMode="tel"
+                  value={telefono}
+                  onChange={(e) => setTelefono(e.target.value)}
+                  placeholder="963852741"
+                />
+                <Button variant="info" onClick={() => void save()} disabled={saving || telefono === guardado}>
+                  {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                  Guardar
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="flex items-center gap-2 text-sm text-muted-foreground">
-                <BellRing className="h-4 w-4" aria-hidden="true" />
-                {selected.size} seleccionado{selected.size === 1 ? '' : 's'}
-              </span>
-              <Button variant="info" onClick={() => void save()} disabled={saving}>
-                {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                Guardar
-              </Button>
+            <div className="rounded-lg border bg-muted/40 p-4 text-sm">
+              <p className="mb-2 flex items-center gap-2 font-semibold">
+                <Smartphone className="h-4 w-4" aria-hidden="true" />
+                Cómo entra la Promotoría a la app
+              </p>
+              <ol className="list-decimal space-y-1 pl-5 text-muted-foreground">
+                <li>Abrir la app Asiscole e iniciar sesión.</li>
+                <li>
+                  Celular: <strong className="text-foreground">{primero || '—'}</strong>.
+                </li>
+                <li>
+                  Documento: el <strong className="text-foreground">DNI de cualquier empleado</strong> activo (
+                  {personalActivo} vinculados).
+                </li>
+                <li>Verá a cada empleado como un "hijo" (grado Personal) y recibirá sus avisos.</li>
+              </ol>
             </div>
           </div>
         )}

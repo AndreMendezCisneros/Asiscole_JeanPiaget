@@ -195,6 +195,7 @@ def procesar_lote_tenant(tenant_id: str) -> dict[str, int]:
                 for mensaje in crear_mensajes_personal(
                     tenant_id=tenant_id,
                     tipo=tipo_evento,
+                    id_personal=int(fila["id_estudiante"]),
                     id_registro=int(fila["id_registro"]),
                     payload=_payload_como_dict(fila["payload"]),
                 ):

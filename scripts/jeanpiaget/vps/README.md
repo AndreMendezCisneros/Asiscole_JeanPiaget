@@ -22,9 +22,16 @@ Crontab actual (`crontab -l` como root):
 # PAUSADO hasta cargar horarios reales: */10 * * * * /opt/sie-jp/jp-marcar-faltas-personal-cierre.sh >> /var/log/jp-marcar-faltas-personal.log 2>&1 # jp-personal-cierre
 ```
 
-## Canal (avisos del personal a la Promotoría)
+## Canal (personal en la app como "hijos" de la Promotoría)
 
-`canal/backend/apps/ingesta/personal.py` y `services.py` (rama `personal_*` del poller) se copian a
-`/opt/asiscole-canal/backend/apps/ingesta/` y con `docker cp` a los contenedores
-`asiscole_canal_backend`, `asiscole_canal_worker` y `asiscole_canal_beat`; luego `docker restart` de los tres.
-Los destinatarios se eligen en Configuración → Promotoría (`configuracion_sistema.promotoria_usuarios`).
+Cada empleado activo es un estudiante virtual en el canal (`id = 1000000 + id_personal`), vinculado al
+celular de `configuracion_sistema.promotoria_telefono` mediante la vista `asis_v_directorio_personal`
+(`scripts/jeanpiaget/PATCH_PERSONAL_APP.sql`). La Promotoría entra a la app con ese celular y el DNI de
+cualquier empleado. Archivos del canal modificados (copias en `canal/backend/apps/`):
+
+- `directorio/repositorio.py` — lee también la vista del personal (si existe en el colegio).
+- `ingesta/personal.py`, `ingesta/services.py` — eventos `personal_*` del outbox → mensajes a los vinculados.
+- `academico/services.py`, `academico/personal.py` — Asistencias e Incidencias de la app para ids ≥ 1 000 000.
+
+Desplegar: copiar a `/opt/asiscole-canal/backend/apps/` y con `docker cp` a `asiscole_canal_backend`,
+`asiscole_canal_worker` y `asiscole_canal_beat`; luego `docker restart` de los tres. Respaldos `*.bak-app-*`.
