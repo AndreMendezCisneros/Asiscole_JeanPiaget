@@ -32,6 +32,7 @@ interface ImportMetaEnv {
   readonly VITE_LOGIN_CARNET_SRC?: string;
   /** Sentry (errores). Vacío = apagado. */
   readonly VITE_SENTRY_DSN?: string;
+  readonly VITE_SENTRY_TUNNEL?: string;
   /** OpenReplay (grabaciones del personal). Vacío = apagado. */
   readonly VITE_OPENREPLAY_KEY?: string;
   readonly VITE_OPENREPLAY_INGEST?: string;
