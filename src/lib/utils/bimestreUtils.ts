@@ -84,14 +84,9 @@ export function getBimestreFromDate(fecha: Date, añoEscolar: number): Bimestre 
 export function getBimestreDates(bimestre: Bimestre, añoEscolar: number): { inicio: Date; fin: Date } {
   const config = DEFAULT_BIMESTRE_DATES[bimestre];
   
-  let añoInicio = añoEscolar;
-  let añoFin = añoEscolar;
-
-  // Ajustar años para bimestres que cruzan el cambio de año
-  if (bimestre === 4) {
-    // El bimestre 4 puede extenderse hasta febrero del año siguiente
-    añoFin = añoEscolar + 1;
-  }
+  const añoInicio = añoEscolar;
+  // Solo pasa al año siguiente si el bimestre cruza el cambio de año (p. ej. nov–feb).
+  const añoFin = config.finMes < config.inicioMes ? añoEscolar + 1 : añoEscolar;
 
   const inicio = new Date(añoInicio, config.inicioMes - 1, config.inicioDia);
   const fin = new Date(añoFin, config.finMes - 1, config.finDia);
