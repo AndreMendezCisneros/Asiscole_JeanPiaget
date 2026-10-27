@@ -9,8 +9,8 @@
  * nunca debe afectar al SIE.
  *
  * Privacidad (datos de menores): solo se graba al personal, nunca al portal de padres
- * ni a vistas públicas; los textos y campos van ocultos (privateMode) y no se capturan
- * peticiones de red. Sentry no recibe IP, nombres, cookies ni cuerpos (dataCollection).
+ * ni a vistas públicas; los textos se ven pero DNI, celulares y correos van ocultos,
+ * y no se capturan peticiones de red. Sentry no recibe IP, nombres, cookies ni cuerpos (dataCollection).
  */
 import type { User } from '@/types';
 
@@ -64,20 +64,40 @@ function puedeGrabar(user: User | null, pathname: string): boolean {
   return !RUTAS_SIN_GRABAR.some((r) => pathname === r || pathname.startsWith(`${r}/`));
 }
 
+/** DNI (8 dígitos) y celulares (9 dígitos) se reemplazan por asteriscos en todo texto grabado. */
+const DNI_O_CELULAR = /\b\d{8,9}\b/g;
+
+/**
+ * Engancha el enmascarado de DNI al sanitizador interno del tracker (@openreplay/tracker 19.0.2,
+ * versión fijada). Si la versión cambia y el gancho no existe, no se graba: es preferible a
+ * grabar DNI a la vista.
+ */
+function ocultarDniEnTextos(t: ReplayTracker): boolean {
+  const sanitizer = (t as unknown as { app?: { sanitizer?: { sanitize?: (id: number, data: string) => string } } })
+    .app?.sanitizer;
+  const original = sanitizer?.sanitize?.bind(sanitizer);
+  if (!sanitizer || !original) return false;
+  sanitizer.sanitize = (id, data) => original(id, data).replace(DNI_O_CELULAR, (m) => '*'.repeat(m.length));
+  return true;
+}
+
 function cargarTracker(): Promise<ReplayTracker | null> {
   if (!REPLAY_KEY || !REPLAY_INGEST) return Promise.resolve(null);
   trackerLoading ??= import('@openreplay/tracker')
     .then(({ default: Tracker }) => {
-      tracker = new Tracker({
+      const t = new Tracker({
         projectKey: REPLAY_KEY,
         ingestPoint: REPLAY_INGEST,
-        privateMode: true,
-        defaultInputMode: 2,
-        obscureTextNumbers: true,
+        // Textos visibles; en campos se ocultan valores con 4+ dígitos (DNI, teléfono) y correos.
+        defaultInputMode: 0,
+        obscureInputNumbers: true,
+        obscureInputEmails: true,
         obscureTextEmails: true,
         network: { capturePayload: false, failuresOnly: true, ignoreHeaders: true, sessionTokenHeader: false },
         consoleMethods: ['error'],
       } as ConstructorParameters<typeof Tracker>[0]);
+      if (!ocultarDniEnTextos(t)) return null;
+      tracker = t;
       return tracker;
     })
     .catch(() => null);
