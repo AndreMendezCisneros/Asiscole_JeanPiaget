@@ -1,5 +1,8 @@
 import type { ArrivalRecord, FaultType, Incident, Student } from '@/types';
 import { toWhatsAppChatId, toWhatsAppPhone } from '@/lib/utils/phoneUtils';
+import { supabase } from '@/lib/supabaseClient';
+import { sessionService } from '@/lib/services/sessionService';
+import { createNotifyOnce, type NotifyResult } from '@/lib/utils/notifyOnce';
 import {
   buildArrivalCorrectionIngestBody,
   buildArrivalIngestBody,
@@ -147,6 +150,8 @@ async function deliverParentNotice(
       messages: string[];
       kind: 'arrival' | 'departure' | 'incident';
     };
+    /** Avisos sin trigger en BD (citación, corrección): por asis_outbox, con reintentos. */
+    durable?: boolean;
   },
 ): Promise<ParentNotifyResult> {
   const apoderadoPhone = student.contactPhone?.trim() || student.emergencyPhone?.trim() || '';
@@ -178,7 +183,9 @@ async function deliverParentNotice(
   }
 
   if (MOBILE_INGEST_ENABLED && options.ingestBody) {
-    const result = await sendViaMobileIngest(options.ingestBody);
+    const result = options.durable
+      ? await sendAppNoticeDurable(options.ingestBody)
+      : await sendViaMobileIngest(options.ingestBody);
     if (result.ok) appOk = true;
     else if (result.error) errors.push(result.error);
   }
@@ -222,7 +229,6 @@ const OPENWA_SESSION_ID = import.meta.env.VITE_OPENWA_SESSION_ID || '';
 const OPENWA_API_KEY = import.meta.env.VITE_OPENWA_API_KEY || '';
 
 /** Evita reenvíos duplicados del mismo aviso en escaneos repetidos. */
-const recentNotifyKeys = new Map<string, number>();
 const NOTIFY_DEDUP_MS = 2 * 60 * 1000;
 
 export type NotifyOpts = {
@@ -276,13 +282,8 @@ export function buildNotifyDedupKey(
   return `${kind}:${studentId}:${date.slice(0, 10)}`;
 }
 
-function shouldSkipDuplicateNotify(key: string): boolean {
-  const last = recentNotifyKeys.get(key);
-  const now = Date.now();
-  if (last != null && now - last < NOTIFY_DEDUP_MS) return true;
-  recentNotifyKeys.set(key, now);
-  return false;
-}
+/** Un aviso por clave cada NOTIFY_DEDUP_MS; se recuerda solo si salió bien. */
+const sendOncePerKey = createNotifyOnce(NOTIFY_DEDUP_MS);
 
 const APP_URL = (import.meta.env.VITE_APP_URL as string | undefined)?.replace(/\/$/, '') || '';
 
@@ -810,6 +811,34 @@ async function sendViaMobileIngest(
   }
 }
 
+/**
+ * Aviso de la app que no tiene trigger en BD (pensión, citación, corrección):
+ * se encola en asis_outbox y el poller del canal lo entrega con reintentos, aunque
+ * se cierre la pestaña o falle la red después. Si la RPC no está disponible o el
+ * id choca con otro aviso, se usa el envío HTTP directo de siempre.
+ */
+async function sendAppNoticeDurable(
+  body: MobileIngestEventBody,
+): Promise<{ ok: boolean; error: string | null }> {
+  const token = sessionService.getApiToken();
+  if (token) {
+    try {
+      const { data, error } = await supabase.rpc('sie_encolar_aviso_app', {
+        p_token: token,
+        p_id_estudiante: body.id_estudiante,
+        p_id_registro: body.id_registro,
+        p_payload: body.payload,
+      });
+      const res = data as { ok?: boolean; error?: string | null } | null;
+      if (!error && res?.ok) return { ok: true, error: null };
+      console.warn('Aviso app: cola no disponible, envío directo:', error?.message ?? res?.error);
+    } catch (err) {
+      console.warn('Aviso app: cola no disponible, envío directo:', err);
+    }
+  }
+  return sendViaMobileIngest(body);
+}
+
 async function sendViaNotifyQueue(
   phone: string,
   student: Student,
@@ -1005,15 +1034,6 @@ export async function notifyParentIncident(
     incidentId: incident.id,
   });
 
-  if (shouldSkipDuplicateNotify(dedupKey)) {
-    return {
-      ok: true,
-      error: null,
-      skipped: true,
-      chatId: toWhatsAppChatId(apoderadoPhone) || undefined,
-    };
-  }
-
   const messages = buildIncidentNotifyMessages(student, incident, fault, apoderadoPhone, opts);
   const stubRecord: Partial<ArrivalRecord> = {
     id: incident.id,
@@ -1022,21 +1042,23 @@ export async function notifyParentIncident(
   };
   const wppPhone = toWhatsAppPhone(apoderadoPhone);
 
-  return deliverParentNotice(student, {
-    wppMessages: messages,
-    ingestBody: MOBILE_INGEST_ENABLED
-      ? buildIncidentIngestBody(MOBILE_INGEST_TENANT, student, incident, fault)
-      : null,
-    queue:
-      wppPhone
-        ? {
-            phone: wppPhone,
-            record: stubRecord,
-            messages,
-            kind: 'incident',
-          }
-        : undefined,
-  });
+  return sendOncePerKey(dedupKey, toWhatsAppChatId(apoderadoPhone) || undefined, () =>
+    deliverParentNotice(student, {
+      wppMessages: messages,
+      ingestBody: MOBILE_INGEST_ENABLED
+        ? buildIncidentIngestBody(MOBILE_INGEST_TENANT, student, incident, fault)
+        : null,
+      queue:
+        wppPhone
+          ? {
+              phone: wppPhone,
+              record: stubRecord,
+              messages,
+              kind: 'incident',
+            }
+          : undefined,
+    }),
+  );
 }
 
 export function buildPensionPendingMessage(
@@ -1096,27 +1118,23 @@ export async function notifyParentPensionPending(
   }
 
   const apoderadoPhone = student.contactPhone?.trim() || student.emergencyPhone?.trim() || '';
+  const chatId = toWhatsAppChatId(apoderadoPhone) || undefined;
+  const send = async (): Promise<NotifyResult> => {
+    const stamp = Date.now() % 1_000_000;
+    const result = await sendAppNoticeDurable(
+      buildPensionIngestBody(MOBILE_INGEST_TENANT, student, {
+        periodo: input.periodo,
+        monto: input.monto,
+        mesesLabel: input.mesesLabel,
+        idRegistro: input.pensionId ?? student.id * 1_000_000 + stamp,
+      }),
+    );
+    return { ...result, chatId };
+  };
+
+  if (input.skipDedup) return send();
   const dedupKey = buildNotifyDedupKey('pension', student.id, input.mesesLabel || input.periodo);
-
-  if (!input.skipDedup && shouldSkipDuplicateNotify(dedupKey)) {
-    return {
-      ok: true,
-      error: null,
-      skipped: true,
-      chatId: toWhatsAppChatId(apoderadoPhone) || undefined,
-    };
-  }
-
-  const stamp = Date.now() % 1_000_000;
-  const result = await sendViaMobileIngest(
-    buildPensionIngestBody(MOBILE_INGEST_TENANT, student, {
-      periodo: input.periodo,
-      monto: input.monto,
-      mesesLabel: input.mesesLabel,
-      idRegistro: input.pensionId ?? student.id * 1_000_000 + stamp,
-    }),
-  );
-  return { ...result, chatId: toWhatsAppChatId(apoderadoPhone) || undefined };
+  return sendOncePerKey(dedupKey, chatId, send);
 }
 
 /**
@@ -1143,19 +1161,13 @@ export async function notifyParentNota(
     `${input.semanaCodigo}:${input.nota}`,
   );
 
-  if (shouldSkipDuplicateNotify(dedupKey)) {
-    return {
-      ok: true,
-      error: null,
-      skipped: true,
-      chatId: toWhatsAppChatId(apoderadoPhone) || undefined,
-    };
-  }
-
-  const result = await sendViaMobileIngest(
-    buildNotaIngestBody(MOBILE_INGEST_TENANT, student, input),
-  );
-  return { ...result, chatId: toWhatsAppChatId(apoderadoPhone) || undefined };
+  const chatId = toWhatsAppChatId(apoderadoPhone) || undefined;
+  return sendOncePerKey(dedupKey, chatId, async () => {
+    const result = await sendViaMobileIngest(
+      buildNotaIngestBody(MOBILE_INGEST_TENANT, student, input),
+    );
+    return { ...result, chatId };
+  });
 }
 
 /**
@@ -1182,21 +1194,15 @@ export async function notifyParentCita(
 
   const dedupKey = buildNotifyDedupKey('cita', student.id, String(input.citaId));
 
-  if (shouldSkipDuplicateNotify(dedupKey)) {
-    return {
-      ok: true,
-      error: null,
-      skipped: true,
-      chatId: toWhatsAppChatId(apoderadoPhone) || undefined,
-    };
-  }
-
-  return deliverParentNotice(student, {
-    wppMessages: [buildCitaMessage(student, input)],
-    ingestBody: MOBILE_INGEST_ENABLED
-      ? buildCitaIngestBody(MOBILE_INGEST_TENANT, student, input)
-      : null,
-  });
+  return sendOncePerKey(dedupKey, toWhatsAppChatId(apoderadoPhone) || undefined, () =>
+    deliverParentNotice(student, {
+      wppMessages: [buildCitaMessage(student, input)],
+      ingestBody: MOBILE_INGEST_ENABLED
+        ? buildCitaIngestBody(MOBILE_INGEST_TENANT, student, input)
+        : null,
+      durable: true,
+    }),
+  );
 }
 
 export function buildArrivalCorrectionMessage(
@@ -1251,21 +1257,16 @@ export async function notifyParentArrivalCorrection(
   }
 
   const dedupKey = `correccion:${input.recordId}:${input.fecha.slice(0, 10)}:${input.hora.slice(0, 5)}`;
-  if (shouldSkipDuplicateNotify(dedupKey)) {
-    return {
-      ok: true,
-      error: null,
-      skipped: true,
-      chatId: toWhatsAppChatId(apoderadoPhone) || undefined,
-    };
-  }
 
-  return deliverParentNotice(student, {
-    wppMessages: [buildArrivalCorrectionMessage(student, input)],
-    ingestBody: MOBILE_INGEST_ENABLED
-      ? buildArrivalCorrectionIngestBody(MOBILE_INGEST_TENANT, student, input)
-      : null,
-  });
+  return sendOncePerKey(dedupKey, toWhatsAppChatId(apoderadoPhone) || undefined, () =>
+    deliverParentNotice(student, {
+      wppMessages: [buildArrivalCorrectionMessage(student, input)],
+      ingestBody: MOBILE_INGEST_ENABLED
+        ? buildArrivalCorrectionIngestBody(MOBILE_INGEST_TENANT, student, input)
+        : null,
+      durable: true,
+    }),
+  );
 }
 
 async function notifyParentEvent(
@@ -1287,15 +1288,6 @@ async function notifyParentEvent(
     tallerId: opts?.tallerId,
   });
 
-  if (shouldSkipDuplicateNotify(dedupKey)) {
-    return {
-      ok: true,
-      error: null,
-      skipped: true,
-      chatId: toWhatsAppChatId(apoderadoPhone) || undefined,
-    };
-  }
-
   const isTaller = Boolean(opts?.tallerId || opts?.tallerNombre);
   const messages =
     kind === 'departure'
@@ -1303,23 +1295,25 @@ async function notifyParentEvent(
       : buildNotifyMessages(student, record, apoderadoPhone, opts);
   const wppPhone = toWhatsAppPhone(apoderadoPhone);
 
-  return deliverParentNotice(student, {
-    wppMessages: messages,
-    ingestBody: MOBILE_INGEST_ENABLED
-      ? kind === 'departure'
-        ? buildDepartureIngestBody(MOBILE_INGEST_TENANT, student, record, { taller: isTaller })
-        : buildArrivalIngestBody(MOBILE_INGEST_TENANT, student, record, { taller: isTaller })
-      : null,
-    queue:
-      wppPhone
-        ? {
-            phone: wppPhone,
-            record,
-            messages,
-            kind,
-          }
-        : undefined,
-  });
+  return sendOncePerKey(dedupKey, toWhatsAppChatId(apoderadoPhone) || undefined, () =>
+    deliverParentNotice(student, {
+      wppMessages: messages,
+      ingestBody: MOBILE_INGEST_ENABLED
+        ? kind === 'departure'
+          ? buildDepartureIngestBody(MOBILE_INGEST_TENANT, student, record, { taller: isTaller })
+          : buildArrivalIngestBody(MOBILE_INGEST_TENANT, student, record, { taller: isTaller })
+        : null,
+      queue:
+        wppPhone
+          ? {
+              phone: wppPhone,
+              record,
+              messages,
+              kind,
+            }
+          : undefined,
+    }),
+  );
 }
 
 export const whatsappService = {
