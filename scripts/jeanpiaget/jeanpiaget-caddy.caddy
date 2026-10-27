@@ -17,7 +17,7 @@ jeanpiaget.asiscole.com {
 	}
 
 	@sie_app not path /wpp-api* /api/* /wpp-notify* /meta-wa* /canal-api*
-	header @sie_app Content-Security-Policy "default-src 'self'; script-src 'self' https://www.googletagmanager.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: blob:; media-src 'self' blob: data:; connect-src 'self' https://__SUPABASE_HOST__ wss://__SUPABASE_HOST__ https://www.google-analytics.com https://region1.google-analytics.com https://cloudflareinsights.com; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; upgrade-insecure-requests"
+	header @sie_app Content-Security-Policy "default-src 'self'; script-src 'self' https://www.googletagmanager.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: blob:; media-src 'self' blob: data:; connect-src 'self' https://__SUPABASE_HOST__ wss://__SUPABASE_HOST__ https://www.google-analytics.com https://region1.google-analytics.com https://cloudflareinsights.com https://*.ingest.de.sentry.io https://replay.asiscole.com; worker-src 'self' blob:; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; upgrade-insecure-requests"
 
 	@app_shell {
 		not path /assets/*

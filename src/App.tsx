@@ -15,6 +15,7 @@ import { PageMetaManager } from "./components/seo/PageMetaManager";
 import { SiteAnalytics } from "./components/seo/SiteAnalytics";
 import { StaffLayoutShell } from "./components/layout/StaffLayoutShell";
 import { lazyPage } from "./lib/lazyPage";
+import { setMonitoringUser, syncSessionReplay } from "./lib/monitoring";
 import { getHomeRouteForRole } from "./lib/utils/roleRoutes";
 import { Dashboard } from "./pages/Dashboard";
 import { RegisterIncident } from "./pages/RegisterIncident";
@@ -469,6 +470,13 @@ const AppWithSessionMonitor = () => {
   useEffect(() => {
     const isLogin = pathname === '/login' || pathname.startsWith('/login/');
     document.documentElement.classList.toggle('route-login', isLogin);
+  }, [pathname]);
+
+  // Monitoreo (solo colegios con VITE_SENTRY_DSN / VITE_OPENREPLAY_KEY): no graba padres ni vistas públicas.
+  useEffect(() => {
+    const user = authService.getCurrentUser();
+    setMonitoringUser(user);
+    void syncSessionReplay(user, pathname);
   }, [pathname]);
 
   return (

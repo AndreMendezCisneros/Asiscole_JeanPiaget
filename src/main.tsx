@@ -2,6 +2,9 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import { preloadCriticalRoutes } from "@/lib/utils/deviceCompat";
+import { initMonitoring } from "@/lib/monitoring";
+
+initMonitoring();
 
 if (import.meta.env.DEV) {
   void import("./lib/utils/verificarEstudiante");
