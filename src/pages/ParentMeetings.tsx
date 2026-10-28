@@ -83,6 +83,7 @@ import {
   formatDateKeyLima,
   getLimaTodayDate,
   parseMeetingDateTime,
+  dateFromKey,
 } from '@/lib/utils/limaDateTime';
 import { StudentSearchCombobox } from '@/components/students/StudentSearchCombobox';
 import { ReincidenceBadge } from '@/components/shared/ReincidenceBadge';
@@ -699,7 +700,7 @@ export const ParentMeetings = () => {
       motivo: meeting.motivo,
       fecha: '',
       hora: '',
-      notas: `Reprogramado por inasistencia el ${format(new Date(meeting.fecha), 'dd/MM/yyyy', { locale: es })}`,
+      notas: `Reprogramado por inasistencia el ${format(dateFromKey(meeting.fecha), 'dd/MM/yyyy', { locale: es })}`,
       tipo: 'individual',
     });
     setDialogOpen(true);
@@ -1051,7 +1052,7 @@ export const ParentMeetings = () => {
                                 </div>
                               </TableCell>
                               <TableCell>{group.motivo}</TableCell>
-                              <TableCell>{format(new Date(group.fecha), 'dd/MM/yyyy', { locale: es })}</TableCell>
+                              <TableCell>{format(dateFromKey(group.fecha), 'dd/MM/yyyy', { locale: es })}</TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-2">
                                   <Clock className="h-4 w-4 text-muted-foreground" />
@@ -1075,7 +1076,7 @@ export const ParentMeetings = () => {
                                   </div>
                                 </TableCell>
                                 <TableCell className="text-muted-foreground text-sm">{meeting.motivo}</TableCell>
-                                <TableCell>{format(new Date(meeting.fecha), 'dd/MM/yyyy', { locale: es })}</TableCell>
+                                <TableCell>{format(dateFromKey(meeting.fecha), 'dd/MM/yyyy', { locale: es })}</TableCell>
                                 <TableCell>
                                   <div className="flex items-center gap-2">
                                     <Clock className="h-4 w-4 text-muted-foreground" />
@@ -1146,7 +1147,7 @@ export const ParentMeetings = () => {
                             </div>
                           </TableCell>
                           <TableCell>{meeting.motivo}</TableCell>
-                          <TableCell>{format(new Date(meeting.fecha), 'dd/MM/yyyy', { locale: es })}</TableCell>
+                          <TableCell>{format(dateFromKey(meeting.fecha), 'dd/MM/yyyy', { locale: es })}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Clock className="h-4 w-4 text-muted-foreground" />
@@ -1246,7 +1247,7 @@ export const ParentMeetings = () => {
                         </Badge>
                       </div>
                       <div className="text-xs text-muted-foreground mt-0.5 flex gap-3">
-                        <span>{format(new Date(group.fecha), "EEEE dd 'de' MMMM yyyy", { locale: es })}</span>
+                        <span>{format(dateFromKey(group.fecha), "EEEE dd 'de' MMMM yyyy", { locale: es })}</span>
                         <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{group.hora}</span>
                       </div>
                     </div>
@@ -1748,7 +1749,7 @@ export const ParentMeetings = () => {
                 <div>
                   <Label className="text-muted-foreground">Fecha</Label>
                   <p className="text-lg font-semibold">
-                    {format(new Date(selectedMeeting.fecha), 'dd/MM/yyyy', { locale: es })}
+                    {format(dateFromKey(selectedMeeting.fecha), 'dd/MM/yyyy', { locale: es })}
                   </p>
                 </div>
                 <div>
