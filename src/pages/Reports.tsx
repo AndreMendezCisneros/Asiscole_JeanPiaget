@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query/queryKeys';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -105,6 +106,17 @@ export const Reports = () => {
     };
   }, [añoEscolar, reportFilters]);
   const latenessQuery = useLatenessReportQuery(latenessFilters, latenessFilters.dateFrom <= latenessFilters.dateTo);
+
+  // «Ver reporte completo» del Inicio llega con #tardanzas: bajar a esa sección cuando ya se pintó
+  const location = useLocation();
+  const pageReady = Boolean(reportsData);
+  useEffect(() => {
+    if (location.hash !== '#tardanzas' || !pageReady) return;
+    const id = window.setTimeout(() => {
+      document.getElementById('tardanzas')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+    return () => window.clearTimeout(id);
+  }, [location.hash, pageReady]);
 
   const { data: studentIncidents = [] } = useQuery({
     queryKey: ['reports', 'student-incidents', selectedStudent?.id, reportFilters.bimestre, reportFilters.añoEscolar],
@@ -571,6 +583,7 @@ export const Reports = () => {
         />
       </div>
 
+      <div id="tardanzas" className="scroll-mt-20">
       <LatenessPanel
         description={`${
           bimestre !== 'all'
@@ -584,6 +597,7 @@ export const Reports = () => {
         onRetry={() => void latenessQuery.refetch()}
         showDaily
       />
+      </div>
 
       {/* Charts y detalle */}
       {/* Tendencia mensual a ancho completo */}

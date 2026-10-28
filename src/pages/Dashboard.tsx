@@ -638,6 +638,8 @@ export const Dashboard = () => {
         isFetching={latenessQuery.isFetching}
         onRetry={() => void latenessQuery.refetch()}
         singleDay={latenessPeriod === 'today'}
+        compact
+        onOpenFullReport={() => navigate('/reports#tardanzas')}
         headerAction={
           <StaffSegmentedControl
             aria-label="Período de tardanzas"
