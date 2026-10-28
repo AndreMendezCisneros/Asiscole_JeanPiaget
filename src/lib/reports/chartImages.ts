@@ -22,12 +22,15 @@ export const CHART_COLORS = {
   blueSoft: '#b9cdf0',
   orange: 'hsl(13 72% 48%)',
   orangeSoft: 'hsl(20 89% 82%)',
+  violet: '#6d4bc4',
+  violetSoft: '#d9cbf6',
   white: '#ffffff',
 };
 
 /** Escala secuencial azul (incidencias) y naranja (tardanzas): 0 = vacío. */
 export const BLUE_RAMP = ['#f5f7fa', '#e6effc', '#c4d7f5', '#8eb1e8', '#2f63b8', '#1b3c7e'];
 export const ORANGE_RAMP = ['#f5f7fa', '#fde6da', '#f9c4a7', '#f39a73', '#d4501f', '#a0321a'];
+export const VIOLET_RAMP = ['#f5f7fa', '#efe9fc', '#d9cbf6', '#b39be8', '#6d4bc4', '#47288f'];
 export const RAMP_TEXT = ['#64748b', '#0f172a', '#0f172a', '#0f172a', '#ffffff', '#ffffff'];
 
 function createCanvas(width: number, height: number) {

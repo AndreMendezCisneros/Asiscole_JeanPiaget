@@ -4,8 +4,9 @@ import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { niceAxisScale } from '@/lib/utils/chartAxis';
 import type { LatenessDay } from '@/lib/utils/latenessStats';
+import { LATE_TERMS, type CountTerms } from './LatenessHeatmap';
 
-function DayTooltip({ active, payload }: TooltipProps<number, string>) {
+function DayTooltip({ active, payload, terms }: TooltipProps<number, string> & { terms: CountTerms }) {
   const d = payload?.[0]?.payload as LatenessDay | undefined;
   if (!active || !d) return null;
   return (
@@ -15,14 +16,14 @@ function DayTooltip({ active, payload }: TooltipProps<number, string>) {
       </p>
       <p>
         <span className="font-semibold tabular-nums">{d.lateCount}</span>{' '}
-        <span className="text-muted-foreground">{d.lateCount === 1 ? 'tardanza' : 'tardanzas'}</span>
+        <span className="text-muted-foreground">{d.lateCount === 1 ? terms.one : terms.many}</span>
       </p>
     </div>
   );
 }
 
 /** Tardanzas por día del período (solo días con registros). */
-export function LatenessDailyChart({ days }: { days: LatenessDay[] }) {
+export function LatenessDailyChart({ days, terms = LATE_TERMS }: { days: LatenessDay[]; terms?: CountTerms }) {
   if (days.length === 0) return null;
   const axis = niceAxisScale(Math.max(0, ...days.map((d) => d.lateCount)));
 
@@ -48,8 +49,8 @@ export function LatenessDailyChart({ days }: { days: LatenessDay[] }) {
             ticks={axis.ticks}
             tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
           />
-          <Tooltip content={<DayTooltip />} cursor={{ fill: 'hsl(var(--muted) / 0.6)' }} />
-          <Bar dataKey="lateCount" fill="hsl(var(--late-4))" radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={false} />
+          <Tooltip content={<DayTooltip terms={terms} />} cursor={{ fill: 'hsl(var(--muted) / 0.6)' }} />
+          <Bar dataKey="lateCount" fill={`hsl(var(--${terms.ramp}-4))`} radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
     </div>

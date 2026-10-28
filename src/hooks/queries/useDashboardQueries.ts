@@ -93,3 +93,18 @@ export function useLatenessReportQuery(filters: LatenessFilters, enabled = true)
     placeholderData: keepPreviousData,
   });
 }
+
+export function useAbsenceReportQuery(filters: LatenessFilters, enabled = true) {
+  return useQuery({
+    queryKey: ['absences', filters] as const,
+    queryFn: async () => {
+      const { summary, error } = await latenessService.getAbsenceReport(filters);
+      if (error) throw new Error(error);
+      if (!summary) throw new Error('No se recibieron datos de faltas');
+      return summary;
+    },
+    enabled,
+    staleTime: 60 * 1000,
+    placeholderData: keepPreviousData,
+  });
+}

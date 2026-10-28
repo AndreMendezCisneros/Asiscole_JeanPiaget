@@ -4339,3 +4339,19 @@
   --inc-text-4: 0 0% 100%;
   --inc-text-5: 0 0% 100%;
 }
+
+/* Faltas: escala secuencial violeta (más oscuro = más faltas). */
+:root {
+  --abs-0: 210 20% 97%;
+  --abs-1: 262 80% 95%;
+  --abs-2: 262 70% 86%;
+  --abs-3: 262 58% 72%;
+  --abs-4: 262 48% 50%;
+  --abs-5: 264 56% 34%;
+  --abs-text-0: 215 14% 46%;
+  --abs-text-1: 222 47% 14%;
+  --abs-text-2: 222 47% 14%;
+  --abs-text-3: 222 47% 12%;
+  --abs-text-4: 0 0% 100%;
+  --abs-text-5: 0 0% 100%;
+}

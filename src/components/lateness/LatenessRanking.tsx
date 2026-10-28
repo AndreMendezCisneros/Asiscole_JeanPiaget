@@ -1,15 +1,17 @@
 import { Bar, BarChart, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { TooltipProps } from 'recharts';
 import type { LatenessClassroom } from '@/lib/utils/latenessStats';
+import { LATE_TERMS, type CountTerms } from './LatenessHeatmap';
 
 interface LatenessRankingProps {
   classrooms: LatenessClassroom[];
   selectedKey: string | null;
   onSelect: (key: string | null) => void;
   limit?: number;
+  terms?: CountTerms;
 }
 
-function RankingTooltip({ active, payload }: TooltipProps<number, string>) {
+function RankingTooltip({ active, payload, terms }: TooltipProps<number, string> & { terms: CountTerms }) {
   const c = payload?.[0]?.payload as LatenessClassroom | undefined;
   if (!active || !c) return null;
   return (
@@ -17,7 +19,7 @@ function RankingTooltip({ active, payload }: TooltipProps<number, string>) {
       <p className="mb-1 text-sm font-semibold">{c.label}</p>
       <p>
         <span className="font-semibold tabular-nums">{c.lateCount}</span>{' '}
-        <span className="text-muted-foreground">tardanzas</span>
+        <span className="text-muted-foreground">{terms.many}</span>
       </p>
       <p>
         <span className="font-semibold tabular-nums">{c.studentsLate}</span>
@@ -29,7 +31,7 @@ function RankingTooltip({ active, payload }: TooltipProps<number, string>) {
 }
 
 /** Aulas con más tardanzas (barras horizontales de un solo tono). */
-export function LatenessRanking({ classrooms, selectedKey, onSelect, limit = 10 }: LatenessRankingProps) {
+export function LatenessRanking({ classrooms, selectedKey, onSelect, limit = 10, terms = LATE_TERMS }: LatenessRankingProps) {
   const data = classrooms
     .filter((c) => c.lateCount > 0)
     .sort((a, b) => b.lateCount - a.lateCount || a.label.localeCompare(b.label))
@@ -38,7 +40,7 @@ export function LatenessRanking({ classrooms, selectedKey, onSelect, limit = 10 
   if (data.length === 0) {
     return (
       <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
-        Ninguna aula con tardanzas en el período
+        Ninguna aula con {terms.many} en el período
       </div>
     );
   }
@@ -58,7 +60,7 @@ export function LatenessRanking({ classrooms, selectedKey, onSelect, limit = 10 
             axisLine={false}
             tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
           />
-          <Tooltip content={<RankingTooltip />} cursor={{ fill: 'hsl(var(--muted) / 0.6)' }} />
+          <Tooltip content={<RankingTooltip terms={terms} />} cursor={{ fill: 'hsl(var(--muted) / 0.6)' }} />
           <Bar
             dataKey="lateCount"
             radius={[0, 4, 4, 0]}
@@ -70,7 +72,7 @@ export function LatenessRanking({ classrooms, selectedKey, onSelect, limit = 10 
             {data.map((c) => (
               <Cell
                 key={c.key}
-                fill="hsl(var(--late-4))"
+                fill={`hsl(var(--${terms.ramp}-4))`}
                 fillOpacity={selectedKey && selectedKey !== c.key ? 0.3 : 1}
               />
             ))}

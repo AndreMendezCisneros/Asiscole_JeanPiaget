@@ -39,7 +39,8 @@ import { StudentSearchCombobox } from '@/components/students/StudentSearchCombob
 import { CLASSROOM_FIELD_LABELS, CLASSROOM_GRADES, CLASSROOM_LEVELS, CLASSROOM_SECTIONS } from '@/lib/constants/classrooms';
 import { buildDashboardStatsFromIncidents } from '@/lib/utils/incidentReportStats';
 import { LatenessPanel } from '@/components/lateness/LatenessPanel';
-import { useLatenessReportQuery } from '@/hooks/queries/useDashboardQueries';
+import { useAbsenceReportQuery, useLatenessReportQuery } from '@/hooks/queries/useDashboardQueries';
+import { AbsencePanel } from '@/components/lateness/AbsencePanel';
 import type { ReportExportData } from '@/lib/reports/reportInsights';
 import { SCHOOL_NAME } from '@/config/siteSeo';
 import { getLimaTodayDate } from '@/lib/utils/limaDateTime';
@@ -109,6 +110,7 @@ export const Reports = () => {
     };
   }, [añoEscolar, reportFilters]);
   const latenessQuery = useLatenessReportQuery(latenessFilters, latenessFilters.dateFrom <= latenessFilters.dateTo);
+  const absenceQuery = useAbsenceReportQuery(latenessFilters, latenessFilters.dateFrom <= latenessFilters.dateTo);
 
   // «Ver reporte completo» del Inicio llega con #tardanzas: bajar a esa sección cuando ya se pintó
   const location = useLocation();
@@ -195,6 +197,11 @@ export const Reports = () => {
         }));
     };
 
+    let absences = selectedStudent ? null : absenceQuery.data ?? null;
+    if (!selectedStudent && !absences) {
+      const res = await absenceQuery.refetch();
+      absences = res.data ?? null;
+    }
     let lateness = selectedStudent ? null : latenessQuery.data ?? null;
     if (!selectedStudent && !lateness) {
       const res = await latenessQuery.refetch();
@@ -212,6 +219,7 @@ export const Reports = () => {
       byGrade: selectedStudent ? [] : comparisonByGrade,
       bySection: selectedStudent ? [] : comparisonBySection,
       lateness,
+      absences,
     };
   };
 
@@ -311,6 +319,7 @@ export const Reports = () => {
               onClick={() => {
                 void refetch();
                 void latenessQuery.refetch();
+                void absenceQuery.refetch();
               }}
               variant="outline"
               size="sm"
@@ -487,6 +496,19 @@ export const Reports = () => {
         showDaily
       />
       </div>
+
+      <AbsencePanel
+        description={`${
+          bimestre !== 'all'
+            ? formatBimestreLabel(getAllBimestres(añoEscolar).find((b) => b.numero === bimestre)!)
+            : `Año escolar ${añoEscolar}`
+        } · días con clases en que se tomó asistencia · respeta los filtros`}
+        summary={absenceQuery.data ?? null}
+        isLoading={absenceQuery.isLoading}
+        isError={absenceQuery.isError}
+        isFetching={absenceQuery.isFetching}
+        onRetry={() => void absenceQuery.refetch()}
+      />
 
       <StaffDataPanel>
         <StaffDataPanelHeader

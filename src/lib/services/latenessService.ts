@@ -12,6 +12,8 @@ import {
   type LatenessSummary,
 } from '@/lib/utils/latenessStats';
 import { fetchArrivalLimits } from './arrivalService';
+import { buildAbsenceSummary, schoolDaysFrom, type AbsenceSummary } from '@/lib/utils/absenceStats';
+import { getLimaTodayDate } from '@/lib/utils/limaDateTime';
 
 export interface LatenessFilters {
   /** YYYY-MM-DD, inclusive. */
@@ -176,4 +178,62 @@ export async function getLatenessReport(
   }
 }
 
-export const latenessService = { getLatenessReport };
+/**
+ * Faltas del período: estudiante activo sin llegada en un día con clases
+ * (hábil, cerrado y con asistencia tomada), más las «Falta justificada».
+ */
+export async function getAbsenceReport(
+  filters: LatenessFilters,
+): Promise<{ summary: AbsenceSummary | null; error: string | null }> {
+  try {
+    const [studentsRes, arrivalsRes] = await Promise.all([
+      fetchAllPages<{ id_estudiante: number; nombre_completo: string | null; grado: string | null; seccion: string | null; nivel_educativo: string | null }>(
+        async (from, to) =>
+          applyStudentFilters(
+            supabase
+              .from('estudiantes')
+              .select('id_estudiante, nombre_completo, grado, seccion, nivel_educativo')
+              .eq('activo', true),
+            filters,
+            '',
+          )
+            .order('id_estudiante', { ascending: true })
+            .range(from, to),
+      ),
+      fetchAllPages<{ id_estudiante: number; fecha: string; estado: string }>(async (from, to) =>
+        applyStudentFilters(
+          supabase
+            .from('registros_llegada')
+            .select('id_estudiante, fecha, estado, estudiante:estudiantes!registros_llegada_id_estudiante_fkey!inner(id_estudiante)')
+            .gte('fecha', filters.dateFrom)
+            .lte('fecha', filters.dateTo),
+          filters,
+          'estudiante.',
+        )
+          .order('id_registro', { ascending: true })
+          .range(from, to),
+      ),
+    ]);
+    if (studentsRes.error) return { summary: null, error: studentsRes.error };
+    if (arrivalsRes.error) return { summary: null, error: arrivalsRes.error };
+
+    const arrivals = arrivalsRes.data.map((r) => ({ studentId: r.id_estudiante, date: String(r.fecha).slice(0, 10), estado: r.estado }));
+    const days = schoolDaysFrom(arrivals, filters.dateFrom, filters.dateTo, getLimaTodayDate());
+    const students = studentsRes.data
+      .filter((s) => s.grado && s.seccion)
+      .map((s) => ({
+        id: s.id_estudiante,
+        name: s.nombre_completo?.trim() || 'Sin nombre',
+        level: s.nivel_educativo ?? '',
+        grade: s.grado ?? '',
+        section: s.seccion ?? '',
+      }));
+    return { summary: buildAbsenceSummary(students, arrivals, days), error: null };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Error al obtener faltas';
+    console.error('Error en getAbsenceReport:', error);
+    return { summary: null, error: message };
+  }
+}
+
+export const latenessService = { getLatenessReport, getAbsenceReport };

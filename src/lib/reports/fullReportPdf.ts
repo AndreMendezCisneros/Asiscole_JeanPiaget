@@ -14,6 +14,7 @@ import {
   ORANGE_RAMP,
   stackedBarChart,
   verticalBarChart,
+  VIOLET_RAMP,
 } from './chartImages';
 
 const LEVEL_KEYS = ['level0', 'level1', 'level2', 'level3', 'level4', 'level5'] as const;
@@ -445,6 +446,86 @@ export async function exportFullReportPdf(data: ReportExportData, incidents: Inc
           j: s.justifiedCount,
           avg: minutes(s.avgMinutesLate),
           last: `${format(new Date(`${s.lastDate}T12:00:00`), 'dd/MM/yyyy')} ${s.lastTime}`,
+        })),
+        { fontSize: 7.5 },
+      );
+    }
+  }
+
+  // ── 3. Faltas
+  const absences = data.absences;
+  if (!isStudent && absences && insights.absences) {
+    doc.newPage();
+    doc.section('3', 'Asistencia y faltas de asistencia');
+    doc.paragraph(
+      `Se cuentan los ${absences.schoolDays.length} días hábiles ya cerrados en los que se tomó asistencia. ` +
+        `Un estudiante activo sin llegada registrada ese día tiene falta; las faltas justificadas se cuentan aparte.`,
+    );
+    doc.keyFigures([
+      { label: 'Faltas', value: absences.totalAbsences, note: `${absences.justified} justificadas` },
+      { label: 'Estudiantes con faltas', value: absences.studentsWithAbsences, note: `de ${absences.students.length} activos` },
+      { label: 'Asistencia', value: absences.attendanceRate == null ? '—' : pct(absences.attendanceRate, 1), note: 'días asistidos / posibles' },
+      { label: 'Aula con más faltas', value: insights.absences.topClassroom?.label ?? '—', note: insights.absences.topClassroom ? `${insights.absences.topClassroom.lateCount} faltas` : undefined },
+    ]);
+    let k = 0;
+    const asub = (title: string, keep = 75) => doc.subsection(`3.${++k}`, title, keep);
+    asub('Faltas por grado y sección', 90);
+    const grid = sectionGrid(
+      absences.classrooms,
+      (c) => c.lateCount,
+      (c) => (c.lateCount > 0 && c.studentRate != null ? `${Math.round(c.studentRate * 100)}% aula` : null),
+    );
+    doc.chart(
+      heatmapChart(grid.rows, grid.sections, { ramp: VIOLET_RAMP, legend: ['Menos', 'Más faltas'] }),
+      'Faltas por aula; debajo, el porcentaje de sus estudiantes que faltó al menos una vez.',
+    );
+    if (insights.absences.topClassroom) {
+      const c = insights.absences.topClassroom;
+      doc.reading(`${c.label} es el aula con más faltas (${c.lateCount}): ${c.studentsLate} de sus ${c.enrolled} estudiantes faltaron al menos una vez.`);
+    }
+    const rooms = [...absences.classrooms].filter((c) => c.lateCount > 0).sort((a, b) => b.lateCount - a.lateCount);
+    if (rooms.length > 0) {
+      asub('Aulas con más faltas');
+      doc.chart(
+        horizontalBarChart(
+          rooms.slice(0, 10).map((c) => ({ label: c.label, value: c.lateCount, note: c.studentRate != null ? `${Math.round(c.studentRate * 100)}% del aula` : undefined })),
+          { color: CHART_COLORS.violet, softColor: CHART_COLORS.violetSoft, strongTop: 3, labelWidth: 110 },
+        ),
+        'Las diez aulas con más faltas en el período.',
+      );
+    }
+    if (absences.days.length > 1) {
+      asub('Faltas por día', 60);
+      doc.chart(
+        verticalBarChart(
+          absences.days.map((d) => ({ label: format(new Date(`${d.date}T12:00:00`), 'dd/MM'), value: d.lateCount })),
+          { color: CHART_COLORS.violet, softColor: CHART_COLORS.violetSoft, highlightMax: true, height: 220 },
+        ),
+        'Estudiantes que faltaron cada día con clases. Se resalta el día con más faltas.',
+      );
+    }
+    const withAbs = absences.students.filter((st) => st.absences > 0);
+    if (withAbs.length > 0) {
+      asub('Estudiantes con faltas', 40);
+      doc.dataTable(
+        `Estudiantes con faltas, de más a menos (${withAbs.length}).`,
+        [
+          { header: 'N.°', key: 'rank', width: 10, align: 'center' },
+          { header: 'Estudiante', key: 'name' },
+          { header: 'Aula', key: 'room', width: 24 },
+          { header: 'Faltas', key: 'n', width: 15, align: 'right' },
+          { header: 'Justif.', key: 'j', width: 15, align: 'right' },
+          { header: 'Asistencia', key: 'rate', width: 22, align: 'right' },
+          { header: 'Última falta', key: 'last', width: 26, align: 'right' },
+        ],
+        withAbs.map((st, i) => ({
+          rank: i + 1,
+          name: st.studentName,
+          room: st.classroomLabel,
+          n: st.absences,
+          j: st.justified,
+          rate: pct(st.attendanceRate, 1, 0),
+          last: st.lastAbsence ? format(new Date(`${st.lastAbsence}T12:00:00`), 'dd/MM/yyyy') : '—',
         })),
         { fontSize: 7.5 },
       );

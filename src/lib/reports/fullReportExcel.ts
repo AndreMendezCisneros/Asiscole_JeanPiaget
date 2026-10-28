@@ -23,6 +23,8 @@ const ORANGE = 'FFD4501F';
 const PALE = 'FFF5F7FA';
 const HEX_BLUE = '2F63B8';
 const HEX_ORANGE = 'D4501F';
+const HEX_VIOLET = '6D4BC4';
+const VIOLET = 'FF6D4BC4';
 const LEVEL_SHORT: Record<string, string> = { Primaria: 'Prim.', Secundaria: 'Sec.', Inicial: 'Inic.' };
 
 /** 'hsl(152, 55%, 45%)' → '33B07A' (los gráficos de Excel piden hex). */
@@ -227,6 +229,7 @@ export async function exportFullReportExcel(data: ReportExportData, incidents: I
       [isStudent ? 'Nivel promedio' : 'Estudiantes con incidencias', isStudent ? Number(stats.averageReincidenceLevel.toFixed(1)) : stats.studentsWithIncidents, 'Estudiantes con tardanza', insights.lateness?.students ?? '—'],
       ['Casos críticos (nivel 3+)', insights.incidents.critical, '% de llegadas tarde', insights.lateness?.rate ?? '—'],
       ['Mes con más incidencias', insights.incidents.peakMonth ? `${insights.incidents.peakMonth.month} (${insights.incidents.peakMonth.incidents})` : '—', 'Aula con más tardanzas', insights.lateness?.topClassroom ? `${insights.lateness.topClassroom.label} (${insights.lateness.topClassroom.lateCount})` : '—'],
+      ['Faltas de asistencia', insights.absences?.total ?? '—', 'Asistencia', insights.absences?.attendanceRate ?? '—'],
       ['Falta más frecuente', insights.incidents.topFault ? `${insights.incidents.topFault.faultType} (${insights.incidents.topFault.count})` : '—', 'Mes con más tardanzas', insights.lateness?.peakMonth ? `${insights.lateness.peakMonth.label} (${insights.lateness.peakMonth.lateCount})` : '—'],
     ];
     for (const [l1, v1, l2, v2] of kpis) {
@@ -244,7 +247,7 @@ export async function exportFullReportExcel(data: ReportExportData, incidents: I
         vc.font = { size: 12, bold: true, color: { argb: 'FF0F172A' } };
         vc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PALE } };
         vc.alignment = { vertical: 'middle', horizontal: 'right' };
-        if (typeof value === 'number' && label.startsWith('%')) vc.numFmt = '0.0%';
+        if (typeof value === 'number' && (label.startsWith('%') || label === 'Asistencia')) vc.numFmt = '0.0%';
       };
       put(1, l1, v1, BLUE);
       if (!isStudent) put(4, l2, v2, ORANGE);
@@ -298,7 +301,7 @@ export async function exportFullReportExcel(data: ReportExportData, incidents: I
 
     // ── Faltas
     if (stats.topFaults.length > 0) {
-      const { sheet, row: start } = await newSheet(workbook, 'Faltas', 'FALTAS MÁS FRECUENTES', subtitle, 5, BLUE);
+      const { sheet, row: start } = await newSheet(workbook, 'Tipos de falta', 'FALTAS MÁS FRECUENTES', subtitle, 5, BLUE);
       let acc = 0;
       const pos = writeTable(
         sheet,
@@ -560,6 +563,91 @@ export async function exportFullReportExcel(data: ReportExportData, incidents: I
             catCol: 1,
             cats: lateness.students.map((s) => s.studentName),
             series: [{ name: 'Tardanzas', col: 3, values: lateness.students.map((s) => s.lateCount), color: HEX_ORANGE }],
+            limit: 15,
+          }),
+          [620, 420],
+        );
+      }
+    }
+
+    // ── Faltas
+    const absences = data.absences;
+    if (!isStudent && absences && absences.schoolDays.length > 0) {
+      {
+        const { sheet, row: start } = await newSheet(workbook, 'Asistencia por aula', 'FALTAS DE ASISTENCIA POR AULA', `${subtitle} · ${absences.schoolDays.length} días con clases`, 8, VIOLET);
+        const ranked = [...absences.classrooms].sort((a, b) => b.lateCount - a.lateCount);
+        const pos = writeTable(
+          sheet,
+          start,
+          [
+            { header: 'Aula', width: 14 },
+            { header: 'Nivel educativo', width: 14 },
+            { header: 'Grado', width: 9 },
+            { header: 'Sección', width: 9, align: 'center' },
+            { header: 'Estudiantes activos', width: 17, numFmt: '0' },
+            { header: 'Con faltas', width: 12, numFmt: '0' },
+            { header: '% del aula', width: 11, numFmt: '0%', bar: 'blue' },
+            { header: 'Faltas', width: 10, numFmt: '0', scale: 'blue' },
+          ],
+          ranked.map((c) => [c.label, c.level, c.grade, c.section, c.enrolled, c.studentsLate, c.studentRate ?? 0, c.lateCount]),
+        );
+        writeNote(
+          sheet,
+          pos.last + 2,
+          `Asistencia del período: ${absences.attendanceRate == null ? '—' : `${(absences.attendanceRate * 100).toFixed(1)}%`}. ` +
+            'Se cuentan los días hábiles ya cerrados en que se tomó asistencia; un estudiante activo sin llegada ese día tiene falta.',
+          8,
+        );
+        place(
+          sheet,
+          8,
+          start,
+          chartFrom(pos, {
+            kind: 'bar',
+            title: 'Aulas con más faltas',
+            catCol: 1,
+            cats: ranked.map((c) => c.label),
+            series: [{ name: 'Faltas', col: 8, values: ranked.map((c) => c.lateCount), color: HEX_VIOLET }],
+            limit: 12,
+          }),
+          [600, 400],
+        );
+      }
+      const withAbs = absences.students.filter((st) => st.absences > 0);
+      if (withAbs.length > 0) {
+        const { sheet, row: start } = await newSheet(workbook, 'Asistencia por estudiante', 'ESTUDIANTES CON FALTAS DE ASISTENCIA', subtitle, 6, VIOLET);
+        const pos = writeTable(
+          sheet,
+          start,
+          [
+            { header: 'Estudiante', width: 34 },
+            { header: 'Aula', width: 13 },
+            { header: 'Faltas', width: 10, numFmt: '0', bar: 'blue' },
+            { header: 'Justificadas', width: 12, numFmt: '0' },
+            { header: 'Asistencia', width: 11, numFmt: '0%' },
+            { header: 'Última falta', width: 13, numFmt: 'dd/mm/yyyy' },
+            { header: 'Fechas de falta', width: 60 },
+          ],
+          withAbs.map((st) => [
+            st.studentName,
+            st.classroomLabel,
+            st.absences,
+            st.justified,
+            st.attendanceRate,
+            st.lastAbsence ? new Date(`${st.lastAbsence}T12:00:00`) : null,
+            st.dates.map((d) => `${d.slice(8, 10)}/${d.slice(5, 7)}`).join(', '),
+          ]),
+        );
+        place(
+          sheet,
+          7,
+          start,
+          chartFrom(pos, {
+            kind: 'bar',
+            title: 'Estudiantes con más faltas',
+            catCol: 1,
+            cats: withAbs.map((st) => st.studentName),
+            series: [{ name: 'Faltas', col: 3, values: withAbs.map((st) => st.absences), color: HEX_VIOLET }],
             limit: 15,
           }),
           [620, 420],

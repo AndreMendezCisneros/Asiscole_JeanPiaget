@@ -1,5 +1,6 @@
 import type { DashboardStats } from '@/types';
 import type { LatenessSummary } from '@/lib/utils/latenessStats';
+import type { AbsenceSummary } from '@/lib/utils/absenceStats';
 
 /** Todo lo que necesita el informe exportado (ya filtrado como en la pantalla de Reportes). */
 export interface ReportExportData {
@@ -32,6 +33,8 @@ export interface ReportExportData {
     averageReincidence: number;
   }[];
   lateness: LatenessSummary | null;
+  /** Faltas (inasistencias) del período; opcional. */
+  absences?: AbsenceSummary | null;
 }
 
 export interface LatenessMonth {
@@ -94,6 +97,16 @@ export interface ReportInsights {
     topClassroom: { label: string; lateCount: number; studentRate: number | null; studentsLate: number; enrolled: number } | null;
     peakMonth: LatenessMonth | null;
     topStudent: { studentName: string; classroomLabel: string; lateCount: number } | null;
+    months: LatenessMonth[];
+  } | null;
+  absences: {
+    total: number;
+    justified: number;
+    students: number;
+    attendanceRate: number | null;
+    schoolDays: number;
+    topClassroom: { label: string; lateCount: number; studentsLate: number; enrolled: number; studentRate: number | null } | null;
+    topStudent: { studentName: string; classroomLabel: string; absences: number } | null;
     months: LatenessMonth[];
   } | null;
 }
@@ -222,9 +235,44 @@ export function buildReportInsights(data: ReportExportData): ReportInsights {
     }
   }
 
+  let absenceInsights: ReportInsights['absences'] = null;
+  const absences = data.absences;
+  if (absences && !data.studentName && absences.schoolDays.length > 0) {
+    const monthMap = new Map<string, number>();
+    for (const d of absences.days) monthMap.set(d.date.slice(0, 7), (monthMap.get(d.date.slice(0, 7)) ?? 0) + d.lateCount);
+    const months = [...monthMap.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, lateCount]) => ({ month, label: monthLabel(month), lateCount }));
+    const topRoom = [...absences.classrooms].sort((a, b) => b.lateCount - a.lateCount)[0];
+    const topSt = absences.students[0];
+    absenceInsights = {
+      total: absences.totalAbsences,
+      justified: absences.justified,
+      students: absences.studentsWithAbsences,
+      attendanceRate: absences.attendanceRate,
+      schoolDays: absences.schoolDays.length,
+      topClassroom: topRoom && topRoom.lateCount > 0 ? topRoom : null,
+      topStudent: topSt && topSt.absences > 0 ? topSt : null,
+      months,
+    };
+    if (absences.totalAbsences === 0) {
+      summary.push(`No hubo faltas en los ${absences.schoolDays.length} días con clases del período.`);
+    } else {
+      summary.push(
+        `Se registraron ${plural(absences.totalAbsences, 'falta', 'faltas')} de ${plural(absences.studentsWithAbsences, 'estudiante', 'estudiantes')} en ${absences.schoolDays.length} días con clases` +
+          (absences.attendanceRate != null ? `; la asistencia fue del ${pct(absences.attendanceRate, 1, 1)}` : '') +
+          (absenceInsights.topClassroom ? ` y el aula con más faltas es ${absenceInsights.topClassroom.label} (${absenceInsights.topClassroom.lateCount}).` : '.'),
+      );
+      if (topSt && topSt.absences >= 3) {
+        alerts.push(`${topSt.studentName} (${topSt.classroomLabel}) acumula ${topSt.absences} faltas: conviene comunicarse con el apoderado.`);
+      }
+    }
+  }
+
   return {
     summary,
     alerts,
+    absences: absenceInsights,
     incidents: {
       total,
       students: stats.studentsWithIncidents,

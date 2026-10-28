@@ -2,6 +2,34 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import { heatStep, type LatenessClassroom, type LatenessGradeRow } from '@/lib/utils/latenessStats';
 
+/** Textos y paleta del mapa: tardanzas (por defecto) o faltas. */
+export interface CountTerms {
+  one: string;
+  many: string;
+  /** «Alumnos con tardanza». */
+  students: string;
+  /** Nota del % del aula bajo el mapa. */
+  pctNote: string;
+  ramp: 'late' | 'abs';
+}
+
+export const LATE_TERMS: CountTerms = {
+  one: 'tardanza',
+  many: 'tardanzas',
+  students: 'Alumnos con tardanza',
+  pctNote: 'El % es la parte del aula que llegó tarde al menos una vez',
+  ramp: 'late',
+};
+
+export const ABSENCE_TERMS: CountTerms = {
+  one: 'falta',
+  many: 'faltas',
+  students: 'Alumnos con faltas',
+  pctNote: 'El % es la parte del aula que faltó al menos una vez',
+  ramp: 'abs',
+};
+
+
 interface LatenessHeatmapProps {
   grades: LatenessGradeRow[];
   sections: string[];
@@ -10,6 +38,7 @@ interface LatenessHeatmapProps {
   onSelect: (key: string | null) => void;
   /** Versión resumida: celdas bajas, sin % ni barra de totales. */
   dense?: boolean;
+  terms?: CountTerms;
 }
 
 function pct(value: number | null): string {
@@ -22,12 +51,14 @@ function Cell({
   selected,
   onSelect,
   dense,
+  terms,
 }: {
   classroom: LatenessClassroom;
   max: number;
   selected: boolean;
   onSelect: () => void;
   dense?: boolean;
+  terms: CountTerms;
 }) {
   const step = heatStep(classroom.lateCount, max);
   return (
@@ -38,14 +69,14 @@ function Cell({
           onClick={onSelect}
           data-selected={selected}
           aria-pressed={selected}
-          aria-label={`${classroom.label}: ${classroom.lateCount} tardanzas, ${classroom.studentsLate} alumnos`}
+          aria-label={`${classroom.label}: ${classroom.lateCount} ${terms.many}, ${classroom.studentsLate} alumnos`}
           className={cn(
             'late-cell flex w-full min-w-[3.25rem] flex-col items-center justify-center rounded-lg',
             dense ? 'h-10' : 'h-14 sm:h-16',
           )}
           style={{
-            backgroundColor: `hsl(var(--late-${step}))`,
-            color: `hsl(var(--late-text-${step}))`,
+            backgroundColor: `hsl(var(--${terms.ramp}-${step}))`,
+            color: `hsl(var(--${terms.ramp}-text-${step}))`,
           }}
         >
           <span className="text-base font-bold leading-none tabular-nums sm:text-lg">
@@ -65,11 +96,11 @@ function Cell({
         </div>
         <dl className="space-y-1 px-3 py-2 text-xs">
           <div className="flex justify-between gap-3">
-            <dt className="text-muted-foreground">Tardanzas</dt>
+            <dt className="capitalize text-muted-foreground">{terms.many}</dt>
             <dd className="font-semibold tabular-nums">{classroom.lateCount}</dd>
           </div>
           <div className="flex justify-between gap-3">
-            <dt className="text-muted-foreground">Alumnos con tardanza</dt>
+            <dt className="text-muted-foreground">{terms.students}</dt>
             <dd className="font-semibold tabular-nums">
               {classroom.studentsLate}
               {classroom.enrolled > 0 && (
@@ -91,7 +122,7 @@ function Cell({
 }
 
 /** Mapa de calor grado × sección: cada celda es un aula; el tono indica cuántas tardanzas tuvo. */
-export function LatenessHeatmap({ grades, sections, max, selectedKey, onSelect, dense = false }: LatenessHeatmapProps) {
+export function LatenessHeatmap({ grades, sections, max, selectedKey, onSelect, dense = false, terms = LATE_TERMS }: LatenessHeatmapProps) {
   const maxGradeTotal = Math.max(1, ...grades.map((g) => g.lateCount));
 
   return (
@@ -141,6 +172,7 @@ export function LatenessHeatmap({ grades, sections, max, selectedKey, onSelect, 
                           selected={selectedKey === c.key}
                           onSelect={() => onSelect(selectedKey === c.key ? null : c.key)}
                           dense={dense}
+                          terms={terms}
                         />
                       ) : (
                         <div
@@ -161,7 +193,7 @@ export function LatenessHeatmap({ grades, sections, max, selectedKey, onSelect, 
                         className="h-full rounded-full"
                         style={{
                           width: `${(g.lateCount / maxGradeTotal) * 100}%`,
-                          backgroundColor: 'hsl(var(--late-4))',
+                          backgroundColor: `hsl(var(--${terms.ramp}-4))`,
                         }}
                       />
                     </div>
@@ -184,18 +216,18 @@ export function LatenessHeatmap({ grades, sections, max, selectedKey, onSelect, 
               <span
                 key={step}
                 className={cn('h-3 w-5 rounded-[3px]', step === 0 && 'ring-1 ring-inset ring-border')}
-                style={{ backgroundColor: `hsl(var(--late-${step}))` }}
+                style={{ backgroundColor: `hsl(var(--${terms.ramp}-${step}))` }}
               />
             ))}
           </div>
-          <span>Más tardanzas</span>
+          <span>Más {terms.many}</span>
         </div>
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5">
             <span className="h-3 w-5 rounded-[3px] border border-dashed border-border" aria-hidden />
             Sin aula
           </span>
-          {!dense && <span>El % es la parte del aula que llegó tarde al menos una vez</span>}
+          {!dense && <span>{terms.pctNote}</span>}
         </div>
       </div>
     </div>
