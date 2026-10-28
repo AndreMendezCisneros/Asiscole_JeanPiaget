@@ -40,6 +40,8 @@ import { CLASSROOM_FIELD_LABELS, CLASSROOM_GRADES, CLASSROOM_LEVELS, CLASSROOM_S
 import { buildDashboardStatsFromIncidents } from '@/lib/utils/incidentReportStats';
 import { LatenessPanel } from '@/components/lateness/LatenessPanel';
 import { useLatenessReportQuery } from '@/hooks/queries/useDashboardQueries';
+import type { ReportExportData } from '@/lib/reports/reportInsights';
+import { SCHOOL_NAME } from '@/config/siteSeo';
 import { getLimaTodayDate } from '@/lib/utils/limaDateTime';
 
 function localDateKey(d: Date): string {
@@ -168,132 +170,70 @@ export const Reports = () => {
     return { error: null, incidents: incidentsList };
   };
 
+  /** Datos del informe exportado: los mismos que se ven en pantalla, con los filtros aplicados. */
+  const buildExportData = async (incidentsList: Incident[]): Promise<ReportExportData> => {
+    const bimestreInfo =
+      bimestre !== 'all' ? getAllBimestres(añoEscolar).find((b) => b.numero === bimestre) : undefined;
+    const filterParts = [
+      selectedLevel !== 'all' && `Nivel: ${selectedLevel}`,
+      selectedGrade !== 'all' && `${CLASSROOM_FIELD_LABELS.grade}: ${selectedGrade}`,
+      selectedSection !== 'all' && `${CLASSROOM_FIELD_LABELS.section}: ${selectedSection}`,
+    ].filter(Boolean) as string[];
+
+    // En modo estudiante la tendencia sale de sus propias incidencias
+    const studentTrend = () => {
+      const map = new Map<string, number>();
+      for (const inc of incidentsList) {
+        const key = inc.registeredAt.slice(0, 7);
+        map.set(key, (map.get(key) ?? 0) + 1);
+      }
+      return [...map.entries()]
+        .sort(([x], [y]) => x.localeCompare(y))
+        .map(([key, incidents]) => ({
+          month: format(new Date(`${key}-01T12:00:00`), 'MMM yyyy', { locale: es }),
+          incidents,
+        }));
+    };
+
+    let lateness = selectedStudent ? null : latenessQuery.data ?? null;
+    if (!selectedStudent && !lateness) {
+      const res = await latenessQuery.refetch();
+      lateness = res.data ?? null;
+    }
+
+    return {
+      schoolName: SCHOOL_NAME,
+      periodLabel: bimestreInfo ? formatBimestreLabel(bimestreInfo) : `Año escolar ${añoEscolar}`,
+      filterText: filterParts.join(' · '),
+      studentName: selectedStudent?.fullName,
+      stats: selectedStudent ? buildDashboardStatsFromIncidents(incidentsList) : viewStats!,
+      monthlyTrend: selectedStudent ? studentTrend() : monthlyTrend,
+      weeklyData: selectedStudent ? [] : weeklyData,
+      byGrade: selectedStudent ? [] : comparisonByGrade,
+      bySection: selectedStudent ? [] : comparisonBySection,
+      lateness,
+    };
+  };
+
   const exportToPDF = async () => {
     if (!viewStats) {
       toast.error('No hay datos para exportar');
       return;
     }
-
     try {
-      toast.loading('Generando PDF...', { id: 'pdf-export' });
-
+      toast.loading('Generando informe PDF…', { id: 'pdf-export' });
       const { incidents: incidentsList, error } = await loadExportIncidents();
-
       if (error) {
         toast.error('Error al cargar incidencias para el PDF', { id: 'pdf-export' });
         return;
       }
-
       if (selectedStudent && incidentsList.length === 0) {
         toast.error('No hay incidencias de ese estudiante para exportar', { id: 'pdf-export' });
         return;
       }
-
-      const exportStats = selectedStudent
-        ? buildDashboardStatsFromIncidents(incidentsList)
-        : viewStats;
-
-      const { PdfReportDocument, buildFilterSubtitle } = await import('@/lib/utils/pdfReportBuilder');
-
-      const bimestreInfo =
-        bimestre !== 'all'
-          ? getAllBimestres(añoEscolar).find((b) => b.numero === bimestre)
-          : undefined;
-
-      const subtitle = buildFilterSubtitle([
-        `Generado ${format(new Date(), "dd/MM/yyyy 'a las' HH:mm", { locale: es })}`,
-        selectedStudent ? `Estudiante: ${selectedStudent.fullName}` : selectedLevel !== 'all' && `Nivel: ${selectedLevel}`,
-        selectedStudent ? undefined : selectedGrade !== 'all' && `${CLASSROOM_FIELD_LABELS.grade}: ${selectedGrade}`,
-        selectedStudent ? undefined : selectedSection !== 'all' && `${CLASSROOM_FIELD_LABELS.section}: ${selectedSection}`,
-        bimestreInfo && `Período: ${formatBimestreLabel(bimestreInfo)}`,
-      ]);
-
-      const doc = new PdfReportDocument(
-        'portrait',
-        selectedStudent ? 'REPORTE DE INCIDENCIAS DEL ESTUDIANTE' : 'REPORTE DE INCIDENCIAS',
-        subtitle,
-      );
-      await doc.drawCoverHeader();
-
-      const criticalCount = exportStats.levelDistribution.level3 + exportStats.levelDistribution.level4;
-      const exportLevelItems = [
-        { level: 'Nivel 0 - Sin reincidencias', count: exportStats.levelDistribution.level0 },
-        { level: 'Nivel 1 - Primera reincidencia', count: exportStats.levelDistribution.level1 },
-        { level: 'Nivel 2 - Reincidencia moderada', count: exportStats.levelDistribution.level2 },
-        { level: 'Nivel 3 - Reincidencia alta', count: exportStats.levelDistribution.level3 },
-        { level: 'Nivel 4 - Reincidencia crítica', count: exportStats.levelDistribution.level4 },
-      ];
-
-      doc.drawKpiCards([
-        { label: 'Total incidencias', value: exportStats.totalIncidents, tone: 'primary' },
-        { label: 'Estudiantes involucrados', value: exportStats.studentsWithIncidents, tone: 'info' },
-        { label: 'Nivel promedio', value: exportStats.averageReincidenceLevel.toFixed(1), tone: 'warning' },
-        { label: 'Casos críticos', value: criticalCount, tone: criticalCount > 0 ? 'error' : 'success' },
-      ]);
-
-      doc.drawSectionTitle('Distribución por nivel de reincidencia');
-      doc.drawKeyValueList(
-        exportLevelItems.map((item) => {
-          const pct =
-            exportStats.totalIncidents > 0
-              ? ((item.count / exportStats.totalIncidents) * 100).toFixed(1)
-              : '0';
-          return { label: item.level, value: `${item.count} registros (${pct}%)` };
-        })
-      );
-
-      doc.drawSectionTitle('Faltas más frecuentes');
-      doc.drawTable(
-        [
-          { header: '#', dataKey: 'rank', width: 10, align: 'center' },
-          { header: 'Tipo de falta', dataKey: 'fault' },
-          { header: 'Cantidad', dataKey: 'count', width: 22, align: 'center' },
-          { header: '% del total', dataKey: 'pct', width: 22, align: 'right' },
-        ],
-        exportStats.topFaults.slice(0, 15).map((fault, index) => {
-          const pct =
-            exportStats.totalIncidents > 0
-              ? `${((fault.count / exportStats.totalIncidents) * 100).toFixed(1)}%`
-              : '0%';
-          return {
-            rank: String(index + 1),
-            fault: fault.faultType,
-            count: String(fault.count),
-            pct,
-          };
-        })
-      );
-
-      doc.drawSectionTitle('Detalle de incidencias');
-      doc.drawParagraph(
-        `Listado de ${incidentsList.length} registro(s). Se muestran hasta 80 filas en este documento.`
-      );
-      doc.drawTable(
-        [
-          { header: 'ID', dataKey: 'id', width: 12, align: 'center' },
-          { header: 'Estudiante', dataKey: 'student', width: 42 },
-          { header: 'Grado', dataKey: 'grade', width: 18 },
-          { header: 'Falta', dataKey: 'fault', width: 38 },
-          { header: 'Niv.', dataKey: 'level', width: 12, align: 'center' },
-          { header: 'Estado', dataKey: 'status', width: 18 },
-          { header: 'Fecha', dataKey: 'date', width: 22 },
-        ],
-        incidentsList.map((inc) => ({
-          id: String(inc.id),
-          student: inc.student?.fullName ?? '—',
-          grade: inc.student ? `${inc.student.grade} ${inc.student.section}` : '—',
-          fault: inc.faultType?.name ?? '—',
-          level: String(inc.reincidenceLevel),
-          status: inc.status,
-          date: format(new Date(inc.registeredAt), 'dd/MM/yyyy HH:mm', { locale: es }),
-        })),
-        { fontSize: 7.5, maxRows: 80 }
-      );
-
-      const fileName = `Reporte_Incidencias_${format(new Date(), 'yyyy_MM_dd', { locale: es })}.pdf`;
-      await doc.finalize(fileName);
-
-      toast.success('PDF generado exitosamente', { id: 'pdf-export' });
+      const { exportFullReportPdf } = await import('@/lib/reports/fullReportPdf');
+      await exportFullReportPdf(await buildExportData(incidentsList), incidentsList);
+      toast.success('Informe PDF generado', { id: 'pdf-export' });
     } catch (err) {
       console.error('Error al generar PDF:', err);
       const message = err instanceof Error ? err.message : 'Error desconocido';
@@ -306,55 +246,17 @@ export const Reports = () => {
       toast.error('No hay datos para exportar');
       return;
     }
-
-    try {
-      const { incidents: incidentsList, error } = await loadExportIncidents();
-
-      if (error) {
-        toast.error('Error al cargar incidencias para exportar');
-        return;
-      }
-
-      if (selectedStudent && incidentsList.length === 0) {
-        toast.error('No hay incidencias de ese estudiante para exportar');
-        return;
-      }
-
-      const exportStats = selectedStudent
-        ? buildDashboardStatsFromIncidents(incidentsList)
-        : viewStats;
-
-      let filterText = `Generado: ${format(new Date(), 'dd/MM/yyyy HH:mm', { locale: es })}`;
-      if (selectedStudent) filterText += ` · Estudiante: ${selectedStudent.fullName}`;
-      else {
-        if (selectedLevel !== 'all') filterText += ` · Nivel: ${selectedLevel}`;
-        if (selectedGrade !== 'all') filterText += ` · ${CLASSROOM_FIELD_LABELS.grade}: ${selectedGrade}`;
-        if (selectedSection !== 'all') filterText += ` · ${CLASSROOM_FIELD_LABELS.section}: ${selectedSection}`;
-      }
-      if (bimestre !== 'all') {
-        const b = getAllBimestres(añoEscolar).find((x) => x.numero === bimestre);
-        if (b) filterText += ` · ${formatBimestreLabel(b)}`;
-      }
-
-      const levelItemsForExport = [
-        { level: 'Nivel 0 - Sin reincidencias', count: exportStats.levelDistribution.level0 },
-        { level: 'Nivel 1 - Primera reincidencia', count: exportStats.levelDistribution.level1 },
-        { level: 'Nivel 2 - Reincidencia moderada', count: exportStats.levelDistribution.level2 },
-        { level: 'Nivel 3 - Reincidencia alta', count: exportStats.levelDistribution.level3 },
-        { level: 'Nivel 4 - Reincidencia crítica', count: exportStats.levelDistribution.level4 },
-      ];
-
-      const { exportIncidentsReportExcel } = await import('@/lib/utils/excelReportExports');
-      await exportIncidentsReportExcel(exportStats, incidentsList, {
-        filterText,
-        levelItems: levelItemsForExport,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Error desconocido';
-      if (message.includes('No hay')) {
-        toast.error(message);
-      }
+    const { incidents: incidentsList, error } = await loadExportIncidents();
+    if (error) {
+      toast.error('Error al cargar incidencias para exportar');
+      return;
     }
+    if (selectedStudent && incidentsList.length === 0) {
+      toast.error('No hay incidencias de ese estudiante para exportar');
+      return;
+    }
+    const { exportFullReportExcel } = await import('@/lib/reports/fullReportExcel');
+    await exportFullReportExcel(await buildExportData(incidentsList), incidentsList);
   };
 
   // monthlyTrend y weeklyData ahora vienen del estado, cargados desde la base de datos

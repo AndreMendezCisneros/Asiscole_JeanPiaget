@@ -251,6 +251,97 @@ export class PdfReportDocument {
     this.y = (finalY ?? this.y) + 8;
   }
 
+  /** Subtítulo de apartado (más chico que drawSectionTitle). */
+  drawSubheading(title: string, hint?: string, keepWithMm = 70): void {
+    // El título no queda solo al pie: pide espacio para lo que viene debajo
+    this.ensureSpace(12 + keepWithMm);
+    this.pdf.setFont('helvetica', 'bold');
+    this.pdf.setFontSize(10);
+    this.pdf.setTextColor(...PDF_THEME.primary);
+    this.pdf.text(title, this.margin, this.y + 4);
+    if (hint) {
+      this.pdf.setFont('helvetica', 'normal');
+      this.pdf.setFontSize(7.5);
+      this.pdf.setTextColor(...PDF_THEME.textMuted);
+      this.pdf.text(hint, this.pageWidth - this.margin, this.y + 4, { align: 'right' });
+    }
+    this.y += 8;
+    this.pdf.setTextColor(...PDF_THEME.text);
+  }
+
+  /** Imagen de gráfico a ancho dado (mm), conservando proporción. */
+  drawChartImage(image: { dataUrl: string; width: number; height: number }, widthMm = this.contentWidth): void {
+    const h = (image.height / image.width) * widthMm;
+    this.ensureSpace(h + 4);
+    const x = this.margin + (this.contentWidth - widthMm) / 2;
+    this.pdf.addImage(image.dataUrl, 'PNG', x, this.y, widthMm, h, undefined, 'FAST');
+    this.y += h + 4;
+  }
+
+  /** Varias imágenes en una fila, mismo ancho cada una. */
+  drawChartRow(images: { dataUrl: string; width: number; height: number }[], gapMm = 6): void {
+    if (images.length === 0) return;
+    const w = (this.contentWidth - gapMm * (images.length - 1)) / images.length;
+    const heights = images.map((img) => (img.height / img.width) * w);
+    const h = Math.max(...heights);
+    this.ensureSpace(h + 4);
+    images.forEach((img, i) => {
+      this.pdf.addImage(img.dataUrl, 'PNG', this.margin + i * (w + gapMm), this.y, w, heights[i], undefined, 'FAST');
+    });
+    this.y += h + 4;
+  }
+
+  /** Recuadro de lectura rápida bajo un gráfico. */
+  drawInsight(text: string): void {
+    this.pdf.setFont('helvetica', 'normal');
+    this.pdf.setFontSize(8.5);
+    const lines = this.pdf.splitTextToSize(text, this.contentWidth - 10);
+    const h = lines.length * 3.8 + 5;
+    this.ensureSpace(h + 4);
+    this.pdf.setFillColor(...PDF_THEME.infoBg);
+    this.pdf.roundedRect(this.margin, this.y, this.contentWidth, h, 1.5, 1.5, 'F');
+    this.pdf.setFillColor(...PDF_THEME.info);
+    this.pdf.rect(this.margin, this.y, 1.2, h, 'F');
+    this.pdf.setTextColor(...PDF_THEME.text);
+    this.pdf.text(lines, this.margin + 5, this.y + 4.6);
+    this.y += h + 5;
+  }
+
+  /** Caja con título y viñetas (resumen ejecutivo, puntos de atención). */
+  drawBulletBox(title: string, bullets: string[], tone: 'primary' | 'warning' = 'primary'): void {
+    if (bullets.length === 0) return;
+    const fg = tone === 'warning' ? PDF_THEME.warning : PDF_THEME.primary;
+    const bg = tone === 'warning' ? PDF_THEME.warningBg : ([246, 249, 253] as [number, number, number]);
+    this.pdf.setFont('helvetica', 'normal');
+    this.pdf.setFontSize(9);
+    const wrapped = bullets.map((b) => this.pdf.splitTextToSize(b, this.contentWidth - 16));
+    const bodyH = wrapped.reduce((s, l) => s + l.length * 4.2 + 1.8, 0);
+    const h = 11 + bodyH + 3;
+    this.ensureSpace(h + 4);
+    this.pdf.setFillColor(...bg);
+    this.pdf.setDrawColor(...PDF_THEME.border);
+    this.pdf.setLineWidth(0.15);
+    this.pdf.roundedRect(this.margin, this.y, this.contentWidth, h, 2, 2, 'FD');
+    this.pdf.setFillColor(...fg);
+    this.pdf.rect(this.margin, this.y, 1.4, h, 'F');
+    this.pdf.setFont('helvetica', 'bold');
+    this.pdf.setFontSize(10);
+    this.pdf.setTextColor(...fg);
+    this.pdf.text(title, this.margin + 6, this.y + 7);
+    let y = this.y + 13;
+    this.pdf.setFont('helvetica', 'normal');
+    this.pdf.setFontSize(9);
+    this.pdf.setTextColor(...PDF_THEME.text);
+    wrapped.forEach((lines) => {
+      this.pdf.setFillColor(...fg);
+      this.pdf.circle(this.margin + 8, y - 1.1, 0.8, 'F');
+      this.pdf.text(lines, this.margin + 11, y);
+      y += lines.length * 4.2 + 1.8;
+    });
+    this.y += h + 6;
+    this.pdf.setTextColor(...PDF_THEME.text);
+  }
+
   ensureSpace(neededMm: number): void {
     const footerReserve = 16;
     if (this.y + neededMm > this.pageHeight - footerReserve) {
