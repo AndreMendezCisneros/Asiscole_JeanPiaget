@@ -15,6 +15,8 @@ import { LatenessHeatmap } from './LatenessHeatmap';
 import { LatenessRanking } from './LatenessRanking';
 import { LatenessDailyChart } from './LatenessDailyChart';
 import { LatenessStudentsList } from './LatenessStudentsList';
+import { DonutChart } from './DonutChart';
+import { DELAY_COLORS, JUSTIFICATION_COLORS, LEVEL_COLORS, LEVEL_FALLBACK_COLOR } from './latenessColors';
 
 interface LatenessPanelProps {
   title?: string;
@@ -192,6 +194,54 @@ export function LatenessPanel({
             />
           </section>
         </div>
+
+        {summary.totalLate > 0 && (
+          <section className="min-w-0">
+            <SubTitle>Composición de las tardanzas</SubTitle>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="rounded-xl border border-border/70 p-4">
+                <p className="mb-3 text-xs font-medium text-muted-foreground">Por nivel</p>
+                <DonutChart
+                  centerLabel="tardanzas"
+                  size={128}
+                  data={summary.byLevel.map((s) => ({
+                    ...s,
+                    color: LEVEL_COLORS[s.key] ?? LEVEL_FALLBACK_COLOR,
+                  }))}
+                />
+              </div>
+              <div className="rounded-xl border border-border/70 p-4">
+                <p className="mb-3 text-xs font-medium text-muted-foreground">Justificación</p>
+                <DonutChart
+                  centerLabel="tardanzas"
+                  size={128}
+                  data={[
+                    {
+                      key: 'pending',
+                      label: 'Sin justificar',
+                      value: summary.totalLate - summary.justified,
+                      color: JUSTIFICATION_COLORS.pending,
+                    },
+                    {
+                      key: 'justified',
+                      label: 'Justificadas',
+                      value: summary.justified,
+                      color: JUSTIFICATION_COLORS.justified,
+                    },
+                  ]}
+                />
+              </div>
+              <div className="rounded-xl border border-border/70 p-4">
+                <p className="mb-3 text-xs font-medium text-muted-foreground">Minutos de retraso</p>
+                <DonutChart
+                  centerLabel="con hora"
+                  size={128}
+                  data={summary.byDelay.map((s, i) => ({ ...s, color: DELAY_COLORS[i] }))}
+                />
+              </div>
+            </div>
+          </section>
+        )}
 
         {showDaily && summary.days.length > 1 && (
           <section className="min-w-0">

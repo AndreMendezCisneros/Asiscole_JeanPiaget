@@ -62,6 +62,7 @@ import {
 import { CLASSROOM_FIELD_LABELS, CLASSROOM_GRADES, CLASSROOM_SECTIONS, CLASSROOM_LEVELS } from '@/lib/constants/classrooms';
 import { StudentSearchCombobox } from '@/components/students/StudentSearchCombobox';
 import { monthDateKeys, rangeDateKeys } from '@/lib/utils/attendanceTurno';
+import { StudentLatenessCard } from '@/components/lateness/StudentLatenessCard';
 import { isNotasEnabled, isPensionesEnabled } from '@/config/features';
 
 const getCurrentMonthValue = () => {
@@ -768,6 +769,7 @@ export const IntegralStudentReport = () => {
                   {selectedBlock.student.level} · {selectedBlock.student.grade} {selectedBlock.student.section}
                 </p>
               </div>
+              <StudentLatenessCard manana={selectedBlock.manana} />
               <IntegralBlockTables block={selectedBlock} />
             </div>
           ) : (

@@ -130,3 +130,25 @@ describe('normalizeSearchText', () => {
     expect(normalizeSearchText('  José PÉREZ ')).toBe('jose perez');
   });
 });
+
+describe('composición de tardanzas', () => {
+  const rows = [
+    row({ recordId: 1, level: 'Secundaria', minutesLate: 3 }),
+    row({ recordId: 2, level: 'primaria', minutesLate: 5 }),
+    row({ recordId: 3, level: 'Primaria', minutesLate: 6 }),
+    row({ recordId: 4, level: 'Primaria', minutesLate: 45 }),
+    row({ recordId: 5, level: 'Primaria', minutesLate: null }),
+  ];
+  const summary = buildLatenessSummary(rows, [], null);
+
+  it('por nivel en orden escolar', () => {
+    expect(summary.byLevel).toEqual([
+      { key: 'Primaria', label: 'Primaria', value: 4 },
+      { key: 'Secundaria', label: 'Secundaria', value: 1 },
+    ]);
+  });
+
+  it('por tramo de minutos, sin las que no tienen hora', () => {
+    expect(summary.byDelay.map((b) => b.value)).toEqual([2, 1, 0, 1]);
+  });
+});

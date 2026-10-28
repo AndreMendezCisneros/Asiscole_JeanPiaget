@@ -67,6 +67,20 @@ export interface LatenessDay {
   lateCount: number;
 }
 
+export interface LatenessSlice {
+  key: string;
+  label: string;
+  value: number;
+}
+
+/** Tramos de minutos de retraso (en orden, para la escala secuencial). */
+export const DELAY_BUCKETS = [
+  { key: 'd1', label: '1 a 5 min', max: 5 },
+  { key: 'd2', label: '6 a 15 min', max: 15 },
+  { key: 'd3', label: '16 a 30 min', max: 30 },
+  { key: 'd4', label: 'Más de 30 min', max: Infinity },
+] as const;
+
 export interface LatenessSummary {
   totalLate: number;
   studentsLate: number;
@@ -82,6 +96,10 @@ export interface LatenessSummary {
   students: LatenessStudent[];
   days: LatenessDay[];
   maxClassroomLate: number;
+  /** Tardanzas por nivel educativo, en orden Inicial → Primaria → Secundaria. */
+  byLevel: LatenessSlice[];
+  /** Tardanzas por tramo de minutos (sin las que no tienen hora). */
+  byDelay: LatenessSlice[];
 }
 
 const LEVEL_ORDER = ['inicial', 'primaria', 'secundaria'];
@@ -261,6 +279,24 @@ export function buildLatenessSummary(
 
   const allMinutes = rows.map((r) => r.minutesLate).filter((m): m is number => m != null);
 
+  const levelCounts = new Map<string, number>();
+  for (const row of rows) {
+    const level = canonicalLevel(row.level);
+    levelCounts.set(level, (levelCounts.get(level) ?? 0) + 1);
+  }
+  const byLevel = [...levelCounts.entries()]
+    .sort(([a], [b]) => levelRank(a) - levelRank(b) || a.localeCompare(b))
+    .map(([level, value]) => ({ key: level, label: level, value }));
+
+  const byDelay = DELAY_BUCKETS.map((b, i) => {
+    const min = i === 0 ? -Infinity : DELAY_BUCKETS[i - 1].max;
+    return {
+      key: b.key,
+      label: b.label,
+      value: allMinutes.filter((m) => m > min && m <= b.max).length,
+    };
+  });
+
   return {
     totalLate: rows.length,
     studentsLate: byStudent.size,
@@ -274,6 +310,8 @@ export function buildLatenessSummary(
     students,
     days,
     maxClassroomLate: Math.max(0, ...classrooms.map((c) => c.lateCount)),
+    byLevel,
+    byDelay,
   };
 }
 
