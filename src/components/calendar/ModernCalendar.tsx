@@ -333,17 +333,22 @@ export const ModernCalendar = ({
                     .filter((g) => getHours(g.start) === hour)
                     .map((g) => {
                       const bulk = g.items.length > 1;
-                      const { top, height } = blockMetrics(g.start, g.end, bulk ? 56 + g.items.length * 24 : 60);
+                      const { top, height } = blockMetrics(g.start, g.end, 60);
                       const first = g.items[0];
                       return (
                         <div
                           key={g.id}
                           className={cn(
-                            "absolute overflow-hidden rounded-lg px-3 py-2 z-10 shadow-sm text-white ring-1 ring-white transition-colors",
-                            !bulk && "cursor-pointer",
+                            "absolute rounded-lg px-3 py-2 shadow-sm text-white ring-1 ring-white transition-colors",
+                            bulk ? "z-20" : "z-10 overflow-hidden cursor-pointer",
                             eventColorClass(first.color),
                           )}
-                          style={{ top: `${top}px`, height: `${height}px`, ...laneStyle(dayLayout.get(g.id), 3) }}
+                          style={{
+                            top: `${top}px`,
+                            // La cita masiva crece con su lista; la lista tiene su propio scroll
+                            ...(bulk ? { minHeight: `${height}px` } : { height: `${height}px` }),
+                            ...laneStyle(dayLayout.get(g.id), 3),
+                          }}
                           title={
                             bulk
                               ? `${first.title} · ${g.items.length} estudiantes`
@@ -360,7 +365,7 @@ export const ModernCalendar = ({
                             {bulk && ` · Cita masiva, ${g.items.length} estudiantes`}
                           </div>
                           {bulk ? (
-                            <ul className="mt-1.5 space-y-0.5">
+                            <ul className="mt-1.5 max-h-72 space-y-0.5 overflow-y-auto overscroll-contain pr-1">
                               {g.items.map((item) => (
                                 <li key={item.id}>
                                   <button
