@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query/queryKeys';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -13,21 +12,23 @@ import {
 } from '@/components/ui/select';
 import { Download, TrendingUp, Users, AlertTriangle, Calendar, Loader2, Filter, BarChart3, FileDown, FileSpreadsheet } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { StaffKpiStat, StaffToolbar } from '@/components/staff';
+import {
+  StaffDataPanel,
+  StaffDataPanelBody,
+  StaffDataPanelHeader,
+  StaffKpiStat,
+  StaffToolbar,
+} from '@/components/staff';
+import { IncidentTrendChart } from '@/components/reports/IncidentTrendChart';
+import {
+  GradeLevelChart,
+  ReincidenceDonut,
+  TopFaultsChart,
+  WeekdayChart,
+} from '@/components/reports/IncidentBreakdownCharts';
+import { GradeComparisonChart, SectionHeatmap } from '@/components/reports/ComparisonCharts';
 import { Label } from '@/components/ui/label';
 
-import {
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend
-} from 'recharts';
 import { dashboardService, incidentsService } from '@/lib/services';
 import { DashboardStats, EducationalLevel, Incident, Student } from '@/types';
 import { toast } from 'sonner';
@@ -366,23 +367,9 @@ export const Reports = () => {
     return matchesGrade && matchesLevel;
   });
 
-  // Filter level distribution by severity focus
-  const levelItems = viewStats
-    ? [
-        { level: 'Nivel 0 - Sin reincidencias', key: 'level0' as const, count: viewStats.levelDistribution.level0, severity: 'low' },
-        { level: 'Nivel 1 - Primera reincidencia', key: 'level1' as const, count: viewStats.levelDistribution.level1, severity: 'moderate' },
-        { level: 'Nivel 2 - Reincidencia moderada', key: 'level2' as const, count: viewStats.levelDistribution.level2, severity: 'moderate' },
-        { level: 'Nivel 3 - Reincidencia alta', key: 'level3' as const, count: viewStats.levelDistribution.level3, severity: 'critical' },
-        { level: 'Nivel 4 - Reincidencia crítica', key: 'level4' as const, count: viewStats.levelDistribution.level4, severity: 'critical' },
-      ]
-    : [];
-
-  const filteredLevelItems = levelItems.filter((item) => {
-    if (severityFilter === 'all') return true;
-    if (severityFilter === 'moderate') return item.severity === 'moderate';
-    if (severityFilter === 'critical') return item.severity === 'critical';
-    return true;
-  });
+  // Niveles visibles según el filtro «Enfoque»
+  const visibleLevels =
+    severityFilter === 'moderate' ? [1, 2] : severityFilter === 'critical' ? [3, 4, 5] : [0, 1, 2, 3, 4, 5];
 
   if (loading) {
     return (
@@ -599,404 +586,105 @@ export const Reports = () => {
       />
       </div>
 
-      {/* Charts y detalle */}
-      {/* Tendencia mensual a ancho completo */}
-      <Card className="app-card">
-        <CardHeader className="app-card-header">
-          <CardTitle className="app-section-title">Tendencia Mensual</CardTitle>
-        </CardHeader>
-          <CardContent className="pt-6">
-          <ResponsiveContainer width="100%" height={320}>
-            <LineChart data={monthlyTrend}>
-                <defs>
-                  <linearGradient id="colorIncidents" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#1e40af" stopOpacity={0.2}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="month" stroke="#6b7280" />
-                <YAxis stroke="#6b7280" />
-                <Tooltip contentStyle={{ backgroundColor: 'white', border: '1px solid #d1d5db', borderRadius: '8px' }} />
-              <Legend />
-              <Line 
-                type="monotone" 
-                dataKey="incidents" 
-                stroke="#3b82f6" 
-                strokeWidth={3}
-                name="Incidencias"
-                dot={{ fill: '#1e40af', r: 5 }}
-                activeDot={{ r: 7 }}
-                fill="url(#colorIncidents)"
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
+      <StaffDataPanel>
+        <StaffDataPanelHeader
+          compact
+          accent="primary"
+          title="Tendencia mensual"
+          description="Incidencias por mes, con el promedio del período y el mes pico"
+        />
+        <StaffDataPanelBody>
+          <IncidentTrendChart data={monthlyTrend} />
+        </StaffDataPanelBody>
+      </StaffDataPanel>
 
-      {/* Fila: Incidencias por día vs por grado */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="app-card">
-          <CardHeader className="app-card-header">
-            <CardTitle className="app-section-title">Incidencias por Día (Esta Semana)</CardTitle>
-          </CardHeader>
-            <CardContent className="pt-6">
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={weeklyData}>
-                  <defs>
-                    <linearGradient id="colorBar" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
-                      <stop offset="100%" stopColor="#d97706" stopOpacity={0.8}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="day" stroke="#6b7280" />
-                  <YAxis stroke="#6b7280" />
-                  <Tooltip contentStyle={{ backgroundColor: 'white', border: '1px solid #d1d5db', borderRadius: '8px' }} />
-                  <Bar dataKey="count" fill="url(#colorBar)" name="Incidencias" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <StaffDataPanel>
+          <StaffDataPanelHeader
+            compact
+            accent="info"
+            title="Incidencias por día"
+            description="Esta semana · el día con más se resalta"
+          />
+          <StaffDataPanelBody>
+            <WeekdayChart data={weeklyData} />
+          </StaffDataPanelBody>
+        </StaffDataPanel>
 
-        <Card className="app-card">
-          <CardHeader className="app-card-header">
-            <CardTitle className="app-section-title">
-              Incidencias por Nivel / Grado
-              {(selectedLevel !== 'all' || selectedGrade !== 'all') && (
-                <>
-                  {' '}
-                  - {selectedLevel !== 'all' ? selectedLevel : 'Todos'}{' '}
-                  {selectedGrade !== 'all' ? selectedGrade : ''}
-                </>
-              )}
-            </CardTitle>
-          </CardHeader>
-            <CardContent className="pt-6">
-            {filteredIncidentsByGrade.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={filteredIncidentsByGrade} layout="vertical">
-                    <defs>
-                      <linearGradient id="colorGrade" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={1}/>
-                        <stop offset="100%" stopColor="#1e40af" stopOpacity={0.8}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis type="number" stroke="#6b7280" />
-                    <YAxis dataKey="label" type="category" width={180} stroke="#6b7280" />
-                    <Tooltip contentStyle={{ backgroundColor: 'white', border: '1px solid #d1d5db', borderRadius: '8px' }} />
-                    <Bar dataKey="count" fill="url(#colorGrade)" name="Incidencias" radius={[0, 8, 8, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                  No hay datos para el filtro seleccionado
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <StaffDataPanel>
+          <StaffDataPanelHeader
+            compact
+            accent="info"
+            title="Incidencias por nivel y grado"
+            description={
+              selectedLevel !== 'all' || selectedGrade !== 'all'
+                ? `${selectedLevel !== 'all' ? selectedLevel : 'Todos los niveles'} ${selectedGrade !== 'all' ? selectedGrade : ''}`.trim()
+                : 'Color según nivel educativo'
+            }
+          />
+          <StaffDataPanelBody>
+            <GradeLevelChart data={filteredIncidentsByGrade} />
+          </StaffDataPanelBody>
+        </StaffDataPanel>
       </div>
 
-      {/* Fila: Distribución de niveles vs faltas más frecuentes */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="app-card">
-          <CardHeader className="app-card-header">
-            <CardTitle className="app-section-title">Distribución por Nivel de Reincidencia</CardTitle>
-          </CardHeader>
-            <CardContent className="pt-6">
-              <div className="space-y-5">
-              {filteredLevelItems.map((item, index) => (
-                <div key={item.key} className="group">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-semibold text-gray-700">{item.level}</span>
-                    <span className="text-sm font-bold text-gray-900">{item.count}</span>
-                  </div>
-                  <div className="w-full bg-gray-100 rounded-full h-3 shadow-inner overflow-hidden">
-                    <div
-                      className="h-3 rounded-full transition-all duration-500 group-hover:shadow-lg"
-                      style={{
-                        width: `${(viewStats?.totalIncidents ?? 0) > 0 ? (item.count / (viewStats?.totalIncidents ?? 1)) * 100 : 0}%`,
-                        background:
-                          item.severity === 'low'
-                            ? 'linear-gradient(90deg, #10b981, #059669)'
-                            : item.severity === 'moderate'
-                            ? 'linear-gradient(90deg, #f59e0b, #d97706)'
-                            : 'linear-gradient(90deg, #ef4444, #dc2626)'
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="app-card">
-          <CardHeader className="app-card-header">
-            <CardTitle className="app-section-title">Faltas Más Frecuentes</CardTitle>
-          </CardHeader>
-            <CardContent className="pt-6">
-            {(viewStats?.topFaults.length ?? 0) === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                No hay datos disponibles
-              </div>
-            ) : (
-                <div className="space-y-5">
-                  {(viewStats?.topFaults ?? []).map((fault, index) => {
-                    const colors = [
-                      'bg-blue-500',
-                      'bg-purple-500',
-                      'bg-amber-500',
-                      'bg-indigo-500',
-                      'bg-pink-500'
-                    ];
-                    return (
-                      <div key={index} className="flex items-center gap-4 group">
-                        <div className={`flex items-center justify-center w-10 h-10 rounded-lg ${colors[index % colors.length]} text-white font-bold shadow-md group-hover:shadow-lg transition-all`}>
-                          {index + 1}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-semibold text-gray-700">{fault.faultType}</span>
-                            <span className="font-bold text-sm text-gray-900">{fault.count} incidencias</span>
-                          </div>
-                          <div className="w-full bg-gray-100 rounded-full h-3 shadow-inner overflow-hidden">
-                            <div
-                              className={`${colors[index % colors.length]} h-3 rounded-full transition-all duration-500 group-hover:shadow-lg`}
-                              style={{ 
-                                width: `${(viewStats?.topFaults.length ?? 0) > 0 && (viewStats?.topFaults[0].count ?? 0) > 0 
-                                  ? (fault.count / (viewStats?.topFaults[0].count ?? 1)) * 100 
-                                  : 0}%` 
-                              }}
-                            />
-                          </div>
-                        </div>
-                        <div className="text-sm font-semibold text-gray-500 min-w-[45px] text-right">
-                          {(viewStats?.totalIncidents ?? 0) > 0 ? ((fault.count / (viewStats?.totalIncidents ?? 1)) * 100).toFixed(1) : 0}%
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <StaffDataPanel>
+          <StaffDataPanelHeader
+            compact
+            accent="warning"
+            title="Nivel de reincidencia"
+            description={
+              severityFilter === 'all'
+                ? 'Cómo se reparten las incidencias por gravedad'
+                : severityFilter === 'moderate'
+                  ? 'Enfoque: reincidencias moderadas'
+                  : 'Enfoque: casos críticos'
+            }
+          />
+          <StaffDataPanelBody>
+            {viewStats && (
+              <ReincidenceDonut distribution={viewStats.levelDistribution} visibleLevels={visibleLevels} />
             )}
-            </CardContent>
-          </Card>
-        </div>
+          </StaffDataPanelBody>
+        </StaffDataPanel>
 
-      {/* Cuadros Comparativos */}
-      <div className="space-y-6">
-        <h2 className="text-2xl font-bold text-gray-900 mt-8 mb-4 flex items-center gap-2">
-          <BarChart3 className="w-6 h-6" />
-          Comparativas por Grado y Sección
-        </h2>
+        <StaffDataPanel>
+          <StaffDataPanelHeader
+            compact
+            accent="warning"
+            title="Faltas más frecuentes"
+            description="% del total de incidencias · las 3 primeras resaltadas"
+          />
+          <StaffDataPanelBody>
+            <TopFaultsChart faults={viewStats?.topFaults ?? []} total={viewStats?.totalIncidents ?? 0} />
+          </StaffDataPanelBody>
+        </StaffDataPanel>
+      </div>
 
-        {/* Comparativa por Grados */}
-        <Card className="app-card">
-          <CardHeader className="app-card-header">
-            <CardTitle className="app-section-title">Comparativa por Grados</CardTitle>
-          </CardHeader>
-            <CardContent className="pt-6">
-              {comparisonByGrade.length > 0 ? (
-                <div className="space-y-6">
-                  {/* Gráfico de barras comparativo */}
-                  <ResponsiveContainer width="100%" height={350}>
-                    <BarChart data={comparisonByGrade}>
-                      <defs>
-                        <linearGradient id="colorGradeComparison" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.9}/>
-                          <stop offset="100%" stopColor="#1e40af" stopOpacity={0.7}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis 
-                        dataKey="label" 
-                        stroke="#6b7280" 
-                        angle={-45}
-                        textAnchor="end"
-                        height={100}
-                      />
-                      <YAxis stroke="#6b7280" />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: 'white', 
-                          border: '1px solid #d1d5db', 
-                          borderRadius: '8px' 
-                        }}
-                        formatter={(value: number) => [value, 'Incidencias']}
-                      />
-                      <Legend />
-                      <Bar 
-                        dataKey="totalIncidents" 
-                        fill="url(#colorGradeComparison)" 
-                        name="Total Incidencias"
-                        radius={[8, 8, 0, 0]}
-                      />
-                      <Bar 
-                        dataKey="studentsWithIncidents" 
-                        fill="#f59e0b" 
-                        name="Estudiantes Involucrados"
-                        radius={[8, 8, 0, 0]}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
+      <StaffDataPanel>
+        <StaffDataPanelHeader
+          compact
+          accent="accent"
+          title="Comparativa por grados"
+          description="Por gravedad (composición por nivel de reincidencia) o por alumno (incidencias por alumno involucrado)"
+        />
+        <StaffDataPanelBody>
+          <GradeComparisonChart rows={comparisonByGrade} />
+        </StaffDataPanelBody>
+      </StaffDataPanel>
 
-                  {/* Tabla comparativa detallada */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr className="bg-gray-50">
-                          <th className="border border-gray-200 px-4 py-3 text-left text-sm font-bold text-gray-900">Grado</th>
-                          <th className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">Total Incidencias</th>
-                          <th className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">Estudiantes Involucrados</th>
-                          <th className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">Nivel Promedio</th>
-                          <th className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">Nivel 0</th>
-                          <th className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">Nivel 1</th>
-                          <th className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">Nivel 2</th>
-                          <th className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">Nivel 3</th>
-                          <th className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">Nivel 4</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {comparisonByGrade.map((item, index) => (
-                          <tr 
-                            key={index} 
-                            className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
-                          >
-                            <td className="border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700">
-                              {item.label}
-                            </td>
-                            <td className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">
-                              {item.totalIncidents}
-                            </td>
-                            <td className="border border-gray-200 px-4 py-3 text-center text-sm text-gray-700">
-                              {item.studentsWithIncidents}
-                            </td>
-                            <td className="border border-gray-200 px-4 py-3 text-center text-sm font-semibold text-blue-600">
-                              {item.averageReincidence.toFixed(2)}
-                            </td>
-                            <td className="border border-gray-200 px-4 py-3 text-center text-sm text-green-600">
-                              {item.levelDistribution.level0}
-                            </td>
-                            <td className="border border-gray-200 px-4 py-3 text-center text-sm text-yellow-600">
-                              {item.levelDistribution.level1}
-                            </td>
-                            <td className="border border-gray-200 px-4 py-3 text-center text-sm text-orange-600">
-                              {item.levelDistribution.level2}
-                            </td>
-                            <td className="border border-gray-200 px-4 py-3 text-center text-sm text-red-600">
-                              {item.levelDistribution.level3}
-                            </td>
-                            <td className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-red-700">
-                              {item.levelDistribution.level4}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ) : (
-                <div className="h-[200px] flex items-center justify-center text-muted-foreground">
-                  No hay datos para comparar
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Comparativa por Secciones */}
-          <Card className="app-card">
-          <CardHeader className="app-card-header">
-            <CardTitle className="app-section-title">Comparativa por Secciones</CardTitle>
-          </CardHeader>
-            <CardContent className="pt-6">
-              {comparisonBySection.length > 0 ? (
-                <div className="space-y-6">
-                  {/* Gráfico de barras comparativo */}
-                  <ResponsiveContainer width="100%" height={350}>
-                    <BarChart data={comparisonBySection}>
-                      <defs>
-                        <linearGradient id="colorSectionComparison" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.9}/>
-                          <stop offset="100%" stopColor="#d97706" stopOpacity={0.7}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis 
-                        dataKey="label" 
-                        stroke="#6b7280" 
-                        angle={-45}
-                        textAnchor="end"
-                        height={120}
-                      />
-                      <YAxis stroke="#6b7280" />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: 'white', 
-                          border: '1px solid #d1d5db', 
-                          borderRadius: '8px' 
-                        }}
-                        formatter={(value: number) => [value, 'Incidencias']}
-                      />
-                      <Legend />
-                      <Bar 
-                        dataKey="totalIncidents" 
-                        fill="url(#colorSectionComparison)" 
-                        name="Total Incidencias"
-                        radius={[8, 8, 0, 0]}
-                      />
-                      <Bar 
-                        dataKey="studentsWithIncidents" 
-                        fill="#3b82f6" 
-                        name="Estudiantes Involucrados"
-                        radius={[8, 8, 0, 0]}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-
-                  {/* Tabla comparativa detallada */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr className="bg-gray-50">
-                          <th className="border border-gray-200 px-4 py-3 text-left text-sm font-bold text-gray-900">Sección</th>
-                          <th className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">Total Incidencias</th>
-                          <th className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">Estudiantes Involucrados</th>
-                          <th className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">Nivel Promedio</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {comparisonBySection.map((item, index) => (
-                          <tr 
-                            key={index} 
-                            className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
-                          >
-                            <td className="border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700">
-                              {item.label}
-                            </td>
-                            <td className="border border-gray-200 px-4 py-3 text-center text-sm font-bold text-gray-900">
-                              {item.totalIncidents}
-                            </td>
-                            <td className="border border-gray-200 px-4 py-3 text-center text-sm text-gray-700">
-                              {item.studentsWithIncidents}
-                            </td>
-                            <td className="border border-gray-200 px-4 py-3 text-center text-sm font-semibold text-blue-600">
-                              {item.averageReincidence.toFixed(2)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ) : (
-                <div className="h-[200px] flex items-center justify-center text-muted-foreground">
-                  No hay datos para comparar
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+      <StaffDataPanel>
+        <StaffDataPanelHeader
+          compact
+          accent="accent"
+          title="Comparativa por secciones"
+          description="Mapa por grado y sección · pase el cursor por un aula para ver el detalle"
+        />
+        <StaffDataPanelBody>
+          <SectionHeatmap rows={comparisonBySection} />
+        </StaffDataPanelBody>
+      </StaffDataPanel>
     </div>
   );
 };

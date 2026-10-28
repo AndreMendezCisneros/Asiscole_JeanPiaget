@@ -4323,3 +4323,19 @@
     transform: none;
   }
 }
+
+/* Incidencias: escala secuencial azul (mapa por sección en Reportes). */
+:root {
+  --inc-0: 210 20% 97%;
+  --inc-1: 214 80% 94%;
+  --inc-2: 214 75% 84%;
+  --inc-3: 215 68% 70%;
+  --inc-4: 217 62% 46%;
+  --inc-5: 220 66% 32%;
+  --inc-text-0: 215 14% 46%;
+  --inc-text-1: 222 47% 14%;
+  --inc-text-2: 222 47% 14%;
+  --inc-text-3: 222 47% 12%;
+  --inc-text-4: 0 0% 100%;
+  --inc-text-5: 0 0% 100%;
+}
