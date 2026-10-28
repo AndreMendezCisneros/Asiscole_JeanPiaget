@@ -22,3 +22,4 @@ export { tallerAttendanceService, mapTallerAsistenciaRow } from './tallerAttenda
 export { pensionesService } from './pensionesService';
 export { compromisosAlarmService } from './compromisosAlarmService';
 export { assembleIntegralBlocks } from './integralReportService';
+export { latenessService } from './latenessService';

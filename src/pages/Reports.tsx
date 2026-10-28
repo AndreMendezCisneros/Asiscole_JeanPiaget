@@ -36,6 +36,13 @@ import { getCurrentSchoolYear, getAllBimestres, formatBimestreLabel, type Bimest
 import { StudentSearchCombobox } from '@/components/students/StudentSearchCombobox';
 import { CLASSROOM_FIELD_LABELS, CLASSROOM_GRADES, CLASSROOM_LEVELS, CLASSROOM_SECTIONS } from '@/lib/constants/classrooms';
 import { buildDashboardStatsFromIncidents } from '@/lib/utils/incidentReportStats';
+import { LatenessPanel } from '@/components/lateness/LatenessPanel';
+import { useLatenessReportQuery } from '@/hooks/queries/useDashboardQueries';
+import { getLimaTodayDate } from '@/lib/utils/limaDateTime';
+
+function localDateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 export const Reports = () => {
   const [selectedGrade, setSelectedGrade] = useState<string>('all');
@@ -80,6 +87,24 @@ export const Reports = () => {
     staleTime: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
   });
+
+  // Tardanzas: bimestre elegido o año escolar completo, nunca más allá de hoy
+  const latenessFilters = useMemo(() => {
+    const bimestres = getAllBimestres(añoEscolar);
+    const range = reportFilters.bimestre
+      ? bimestres.find((b) => b.numero === reportFilters.bimestre)
+      : { inicio: bimestres[0].inicio, fin: bimestres[bimestres.length - 1].fin };
+    const today = getLimaTodayDate();
+    const dateTo = localDateKey(range!.fin);
+    return {
+      dateFrom: localDateKey(range!.inicio),
+      dateTo: dateTo > today ? today : dateTo,
+      level: reportFilters.level,
+      grade: reportFilters.grade,
+      section: reportFilters.section,
+    };
+  }, [añoEscolar, reportFilters]);
+  const latenessQuery = useLatenessReportQuery(latenessFilters, latenessFilters.dateFrom <= latenessFilters.dateTo);
 
   const { data: studentIncidents = [] } = useQuery({
     queryKey: ['reports', 'student-incidents', selectedStudent?.id, reportFilters.bimestre, reportFilters.añoEscolar],
@@ -381,7 +406,15 @@ export const Reports = () => {
         description="Busque un estudiante o ajuste el alcance del análisis y exporte"
         footer={
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => refetch()} variant="outline" size="sm" disabled={isFetching}>
+            <Button
+              onClick={() => {
+                void refetch();
+                void latenessQuery.refetch();
+              }}
+              variant="outline"
+              size="sm"
+              disabled={isFetching}
+            >
               <Calendar className="mr-2 h-4 w-4" />
               {isFetching ? 'Cargando…' : 'Actualizar'}
             </Button>
@@ -537,6 +570,20 @@ export const Reports = () => {
           tone="secondary"
         />
       </div>
+
+      <LatenessPanel
+        description={`${
+          bimestre !== 'all'
+            ? formatBimestreLabel(getAllBimestres(añoEscolar).find((b) => b.numero === bimestre)!)
+            : `Año escolar ${añoEscolar}`
+        } · respeta los filtros de nivel, grado y sección`}
+        summary={latenessQuery.data ?? null}
+        isLoading={latenessQuery.isLoading}
+        isError={latenessQuery.isError}
+        isFetching={latenessQuery.isFetching}
+        onRetry={() => void latenessQuery.refetch()}
+        showDaily
+      />
 
       {/* Charts y detalle */}
       {/* Tendencia mensual a ancho completo */}

@@ -29,7 +29,7 @@ import {
   Line,
   Legend,
 } from 'recharts';
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PageLoader } from '@/components/ui/page-loader';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DashboardStats, Incident } from '@/types';
@@ -46,7 +46,11 @@ import {
   StaffDataPanelBody,
   StaffActivityItem,
   StaffEmptyState,
+  StaffSegmentedControl,
 } from '@/components/staff';
+import { LatenessPanel } from '@/components/lateness/LatenessPanel';
+import { latenessPeriodRange, type LatenessPeriod } from '@/lib/utils/latenessStats';
+import { getLimaTodayDate } from '@/lib/utils/limaDateTime';
 import { ReincidenceBadge } from '@/components/shared/ReincidenceBadge';
 import {
   getReincidenceLevelBarColor,
@@ -61,6 +65,7 @@ import {
   useRecentIncidentsQuery,
   useMonthlyTrendQuery,
   useWeeklyAttendanceTrendQuery,
+  useLatenessReportQuery,
 } from '@/hooks/queries/useDashboardQueries';
 import { niceAxisScale } from '@/lib/utils/chartAxis';
 
@@ -78,6 +83,12 @@ const ATTENDANCE_CHART = {
   total: 'hsl(217, 48%, 42%)',
 };
 
+const LATENESS_PERIODS: { value: LatenessPeriod; label: string; description: string }[] = [
+  { value: 'today', label: 'Hoy', description: 'Llegadas tarde de hoy' },
+  { value: 'week', label: 'Semana', description: 'Semana en curso, desde el lunes' },
+  { value: 'month', label: 'Mes', description: 'Mes en curso' },
+];
+
 export const Dashboard = () => {
   const statsQuery = useDashboardStatsQuery();
   const statsReady = statsQuery.isSuccess || Boolean(statsQuery.data);
@@ -86,6 +97,12 @@ export const Dashboard = () => {
   const monthlyTrendQuery = useMonthlyTrendQuery(true);
   const alertsQuery = useDepartureAlertsQuery(statsReady);
   const recentIncidentsQuery = useRecentIncidentsQuery(statsReady);
+  const [latenessPeriod, setLatenessPeriod] = useState<LatenessPeriod>('week');
+  const latenessFilters = useMemo(
+    () => latenessPeriodRange(latenessPeriod, getLimaTodayDate()),
+    [latenessPeriod],
+  );
+  const latenessQuery = useLatenessReportQuery(latenessFilters);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -612,6 +629,26 @@ export const Dashboard = () => {
         </StaffDataPanelBody>
       </StaffDataPanel>
       </div>
+
+      <LatenessPanel
+        description={LATENESS_PERIODS.find((p) => p.value === latenessPeriod)?.description}
+        summary={latenessQuery.data ?? null}
+        isLoading={latenessQuery.isLoading}
+        isError={latenessQuery.isError}
+        isFetching={latenessQuery.isFetching}
+        onRetry={() => void latenessQuery.refetch()}
+        singleDay={latenessPeriod === 'today'}
+        headerAction={
+          <StaffSegmentedControl
+            aria-label="Período de tardanzas"
+            value={latenessPeriod}
+            onValueChange={(v) => setLatenessPeriod(v as LatenessPeriod)}
+            options={LATENESS_PERIODS}
+            className="w-full sm:w-[240px]"
+            listClassName="grid-cols-3 sm:grid-cols-3"
+          />
+        }
+      />
 
       <div className="app-section-grid-2">
         <StaffDataPanel className="h-full">

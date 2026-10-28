@@ -4261,3 +4261,65 @@
     opacity: 1;
   }
 }
+
+/* Tardanzas: escala secuencial de un solo tono (más oscuro = más tardanzas). */
+:root {
+  --late-0: 210 20% 97%;
+  --late-1: 20 89% 93%;
+  --late-2: 20 89% 82%;
+  --late-3: 17 86% 70%;
+  --late-4: 13 72% 48%;
+  --late-5: 10 74% 36%;
+  --late-text-0: 215 14% 46%;
+  --late-text-1: 222 47% 14%;
+  --late-text-2: 222 47% 14%;
+  --late-text-3: 222 47% 12%;
+  --late-text-4: 0 0% 100%;
+  --late-text-5: 0 0% 100%;
+}
+
+.dark {
+  --late-0: 0 0% 18%;
+  --late-1: 14 30% 19%;
+  --late-2: 14 45% 25%;
+  --late-3: 14 58% 34%;
+  --late-4: 14 66% 47%;
+  --late-5: 16 85% 62%;
+  --late-text-0: 0 0% 62%;
+  --late-text-1: 0 0% 96%;
+  --late-text-2: 0 0% 98%;
+  --late-text-3: 0 0% 100%;
+  --late-text-4: 0 0% 100%;
+  --late-text-5: 222 47% 10%;
+}
+
+.late-cell {
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.late-cell:hover,
+.late-cell:focus-visible {
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 0 2px hsl(var(--card)),
+    0 0 0 4px hsl(var(--late-4) / 0.55),
+    0 6px 16px hsl(var(--late-5) / 0.18);
+  outline: none;
+}
+
+.late-cell[data-selected='true'] {
+  box-shadow:
+    0 0 0 2px hsl(var(--card)),
+    0 0 0 4px hsl(var(--foreground) / 0.85);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .late-cell {
+    transition: none;
+  }
+  .late-cell:hover {
+    transform: none;
+  }
+}

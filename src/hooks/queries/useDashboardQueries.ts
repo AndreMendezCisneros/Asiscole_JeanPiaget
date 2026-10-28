@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { dashboardService, arrivalService, incidentsService } from '@/lib/services';
+import { dashboardService, arrivalService, incidentsService, latenessService } from '@/lib/services';
+import type { LatenessFilters } from '@/lib/services/latenessService';
 import { queryKeys } from '@/lib/query/queryKeys';
 
 const DEPARTURE_ALERTS_INTERVAL_MS = 5 * 60 * 1000;
@@ -75,5 +76,20 @@ export function useWeeklyAttendanceTrendQuery(enabled = true) {
     staleTime: 60 * 1000,
     placeholderData: keepPreviousData,
     refetchOnMount: true,
+  });
+}
+
+export function useLatenessReportQuery(filters: LatenessFilters, enabled = true) {
+  return useQuery({
+    queryKey: ['lateness', filters] as const,
+    queryFn: async () => {
+      const { summary, error } = await latenessService.getLatenessReport(filters);
+      if (error) throw new Error(error);
+      if (!summary) throw new Error('No se recibieron datos de tardanzas');
+      return summary;
+    },
+    enabled,
+    staleTime: 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 }
