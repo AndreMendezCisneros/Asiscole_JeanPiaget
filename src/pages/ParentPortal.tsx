@@ -32,7 +32,7 @@ import {
 import type { ArrivalRecord, Incident, ParentMeeting, Student } from '@/types';
 import { format, startOfMonth, endOfMonth, parseISO, isWithinInterval, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { getLimaTodayDate, formatDateKeyLima } from '@/lib/utils/limaDateTime';
+import { getLimaTodayDate, formatDateKeyLima, dateFromKey } from '@/lib/utils/limaDateTime';
 import { StudentPhoto } from '@/components/shared/StudentPhoto';
 import { ParentBottomNav, type ParentTab } from '@/components/parent/ParentBottomNav';
 import { ParentChildrenSwitcher } from '@/components/parent/ParentChildrenSwitcher';
@@ -652,7 +652,7 @@ function MeetingCard({ meeting }: { meeting: ParentMeeting }) {
         <div className="min-w-0 flex-1">
           <p className="font-semibold">{meeting.motivo}</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            {format(new Date(meeting.fecha), "EEEE d 'de' MMMM", { locale: es })} · {meeting.hora}
+            {format(dateFromKey(meeting.fecha), "EEEE d 'de' MMMM", { locale: es })} · {meeting.hora}
           </p>
           <Badge className="mt-2" variant={meeting.estado === 'Cancelada' ? 'destructive' : 'outline'}>
             {meeting.estado}

@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { format } from 'date-fns';
+import { dateFromKey } from '@/lib/utils/limaDateTime';
 import { es } from 'date-fns/locale';
 import type { AuditLog, Incident, ParentMeeting, Student } from '@/types';
 import {
@@ -221,7 +222,7 @@ export async function exportParentMeetingsExcel(meetings: ParentMeeting[]): Prom
         m.student?.grade ?? '—',
         m.student?.section ?? '—',
         m.motivo,
-        m.fecha ? format(new Date(m.fecha), 'dd/MM/yyyy', { locale: es }) : '—',
+        m.fecha ? format(dateFromKey(m.fecha), 'dd/MM/yyyy', { locale: es }) : '—',
         m.hora ?? '—',
         m.estado,
         m.asistencia == null ? 'Pendiente' : m.asistencia ? 'Asistió' : 'No asistió',

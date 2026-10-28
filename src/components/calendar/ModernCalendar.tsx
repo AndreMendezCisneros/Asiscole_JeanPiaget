@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isSameMonth, addWeeks, subWeeks, addMonths, subMonths, addDays, subDays, startOfDay, parse, getHours, getMinutes, setHours, setMinutes } from 'date-fns';
+import { groupSameSlot, laneStyle, layoutOverlappingEvents } from './eventLayout';
 import { es } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, Users, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -92,6 +93,19 @@ export const ModernCalendar = ({
     return allEvents;
   }, [events]);
 
+  const eventColorClass = (color?: string) =>
+    color === 'amber' ? "bg-amber-500 hover:bg-amber-600" :
+    color === 'green' ? "bg-green-500 hover:bg-green-600" :
+    color === 'gray' ? "bg-gray-500 hover:bg-gray-600" :
+    color === 'blue' ? "bg-blue-500 hover:bg-blue-600" :
+    "bg-primary hover:bg-primary/90";
+
+  /** Posición dentro de la celda de su hora (64 px por hora). */
+  const blockMetrics = (start: Date, end: Date, minHeight: number) => {
+    const duration = getHours(end) * 60 + getMinutes(end) - (getHours(start) * 60 + getMinutes(start));
+    return { top: (getMinutes(start) / 60) * 64, height: Math.max((duration / 60) * 64, minHeight) };
+  };
+
   // Renderizar vista de semana
   const renderWeekView = () => {
     const days = dateRange.days;
@@ -133,7 +147,10 @@ export const ModernCalendar = ({
             </div>
 
             {/* Columnas de días */}
-            {days.map((day, dayIdx) => (
+            {days.map((day, dayIdx) => {
+              const groups = groupSameSlot(getEventsForDate(day));
+              const layout = layoutOverlappingEvents(groups);
+              return (
               <div key={dayIdx} className="border-r border-gray-200 last:border-r-0 relative">
                 {Array.from({ length: endHour - startHour }, (_, i) => startHour + i).map((hour) => (
                   <div
@@ -144,57 +161,49 @@ export const ModernCalendar = ({
                       onCreateEvent?.(date, `${hour.toString().padStart(2, '0')}:00`);
                     }}
                   >
-                    {/* Eventos en esta hora */}
-                    {getEventsForDate(day)
-                      .filter(event => {
-                        const eventHour = getHours(new Date(event.start));
-                        return eventHour === hour;
-                      })
-                      .map((event) => {
-                        const start = new Date(event.start);
-                        const end = new Date(event.end);
-                        const startMinutes = getHours(start) * 60 + getMinutes(start);
-                        const endMinutes = getHours(end) * 60 + getMinutes(end);
-                        const duration = endMinutes - startMinutes;
-                        const height = (duration / 60) * 64; // 64px por hora
-                        const top = (getMinutes(start) / 60) * 64;
-
+                    {/* Eventos en esta hora; una cita masiva es un solo bloque */}
+                    {groups
+                      .filter((g) => getHours(g.start) === hour)
+                      .map((g) => {
+                        const { top, height } = blockMetrics(g.start, g.end, 20);
+                        const first = g.items[0];
+                        const bulk = g.items.length > 1;
                         return (
                           <div
-                            key={event.id}
+                            key={g.id}
                             className={cn(
-                              "absolute left-1 right-1 rounded px-2 py-1 text-xs cursor-pointer z-10 text-white transition-colors",
-                              event.color === 'amber' ? "bg-amber-500 hover:bg-amber-600" :
-                              event.color === 'green' ? "bg-green-500 hover:bg-green-600" :
-                              event.color === 'gray' ? "bg-gray-500 hover:bg-gray-600" :
-                              event.color === 'blue' ? "bg-blue-500 hover:bg-blue-600" :
-                              "bg-primary hover:bg-primary/90"
+                              "absolute overflow-hidden rounded px-1.5 py-1 text-xs cursor-pointer z-10 text-white ring-1 ring-white transition-colors",
+                              eventColorClass(first.color),
                             )}
-                            style={{
-                              top: `${top}px`,
-                              height: `${Math.max(height, 20)}px`,
-                            }}
+                            style={{ top: `${top}px`, height: `${height}px`, ...laneStyle(layout.get(g.id), 1) }}
+                            title={
+                              bulk
+                                ? `${first.title} · ${g.items.length} estudiantes`
+                                : [first.title, first.student?.fullName].filter(Boolean).join(' · ')
+                            }
                             onClick={(e) => {
                               e.stopPropagation();
-                              onEventClick?.(event);
+                              if (bulk) {
+                                setSelectedDate(day);
+                                setView('day');
+                              } else {
+                                onEventClick?.(first);
+                              }
                             }}
                           >
-                            <div className="font-semibold truncate">{event.title}</div>
-                            <div className="text-xs opacity-90 truncate">
-                              {format(new Date(event.start), 'HH:mm')} - {format(new Date(event.end), 'HH:mm')}
+                            <div className="font-semibold truncate">{first.title}</div>
+                            <div className="truncate opacity-90">
+                              {format(g.start, 'HH:mm')} ·{' '}
+                              {bulk ? `${g.items.length} estudiantes` : first.student?.fullName ?? format(g.end, 'HH:mm')}
                             </div>
-                            {event.student && (
-                              <div className="text-xs opacity-75 truncate">
-                                {event.student.fullName}
-                              </div>
-                            )}
                           </div>
                         );
                       })}
                   </div>
                 ))}
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -281,7 +290,8 @@ export const ModernCalendar = ({
   // Renderizar vista de día
   const renderDayView = () => {
     const day = selectedDate;
-    const dayEvents = getEventsForDate(day);
+    const dayGroups = groupSameSlot(getEventsForDate(day));
+    const dayLayout = layoutOverlappingEvents(dayGroups);
     const startHour = 6;
     const endHour = 22;
 
@@ -296,7 +306,7 @@ export const ModernCalendar = ({
 
         {/* Grid de horas */}
         <div className="flex-1 overflow-y-auto">
-          <div className="grid grid-cols-2">
+          <div className="grid grid-cols-[72px_1fr]">
             {/* Columna de horas */}
             <div className="border-r border-gray-200">
               {Array.from({ length: endHour - startHour }, (_, i) => startHour + i).map((hour) => (
@@ -319,56 +329,69 @@ export const ModernCalendar = ({
                     onCreateEvent?.(date, `${hour.toString().padStart(2, '0')}:00`);
                   }}
                 >
-                  {dayEvents
-                    .filter(event => {
-                      const eventHour = getHours(new Date(event.start));
-                      return eventHour === hour;
-                    })
-                    .map((event) => {
-                      const start = new Date(event.start);
-                      const end = new Date(event.end);
-                      const startMinutes = getHours(start) * 60 + getMinutes(start);
-                      const endMinutes = getHours(end) * 60 + getMinutes(end);
-                      const duration = endMinutes - startMinutes;
-                      const height = (duration / 60) * 64;
-                      const top = (getMinutes(start) / 60) * 64;
-
+                  {dayGroups
+                    .filter((g) => getHours(g.start) === hour)
+                    .map((g) => {
+                      const bulk = g.items.length > 1;
+                      const { top, height } = blockMetrics(g.start, g.end, bulk ? 56 + g.items.length * 24 : 60);
+                      const first = g.items[0];
                       return (
                         <div
-                          key={event.id}
+                          key={g.id}
                           className={cn(
-                            "absolute left-2 right-2 rounded-lg px-3 py-2 cursor-pointer z-10 shadow-sm text-white transition-colors",
-                            event.color === 'amber' ? "bg-amber-500 hover:bg-amber-600" :
-                            event.color === 'green' ? "bg-green-500 hover:bg-green-600" :
-                            event.color === 'gray' ? "bg-gray-500 hover:bg-gray-600" :
-                            event.color === 'blue' ? "bg-blue-500 hover:bg-blue-600" :
-                            "bg-primary hover:bg-primary/90"
+                            "absolute overflow-hidden rounded-lg px-3 py-2 z-10 shadow-sm text-white ring-1 ring-white transition-colors",
+                            !bulk && "cursor-pointer",
+                            eventColorClass(first.color),
                           )}
-                          style={{
-                            top: `${top}px`,
-                            height: `${Math.max(height, 40)}px`,
-                          }}
+                          style={{ top: `${top}px`, height: `${height}px`, ...laneStyle(dayLayout.get(g.id), 3) }}
+                          title={
+                            bulk
+                              ? `${first.title} · ${g.items.length} estudiantes`
+                              : [first.title, first.student?.fullName].filter(Boolean).join(' · ')
+                          }
                           onClick={(e) => {
                             e.stopPropagation();
-                            onEventClick?.(event);
+                            if (!bulk) onEventClick?.(first);
                           }}
                         >
-                          <div className="font-semibold">{event.title}</div>
+                          <div className="font-semibold truncate">{first.title}</div>
                           <div className="text-sm opacity-90">
-                            {format(new Date(event.start), 'HH:mm')} - {format(new Date(event.end), 'HH:mm')}
+                            {format(g.start, 'HH:mm')} - {format(g.end, 'HH:mm')}
+                            {bulk && ` · Cita masiva, ${g.items.length} estudiantes`}
                           </div>
-                          {event.student && (
-                            <div className="text-sm opacity-75 mt-1">
-                              {event.student.fullName}
-                              {event.student.grade && event.student.section && (
-                                <span className="ml-2">
-                                  {event.student.grade} {event.student.section}
-                                </span>
-                              )}
-                            </div>
-                          )}
-                          {event.motivo && (
-                            <div className="text-xs opacity-70 mt-1">{event.motivo}</div>
+                          {bulk ? (
+                            <ul className="mt-1.5 space-y-0.5">
+                              {g.items.map((item) => (
+                                <li key={item.id}>
+                                  <button
+                                    type="button"
+                                    className="w-full truncate rounded px-1.5 py-0.5 text-left text-sm hover:bg-white/20"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onEventClick?.(item);
+                                    }}
+                                  >
+                                    {item.student?.fullName ?? item.title}
+                                    {item.student?.grade && item.student?.section && (
+                                      <span className="ml-2 opacity-75">
+                                        {item.student.grade} {item.student.section}
+                                      </span>
+                                    )}
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            first.student && (
+                              <div className="text-sm opacity-75 mt-1 truncate">
+                                {first.student.fullName}
+                                {first.student.grade && first.student.section && (
+                                  <span className="ml-2">
+                                    {first.student.grade} {first.student.section}
+                                  </span>
+                                )}
+                              </div>
+                            )
                           )}
                         </div>
                       );

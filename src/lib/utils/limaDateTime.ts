@@ -76,6 +76,15 @@ export function normalizeTimeHHMM(hora: unknown): string {
 }
 
 /** Parsea fecha + hora de cita para el calendario (duración por defecto 30 min) */
+/**
+ * Fecha de calendario `YYYY-MM-DD` como medianoche local.
+ * `new Date('2026-10-29')` la lee como medianoche UTC, que en Lima es el 28 a las 19:00.
+ */
+export function dateFromKey(fecha: string): Date {
+  const [y, m, d] = fecha.trim().slice(0, 10).split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
 export function parseMeetingDateTime(
   fecha: string,
   hora: string,
