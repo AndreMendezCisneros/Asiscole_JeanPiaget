@@ -170,9 +170,9 @@ export async function exportFullReportPdf(data: ReportExportData, incidents: Inc
   if (!isStudent && data.weeklyData.some((d) => d.count > 0)) {
     sub('Distribución por día de la semana', 60);
     doc.chart(
-      verticalBarChart(data.weeklyData.map((d) => ({ label: d.day, value: d.count })), { highlightMax: true, height: 200 }),
+      verticalBarChart(data.weeklyData.map((d) => ({ label: d.day, value: d.count })), { highlightMax: true, height: 220 }),
       'Incidencias de la semana en curso por día. Se resalta el día con más registros.',
-      doc.CW * 0.78,
+      doc.CW * 0.95,
     );
     const pk = insights.incidents.peakWeekday;
     const wTotal = data.weeklyData.reduce((s, d) => s + d.count, 0);
@@ -191,7 +191,7 @@ export async function exportFullReportPdf(data: ReportExportData, incidents: Inc
       { width: 520, height: 200, centerLabel: 'incidencias' },
     ),
     'Incidencias según el nivel de reincidencia del estudiante al momento del registro.',
-    doc.CW * 0.72,
+    doc.CW * 0.9,
   );
   doc.reading(
     insights.incidents.critical > 0
@@ -367,7 +367,7 @@ export async function exportFullReportPdf(data: ReportExportData, incidents: Inc
           { color: CHART_COLORS.orange, softColor: CHART_COLORS.orangeSoft, strongTop: 3, labelWidth: 110 },
         ),
         'Las diez aulas con más tardanzas en el período.',
-        doc.CW * 0.92,
+        doc.CW,
       );
       doc.dataTable(
         'Tardanzas por aula.',
@@ -394,10 +394,10 @@ export async function exportFullReportPdf(data: ReportExportData, incidents: Inc
       doc.chart(
         verticalBarChart(
           insights.lateness.months.map((mm) => ({ label: capitalize(mm.label.slice(0, 3)), value: mm.lateCount })),
-          { color: CHART_COLORS.orange, softColor: CHART_COLORS.orangeSoft, highlightMax: true, height: 200 },
+          { color: CHART_COLORS.orange, softColor: CHART_COLORS.orangeSoft, highlightMax: true, height: 220 },
         ),
         'Tardanzas registradas por mes. Se resalta el mes con más.',
-        doc.CW * 0.78,
+        doc.CW * 0.95,
       );
       if (insights.lateness.peakMonth) {
         doc.reading(`${capitalize(insights.lateness.peakMonth.label)} fue el mes con más tardanzas (${insights.lateness.peakMonth.lateCount}).`);

@@ -34,7 +34,7 @@ export class InstitutionalPdf {
   readonly pdf: jsPDF;
   readonly W: number;
   readonly H: number;
-  readonly M = 20;
+  readonly M = 16;
   readonly CW: number;
   y = 0;
   private figure = 0;
