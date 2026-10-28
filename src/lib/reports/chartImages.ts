@@ -285,7 +285,8 @@ export function horizontalBarChart(
   const fmt = opts.valueFormatter ?? ((v: number) => String(v));
   const { canvas, ctx } = createCanvas(width, height);
   const left = labelW + 10;
-  const right = width - 70;
+  // Deja sitio a la derecha para el valor y, si hay, la nota («75% del aula»)
+  const right = width - (points.some((p) => p.note) ? 150 : 70);
   const max = Math.max(1, ...points.map((p) => p.value));
 
   points.forEach((p, i) => {
