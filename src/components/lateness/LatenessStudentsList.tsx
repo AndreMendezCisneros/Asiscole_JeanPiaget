@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
+import { StaffTablePagination } from '@/components/staff';
+import { useTablePagination } from '@/hooks/useTablePagination';
 import { normalizeSearchText } from '@/lib/utils/latenessStats';
 import type { LatenessClassroom, LatenessStudent } from '@/lib/utils/latenessStats';
 
@@ -13,7 +14,6 @@ interface LatenessStudentsListProps {
   onClearClassroom: () => void;
   /** En «Hoy» cada alumno tiene una sola llegada: se muestra la hora en vez del conteo. */
   singleDay?: boolean;
-  pageSize?: number;
 }
 
 function initials(name: string): string {
@@ -33,10 +33,8 @@ export function LatenessStudentsList({
   selectedClassroom,
   onClearClassroom,
   singleDay = false,
-  pageSize = 10,
 }: LatenessStudentsListProps) {
   const [query, setQuery] = useState('');
-  const [expanded, setExpanded] = useState(false);
 
   const filtered = useMemo(() => {
     const q = normalizeSearchText(query);
@@ -48,7 +46,15 @@ export function LatenessStudentsList({
   }, [students, selectedClassroom, query]);
 
   const maxCount = Math.max(1, ...filtered.map((s) => s.lateCount));
-  const visible = expanded ? filtered : filtered.slice(0, pageSize);
+  const { page, pageSize, totalPages, goToPage, nextPage, prevPage, changePageSize, resetPage, sliceRange } =
+    useTablePagination({ totalItems: filtered.length });
+
+  // Al buscar, cambiar de aula o de período se vuelve a la primera página
+  useEffect(() => {
+    resetPage();
+  }, [query, selectedClassroom?.key, students]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const visible = filtered.slice(sliceRange.start, sliceRange.end);
 
   return (
     <div className="space-y-3">
@@ -148,12 +154,18 @@ export function LatenessStudentsList({
         </div>
       )}
 
-      {filtered.length > pageSize && (
-        <div className="flex justify-center">
-          <Button variant="ghost" size="sm" onClick={() => setExpanded((v) => !v)}>
-            {expanded ? 'Ver menos' : `Ver los ${filtered.length}`}
-          </Button>
-        </div>
+      {filtered.length > 0 && (
+        <StaffTablePagination
+          page={page}
+          totalPages={totalPages}
+          pageSize={pageSize}
+          totalItems={filtered.length}
+          onPrev={prevPage}
+          onNext={nextPage}
+          onGoToPage={goToPage}
+          onPageSizeChange={changePageSize}
+          className="!mt-3"
+        />
       )}
     </div>
   );
