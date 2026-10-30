@@ -983,8 +983,7 @@ export async function getBimestralAttendance(filters: {
           hasRecord: Boolean(record),
           arrivalTime: record?.hora_llegada,
         });
-        const dateObj = new Date(dateStr);
-        const day = dateObj.getDate();
+        const day = Number(dateStr.slice(8, 10));
         tallyAttendanceStatus(totals, status);
         return {
           day,

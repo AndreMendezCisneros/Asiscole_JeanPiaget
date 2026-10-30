@@ -8,6 +8,7 @@ import {
   getLimaDayRangeISO,
   getLimaTodayDate,
   getMonthBounds,
+  localDateKey,
 } from '@/lib/utils/limaDateTime';
 import {
   businessDaysBetween,
@@ -317,7 +318,11 @@ function resolveReportDateRange(filters?: {
 }): DateRange {
   if (filters?.bimestre && filters?.añoEscolar) {
     const { inicio, fin } = getBimestreDates(filters.bimestre as 1 | 2 | 3 | 4, filters.añoEscolar);
-    return { fechaDesde: inicio.toISOString(), fechaHasta: fin.toISOString() };
+    // Hasta el final del último día del bimestre (fin viene a las 00:00)
+    return {
+      fechaDesde: getLimaDayRangeISO(localDateKey(inicio)).desde,
+      fechaHasta: getLimaDayRangeISO(localDateKey(fin)).hasta,
+    };
   }
   if (filters?.startDate && filters?.endDate) {
     return { fechaDesde: filters.startDate, fechaHasta: filters.endDate };
@@ -930,7 +935,7 @@ export const dashboardService = {
           weekDays.push({
             date: day,
             label: dayLabels[dayOfWeek],
-            key: day.toISOString().slice(0, 10),
+            key: localDateKey(day),
           });
         }
         daysBack++;
@@ -975,7 +980,7 @@ export const dashboardService = {
 
       const buckets = new Map(weekDays.map((d) => [d.key, 0]));
       for (const row of rows) {
-        const key = new Date(row.fecha_hora_registro).toISOString().slice(0, 10);
+        const key = formatDateKeyLima(new Date(row.fecha_hora_registro));
         if (buckets.has(key)) buckets.set(key, (buckets.get(key) || 0) + 1);
       }
 

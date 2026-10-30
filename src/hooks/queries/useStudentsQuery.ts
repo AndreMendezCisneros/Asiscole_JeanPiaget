@@ -1,4 +1,5 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { studentSearchOrFilter } from '@/lib/utils/postgrestSearch';
 import { useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { studentsService } from '@/lib/services';
@@ -42,8 +43,7 @@ async function fetchStudentsStats(filters: Omit<StudentsListFilters, 'page'>): P
   }
   if (filters.section) base = base.eq('seccion', filters.section);
   if (filters.search && filters.search.trim()) {
-    const term = filters.search.trim().replace(/[%_]/g, (m) => `\\${m}`);
-    base = base.or(`nombre_completo.ilike.%${term}%,codigo_barras.ilike.%${term}%`);
+    base = base.or(studentSearchOrFilter(filters.search));
   }
   const { data: ids, error } = await base;
   if (error || !ids) return EMPTY_STATS;

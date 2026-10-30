@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient';
+import { studentSearchOrFilter } from '@/lib/utils/postgrestSearch';
 import { Student, EducationalLevel, DocenteClassroom } from '@/types';
 import { resolveStudentProfilePhotoUrl } from '@/lib/utils/profilePhoto';
 import { gradeFilterValues } from '@/lib/utils/gradeAliases';
@@ -468,8 +469,7 @@ export const studentsService = {
         if (filters?.grade) q = q.in('grado', gradeFilterValues(filters.grade));
         if (filters?.section) q = q.eq('seccion', filters.section);
         if (filters?.search && filters.search.trim()) {
-          const term = filters.search.trim().replace(/[%_]/g, (m) => `\\${m}`);
-          q = q.or(`nombre_completo.ilike.%${term}%,codigo_barras.ilike.%${term}%`);
+          q = q.or(studentSearchOrFilter(filters.search));
         }
         return q;
       };

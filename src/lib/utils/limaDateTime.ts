@@ -65,6 +65,11 @@ export function formatDateKeyLima(date: Date): string {
   return `${get('year')}-${get('month')}-${get('day')}`;
 }
 
+/** Clave YYYY-MM-DD de un Date local (p. ej. los límites de bimestre, creados a medianoche local). */
+export function localDateKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 /** ¿Mismo día calendario en Lima? */
 export function isSameCalendarDayLima(a: Date, b: Date): boolean {
   return formatDateKeyLima(a) === formatDateKeyLima(b);

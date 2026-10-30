@@ -182,9 +182,17 @@ export const StudentsList = () => {
     initialPageSize: TABLE_PAGE_SIZE,
   });
 
+  // Al cambiar búsqueda o filtros se consulta la página 1 en el mismo render: si se esperaba
+  // a resetPage(), salía una consulta con la página anterior (offset fuera de rango → 416).
+  const filterKey = `${debouncedSearch}|${levelFilter}|${gradeFilter}|${sectionFilter}`;
+  const [pageFilterKey, setPageFilterKey] = useState(filterKey);
+  const effectivePage = pageFilterKey === filterKey ? currentPage : 1;
+
   useEffect(() => {
+    if (pageFilterKey === filterKey) return;
     resetPage();
-  }, [debouncedSearch, levelFilter, gradeFilter, sectionFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+    setPageFilterKey(filterKey);
+  }, [filterKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const studentFilters = useMemo(
     () => ({
@@ -192,10 +200,10 @@ export const StudentsList = () => {
       level: levelFilter === 'all' ? undefined : levelFilter,
       grade: gradeFilter === 'all' ? undefined : gradeFilter,
       section: sectionFilter === 'all' ? undefined : sectionFilter,
-      page: currentPage,
+      page: effectivePage,
       pageSize,
     }),
-    [debouncedSearch, levelFilter, gradeFilter, sectionFilter, currentPage, pageSize]
+    [debouncedSearch, levelFilter, gradeFilter, sectionFilter, effectivePage, pageSize]
   );
 
   const {

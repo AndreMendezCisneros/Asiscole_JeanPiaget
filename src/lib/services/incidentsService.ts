@@ -10,7 +10,7 @@ import type { RevisadoAppEstado } from '@/lib/utils/revisadoAppEstado';
 import { fetchAllPages } from '@/lib/utils/supabasePagination';
 import { ensureSupabaseReady } from '@/lib/supabaseWarmup';
 import { isTalleresEnabled } from '@/config/features';
-import { getLimaMonthBounds, getMonthBounds, toLimaDayBound } from '@/lib/utils/limaDateTime';
+import { getLimaMonthBounds, getMonthBounds, localDateKey, toLimaDayBound } from '@/lib/utils/limaDateTime';
 import {
   buildIncidentSelect,
   isMissingTallerSchemaError,
@@ -189,8 +189,9 @@ async function resolveDateRange(filters?: IncidentsListFilters): Promise<{
   if (filters?.bimestre && filters?.añoEscolar) {
     const { getBimestreDates } = await import('@/lib/utils/bimestreUtils');
     const { inicio, fin } = getBimestreDates(filters.bimestre as 1 | 2 | 3 | 4, filters.añoEscolar);
-    fechaDesde = inicio.toISOString();
-    fechaHasta = fin.toISOString();
+    // Solo la fecha: toLimaDayBound la convierte en inicio y fin de día en Lima
+    fechaDesde = localDateKey(inicio);
+    fechaHasta = localDateKey(fin);
   }
 
   return {

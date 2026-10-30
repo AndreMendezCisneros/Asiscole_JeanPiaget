@@ -405,8 +405,8 @@ export const AttendanceReport = () => {
               onTime: String(row.totals.onTime),
               late: String(row.totals.late),
             };
-            row.days.forEach((day) => {
-              record[`d${day.day}`] = statusChar(day.status);
+            row.days.forEach((day, index) => {
+              record[`d${index + 1}`] = statusChar(day.status);
             });
             return record;
           }),
@@ -838,11 +838,11 @@ export const AttendanceReport = () => {
                             {row.student.level} • {row.student.grade} {row.student.section}
                           </div>
                         </td>
-                        {row.days.map((day) => {
+                        {row.days.map((day, index) => {
                           const info = statusMap[day.status] || statusMap.Sin_registro;
                           return (
                             <td
-                              key={day.day}
+                              key={index}
                               className="px-1 py-2 text-center"
                               title={day.justificationReason || info.description}
                             >

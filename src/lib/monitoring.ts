@@ -47,6 +47,11 @@ export function initMonitoring(): void {
         replaysSessionSampleRate: 0,
         replaysOnErrorSampleRate: 0,
         tracesSampleRate: 0,
+        // Muchos fallos (p. ej. consultas con 500) se atrapan y solo van a console.error:
+        // también se envían, si no Sentry nunca los ve.
+        integrations: [mod.captureConsoleIntegration({ levels: ['error'] })],
+        // Aviso inofensivo del navegador al redimensionar; no es un error del SIE.
+        ignoreErrors: ['ResizeObserver loop completed with undelivered notifications', 'ResizeObserver loop limit exceeded'],
         initialScope: { tags: { colegio: import.meta.env.VITE_SCHOOL_NAME || 'sin-nombre' } },
       });
       sentry = mod;
