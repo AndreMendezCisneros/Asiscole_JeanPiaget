@@ -101,19 +101,15 @@ export const personalIncidentsService = {
     faultId: number;
     userId: number;
     observations?: string;
-  }): Promise<{ incident: PersonalIncident | null; error: string | null }> {
-    const { data, error } = await supabase
-      .from('incidencias_personal')
-      .insert({
-        id_personal: input.personalId,
-        id_falta: input.faultId,
-        id_usuario_registro: input.userId,
-        observaciones: input.observations?.trim() || null,
-      })
-      .select(SELECT)
-      .single();
-    if (error) return { incident: null, error: error.message };
-    return { incident: mapRow(data as unknown as Row), error: null };
+  }): Promise<{ error: string | null }> {
+    // Sin .select(): Admin y Tutor pueden registrar, pero no leer incidencias del personal.
+    const { error } = await supabase.from('incidencias_personal').insert({
+      id_personal: input.personalId,
+      id_falta: input.faultId,
+      id_usuario_registro: input.userId,
+      observaciones: input.observations?.trim() || null,
+    });
+    return { error: error?.message ?? null };
   },
 
   /** Justifica (o anula) una incidencia activa con su motivo. */

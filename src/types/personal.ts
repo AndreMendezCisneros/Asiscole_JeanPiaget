@@ -99,6 +99,15 @@ export interface PersonalArrivalRecord {
   registeredBy: number | null;
 }
 
+/** Tramo de taller: independiente de la jornada; puede haber varios por día. */
+export interface PersonalTallerRecord {
+  id: number;
+  personalId: number;
+  date: string;
+  arrivalTime: string;
+  departureTime: string | null;
+}
+
 export interface PersonalFormData {
   barcode: string;
   fullName: string;

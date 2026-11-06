@@ -47,6 +47,14 @@ describe('rol RR.HH.', () => {
     const subs = getStaffNavItems('RRHH')[0].subItems?.map((s) => s.path) ?? [];
     expect(subs).toContain('/personal/horas');
     expect(subs).toContain('/personal/promotoria');
+    expect(subs).toContain('/personal/horas-extra');
+  });
+
+  it('Admin solo registra incidencias del personal', () => {
+    const adminSubs = getStaffNavItems('Admin').flatMap((i) => i.subItems?.map((s) => s.path) ?? []);
+    expect(adminSubs.filter((p) => p.startsWith('/personal'))).toEqual(['/personal/registrar-incidencia']);
+    const directorSubs = getStaffNavItems('Director').flatMap((i) => i.subItems?.map((s) => s.path) ?? []);
+    expect(directorSubs).not.toContain('/personal/registrar-incidencia');
   });
 });
 

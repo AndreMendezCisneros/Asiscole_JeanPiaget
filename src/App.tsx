@@ -31,6 +31,7 @@ import { PersonalIncidentReport } from "./pages/personal/PersonalIncidentReport"
 import { PersonalAttendanceReport } from "./pages/personal/PersonalAttendanceReport";
 import { PersonalIntegralReport } from "./pages/personal/PersonalIntegralReport";
 import { PersonalLostTimeReport } from "./pages/personal/PersonalLostTimeReport";
+import { PersonalOvertimeReport } from "./pages/personal/PersonalOvertimeReport";
 import { PersonalPromotoria } from "./pages/personal/PersonalPromotoria";
 import { AttendanceReport } from "./pages/AttendanceReport";
 import { IntegralStudentReport } from "./pages/IntegralStudentReport";
@@ -223,7 +224,7 @@ const AppContent = () => {
         <Route
           path="/personal/registrar-incidencia"
           element={
-            <ProtectedRoute requiredRole={[...RRHH_ROLES]}>
+            <ProtectedRoute requiredRole={[...RRHH_ROLES, 'Admin']}>
               <PersonalRegisterIncident />
             </ProtectedRoute>
           }
@@ -257,6 +258,14 @@ const AppContent = () => {
           element={
             <ProtectedRoute requiredRole={[...RRHH_ROLES]}>
               <PersonalLostTimeReport />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/personal/horas-extra"
+          element={
+            <ProtectedRoute requiredRole={[...RRHH_ROLES]}>
+              <PersonalOvertimeReport />
             </ProtectedRoute>
           }
         />

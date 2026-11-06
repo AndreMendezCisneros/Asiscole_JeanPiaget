@@ -55,6 +55,7 @@ const ALL_STAFF_NAV_ITEMS: StaffNavItem[] = [
       { path: '/incidents', label: 'Lista de Incidencias' },
       { path: '/register', label: 'Registrar Incidencia' },
       { path: '/justify-faults', label: 'Justificar Faltas' },
+      { path: '/personal/registrar-incidencia', label: 'Incidencia del Personal', roles: ['Admin'] },
     ],
   },
   {
@@ -79,6 +80,7 @@ const ALL_STAFF_NAV_ITEMS: StaffNavItem[] = [
       { path: '/personal/reporte-asistencias', label: 'Reporte de Asistencias' },
       { path: '/personal/reporte-integral', label: 'Reporte Integral' },
       { path: '/personal/horas', label: 'Horas no trabajadas' },
+      { path: '/personal/horas-extra', label: 'Horas extra' },
       { path: '/personal/promotoria', label: 'Promotoría (avisos)' },
     ],
   },

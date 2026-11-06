@@ -97,8 +97,10 @@ import {
 } from '@/lib/utils/tutorScannerStorage';
 import { personalService } from '@/lib/services/personalService';
 import { personalAttendanceService } from '@/lib/services/personalAttendanceService';
+import { personalTallerService } from '@/lib/services/personalTallerService';
+import { PersonalIncidentForm } from '@/components/personal/PersonalIncidentForm';
 import { scheduleForDate } from '@/lib/utils/personalSchedule';
-import type { Personal, PersonalArrivalRecord } from '@/types/personal';
+import type { Personal, PersonalArrivalRecord, PersonalTallerRecord } from '@/types/personal';
 
 const NAME_SEARCH_SCROLL_AFTER = 8;
 
@@ -131,7 +133,11 @@ export const TutorScanner = () => {
   const [lookupPending, setLookupPending] = useState(false);
   const [scanAnnouncement, setScanAnnouncement] = useState('');
   const [student, setStudent] = useState<Student | null>(null);
-  const [showIncidentDialog, setShowIncidentDialog] = useState(false);
+  const [showStudentIncident, setShowStudentIncident] = useState(false);
+  /** undefined = cerrado; null = abierto sin empleado elegido. */
+  const [personalIncidentFor, setPersonalIncidentFor] = useState<Personal | null | undefined>(undefined);
+  /** Con cualquier diálogo abierto, el lector de carnets no toma el foco. */
+  const showIncidentDialog = showStudentIncident || personalIncidentFor !== undefined;
   const [faults, setFaults] = useState<FaultType[]>([]);
   const [selectedFault, setSelectedFault] = useState('');
   const [observations, setObservations] = useState('');
@@ -157,8 +163,10 @@ export const TutorScanner = () => {
   /** Perfil de un empleado escaneado (personal del colegio, no estudiante). */
   const [personalProfile, setPersonalProfile] = useState<{
     personal: Personal;
-    record: PersonalArrivalRecord;
+    /** Registro de clase, o tramo de taller si se marcó en modo Talleres. */
+    record: PersonalArrivalRecord | PersonalTallerRecord;
     action: 'arrival' | 'departure';
+    taller: boolean;
   } | null>(null);
   const [personalSearchResults, setPersonalSearchResults] = useState<Personal[]>([]);
   const inFlightPersonalIdsRef = useRef<Set<number>>(new Set());
@@ -1106,17 +1114,52 @@ export const TutorScanner = () => {
   const processPersonal = useCallback(
     async (found: Personal, scanSeq: number) => {
       if (!isMountedRef.current) return;
-      if (isTallerMode) {
-        toast.error('El personal se registra en modo Clase.', { duration: 3200 });
-        releaseScanFocus();
-        return;
-      }
       if (inFlightPersonalIdsRef.current.has(found.id)) {
         releaseScanFocus();
         return;
       }
       inFlightPersonalIdsRef.current.add(found.id);
       try {
+        if (isTallerMode) {
+          const taller =
+            tallerPhase === 'salida'
+              ? await personalTallerService.registerDeparture(found, user?.id)
+              : await personalTallerService.registerArrival(found, user?.id);
+          if (!isMountedRef.current) return;
+          if ('error' in taller) {
+            toast.error(taller.error, { duration: 4000 });
+            return;
+          }
+          const { record, action, duplicate } = taller;
+          if (scanSeq === latestProfileScanRef.current) {
+            showStudentProfileRef.current = false;
+            displayedStudentIdRef.current = null;
+            setShowStudentProfile(false);
+            setStudent(null);
+            setArrivalRecord(null);
+            setPersonalProfile({ personal: found, record, action, taller: true });
+            bumpProfileIdleRef.current();
+          }
+          const status = action === 'departure' ? 'Salió del taller' : 'Entró al taller';
+          const time = (action === 'departure' ? record.departureTime : record.arrivalTime) ?? nowHHMM;
+          if (duplicate) {
+            toast.info(`${found.fullName} ya está en el taller desde las ${time}. Para salida, elija Salida.`, { duration: 2800 });
+          } else {
+            setSessionCount((prev) => ({
+              total: prev.total + 1,
+              onTime: prev.onTime + (action === 'arrival' ? 1 : 0),
+              late: prev.late + (action === 'departure' ? 1 : 0),
+            }));
+            setRecentScans((prev) =>
+              [
+                { id: `${Date.now()}-p${found.id}`, name: `${found.fullName} (personal)`, time, status },
+                ...prev,
+              ].slice(0, 6),
+            );
+          }
+          setScanAnnouncement(`${found.fullName}, personal: ${status}, hora ${time}`);
+          return;
+        }
         const result =
           clasePhase === 'salida'
             ? await personalAttendanceService.registerDeparture(found, user?.id)
@@ -1133,11 +1176,14 @@ export const TutorScanner = () => {
           setShowStudentProfile(false);
           setStudent(null);
           setArrivalRecord(null);
-          setPersonalProfile({ personal: found, record, action });
+          setPersonalProfile({ personal: found, record, action, taller: false });
           bumpProfileIdleRef.current();
         }
         const status = personalScanLabel(action, record);
         const time = (action === 'departure' ? record.departureTime : record.arrivalTime) ?? nowHHMM;
+        if (action === 'arrival' && !duplicate && record.status === 'Falta') {
+          toast.warning('Pasó su hora de salida. Si viene al taller, márquelo en modo Talleres.', { duration: 5000 });
+        }
         if (duplicate) {
           toast.info(
             action === 'departure'
@@ -1164,7 +1210,7 @@ export const TutorScanner = () => {
         releaseScanFocus();
       }
     },
-    [clasePhase, isTallerMode, nowHHMM, releaseScanFocus, user?.id]
+    [clasePhase, isTallerMode, nowHHMM, releaseScanFocus, tallerPhase, user?.id]
   );
 
   const handlePersonalSearchSelect = (selected: Personal) => {
@@ -1425,7 +1471,7 @@ export const TutorScanner = () => {
       toast.error('Debe escanear un estudiante primero');
       return;
     }
-    setShowIncidentDialog(true);
+    setShowStudentIncident(true);
   };
 
   const submitIncident = async (faultTypeId: number, obs?: string) => {
@@ -1520,7 +1566,7 @@ export const TutorScanner = () => {
     invalidateStudents();
     void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats() });
     void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.recentIncidents() });
-    setShowIncidentDialog(false);
+    setShowStudentIncident(false);
     setSelectedFault('');
     setObservations('');
     setQuickFaultId(null);
@@ -1694,6 +1740,17 @@ export const TutorScanner = () => {
             >
               {user?.fullName?.split(' ')[0]}
             </Badge>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setPersonalIncidentFor(null)}
+              aria-label="Incidencia de personal"
+              className="border-[var(--tutor-lead)] bg-transparent text-[var(--tutor-starlight)] hover:bg-[var(--tutor-graphite)] hover:text-[var(--tutor-starlight)]"
+            >
+              <AlertCircle className="h-4 w-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Incidencia de personal</span>
+            </Button>
             <Button
               type="button"
               size="sm"
@@ -2133,12 +2190,17 @@ export const TutorScanner = () => {
 
           <aside className="tutor-right">
             {!showStudentProfile && personalProfile && (() => {
-              const { personal: staff, record, action } = personalProfile;
+              const { personal: staff, record, action, taller } = personalProfile;
               const horarioHoy = scheduleForDate(staff.schedule, record.date);
+              const classRecord = taller ? null : (record as PersonalArrivalRecord);
               const warn =
-                (action === 'arrival' && (record.status === 'Tarde' || record.status === 'Falta')) ||
-                record.departureType === 'Anticipada';
-              const statusLabel = personalScanLabel(action, record);
+                (action === 'arrival' && (classRecord?.status === 'Tarde' || classRecord?.status === 'Falta')) ||
+                classRecord?.departureType === 'Anticipada';
+              const statusLabel = classRecord
+                ? personalScanLabel(action, classRecord)
+                : action === 'departure'
+                  ? 'Salió del taller'
+                  : 'Entró al taller';
               const timeLabel =
                 (action === 'departure' ? record.departureTime : record.arrivalTime) ?? '—:—';
               return (
@@ -2200,6 +2262,15 @@ export const TutorScanner = () => {
                         </p>
                       </div>
                       <div className="tutor-student-card__actions">
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="lg"
+                          onClick={() => setPersonalIncidentFor(staff)}
+                        >
+                          <AlertCircle className="mr-2 h-4 w-4" />
+                          Registrar incidencia
+                        </Button>
                         <Button
                           type="button"
                           variant="outline"
@@ -2534,9 +2605,31 @@ export const TutorScanner = () => {
       </main>
 
       <Dialog
-        open={showIncidentDialog}
+        open={personalIncidentFor !== undefined}
         onOpenChange={(open) => {
-          setShowIncidentDialog(open);
+          if (!open) setPersonalIncidentFor(undefined);
+        }}
+      >
+        <DialogContent className="tutor-dialog sm:max-w-2xl rounded-[28px] max-h-[90dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Incidencia de personal</DialogTitle>
+            <DialogDescription>
+              Registra solo la incidencia: no marca entrada ni salida. Se avisa a Promotoría.
+            </DialogDescription>
+          </DialogHeader>
+          <PersonalIncidentForm
+            key={personalIncidentFor?.id ?? 'buscar'}
+            initialPersonal={personalIncidentFor ?? null}
+            onDone={() => setPersonalIncidentFor(undefined)}
+            onCancel={() => setPersonalIncidentFor(undefined)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showStudentIncident}
+        onOpenChange={(open) => {
+          setShowStudentIncident(open);
           if (!open) {
             setSelectedFault('');
             setObservations('');
@@ -2590,7 +2683,7 @@ export const TutorScanner = () => {
               type="button"
               variant="outline"
               onClick={() => {
-                setShowIncidentDialog(false);
+                setShowStudentIncident(false);
                 setSelectedFault('');
                 setObservations('');
                 focusBarcodeInput();

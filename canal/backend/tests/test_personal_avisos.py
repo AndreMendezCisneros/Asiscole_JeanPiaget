@@ -46,6 +46,16 @@ def test_llego_despues_de_su_salida():
     assert "después de su hora de salida (15:30)" in texto and "inasistencia" in texto
 
 
+def test_taller_entrada_y_salida():
+    entrada = redactar("personal_entrada", {"nombre_completo": "PEREZ, Ana", "hora": "16:00", "estado": "Taller"})
+    assert "ingresó al taller a las 16:00" in entrada
+    salida = redactar(
+        "personal_salida",
+        {"nombre_completo": "PEREZ, Ana", "hora": "18:30", "estado": "Taller", "hora_ingreso": "16:00"},
+    )
+    assert "salió del taller a las 18:30 (ingresó a las 16:00)" in salida
+
+
 def test_id_virtual_del_personal():
     from apps.ingesta.personal import ID_PERSONAL_OFFSET, es_id_personal, id_virtual
 

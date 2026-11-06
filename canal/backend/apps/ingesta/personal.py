@@ -65,6 +65,8 @@ def redactar(tipo: str, p: dict[str, Any]) -> str:
     if tipo == "personal_entrada":
         estado = str(p.get("estado") or "").strip()
         esperada = _hhmm(p.get("hora_esperada"))
+        if estado == "Taller":
+            return f"Personal: {quien} ingresó al taller a las {hora}, fuera de horario."
         if estado == "Falta":
             if hora and hora != "00:00":
                 salida = _hhmm(p.get("hora_salida_esperada"))
@@ -85,6 +87,10 @@ def redactar(tipo: str, p: dict[str, Any]) -> str:
         return f"Personal: {quien} ingresó a las {hora}{sufijo}"
 
     if tipo == "personal_salida":
+        if str(p.get("estado") or "").strip() == "Taller":
+            ingreso = _hhmm(p.get("hora_ingreso"))
+            desde = f" (ingresó a las {ingreso})" if ingreso else ""
+            return f"Personal: {quien} salió del taller a las {hora}{desde}."
         tipo_salida = str(p.get("tipo_salida") or "").strip()
         esperada = _hhmm(p.get("hora_salida_esperada"))
         if tipo_salida == "Anticipada":

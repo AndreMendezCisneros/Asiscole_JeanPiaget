@@ -21,6 +21,7 @@ const STAFF_ROUTE_IMPORTS: Record<string, PreloadFn> = {
   '/personal/reporte-asistencias': () => import('@/pages/personal/PersonalAttendanceReport'),
   '/personal/reporte-integral': () => import('@/pages/personal/PersonalIntegralReport'),
   '/personal/horas': () => import('@/pages/personal/PersonalLostTimeReport'),
+  '/personal/horas-extra': () => import('@/pages/personal/PersonalOvertimeReport'),
   '/personal/promotoria': () => import('@/pages/personal/PersonalPromotoria'),
   '/attendance-report': () => import('@/pages/AttendanceReport'),
   '/integral-report': () => import('@/pages/IntegralStudentReport'),
