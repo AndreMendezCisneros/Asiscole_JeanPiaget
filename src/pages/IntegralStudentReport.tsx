@@ -63,6 +63,23 @@ import { CLASSROOM_FIELD_LABELS, CLASSROOM_GRADES, CLASSROOM_SECTIONS, CLASSROOM
 import { StudentSearchCombobox } from '@/components/students/StudentSearchCombobox';
 import { monthDateKeys, rangeDateKeys } from '@/lib/utils/attendanceTurno';
 import { isNotasEnabled, isPensionesEnabled } from '@/config/features';
+import { getLimaTodayDate } from '@/lib/utils/limaDateTime';
+import { integralMonthlyBreakdown, type IntegralMonthRow } from '@/lib/utils/integralMonthly';
+
+type ReportType = 'monthly' | 'bimestral' | 'annual';
+
+function localDateKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+/** Año escolar completo (bimestre 1 a 4), recortado a hoy. */
+function schoolYearRange(añoEscolar: number): { start: string; end: string } {
+  const bims = getAllBimestres(añoEscolar);
+  const start = localDateKey(bims[0].inicio);
+  const yearEnd = localDateKey(bims[bims.length - 1].fin);
+  const today = getLimaTodayDate();
+  return { start, end: yearEnd < today ? yearEnd : today < start ? start : today };
+}
 
 const getCurrentMonthValue = () => {
   const now = new Date();
@@ -86,7 +103,8 @@ function attendanceStatusLabel(status: string): string {
 
 export const IntegralStudentReport = () => {
   const [mode, setMode] = useState<'individual' | 'general'>('individual');
-  const [reportType, setReportType] = useState<'monthly' | 'bimestral'>('monthly');
+  const [reportType, setReportType] = useState<ReportType>('monthly');
+  const [range, setRange] = useState<{ start: string; end: string } | null>(null);
   const [monthValue, setMonthValue] = useState(getCurrentMonthValue());
   const [bimestre, setBimestre] = useState<Bimestre | 'all'>('all');
   const [añoEscolar, setAñoEscolar] = useState<number>(getCurrentSchoolYear());
@@ -101,8 +119,9 @@ export const IntegralStudentReport = () => {
 
   const filtersReady =
     mode === 'individual'
-      ? selectedStudent != null && (reportType === 'monthly' || bimestre !== 'all')
-      : levelFilter !== 'all' &&
+      ? selectedStudent != null && (reportType !== 'bimestral' || bimestre !== 'all')
+      : reportType !== 'annual' &&
+        levelFilter !== 'all' &&
         gradeFilter !== 'all' &&
         sectionFilter !== 'all' &&
         (reportType === 'monthly' || bimestre !== 'all');
@@ -111,6 +130,7 @@ export const IntegralStudentReport = () => {
     if (reportType === 'monthly') {
       return format(new Date(`${monthValue}-01T12:00:00`), 'MMMM yyyy', { locale: es });
     }
+    if (reportType === 'annual') return `Año escolar ${añoEscolar}`;
     if (bimestre === 'all') return `Año ${añoEscolar}`;
     const info = getAllBimestres(añoEscolar).find((item) => item.numero === bimestre);
     return info ? formatBimestreLabel(info) : `Bimestre ${bimestre}`;
@@ -166,7 +186,24 @@ export const IntegralStudentReport = () => {
       };
 
       let morningRows;
-      if (reportType === 'bimestral') {
+      if (reportType === 'annual') {
+        if (mode !== 'individual' || !selectedStudent) {
+          toast.error('El reporte anual es solo para un estudiante');
+          return;
+        }
+        const yearRange = schoolYearRange(añoEscolar);
+        start = yearRange.start;
+        end = yearRange.end;
+        dateKeys = rangeDateKeys(new Date(`${start}T12:00:00`), new Date(`${end}T12:00:00`));
+        const result = await arrivalService.getRangeAttendance({
+          start,
+          end,
+          ...attendanceFilters,
+          studentId: selectedStudent.id,
+        });
+        if (result.error) throw new Error(result.error);
+        morningRows = result.rows;
+      } else if (reportType === 'bimestral') {
         if (bimestre === 'all') {
           toast.error('Seleccione un bimestre');
           return;
@@ -227,6 +264,7 @@ export const IntegralStudentReport = () => {
       if (error) toast.error(error);
       if (!isMountedRef.current) return;
       setBlocks(nextBlocks);
+      setRange({ start, end });
       setHasQueried(true);
     } catch (error) {
       if (!isMountedRef.current) return;
@@ -246,8 +284,21 @@ export const IntegralStudentReport = () => {
   }, []);
 
   useEffect(() => {
+    if (mode === 'general' && reportType === 'annual') setReportType('monthly');
+  }, [mode, reportType]);
+
+  const monthlyRows = useMemo<IntegralMonthRow[]>(
+    () =>
+      reportType === 'annual' && blocks[0] && range
+        ? integralMonthlyBreakdown(blocks[0], range.start, range.end)
+        : [],
+    [reportType, blocks, range],
+  );
+
+  useEffect(() => {
     setHasQueried(false);
     setBlocks([]);
+    setRange(null);
   }, [mode, reportType, monthValue, bimestre, añoEscolar, levelFilter, gradeFilter, sectionFilter, selectedStudent?.id]);
 
   const subtitle = buildFilterSubtitle([
@@ -295,6 +346,39 @@ export const IntegralStudentReport = () => {
           deuda: block.summary.deuda.toFixed(2),
         })),
       );
+
+      if (monthlyRows.length > 0) {
+        const only = blocks[0].summary;
+        doc.drawSectionTitle('Resumen por mes');
+        doc.drawTable(
+          [
+            { header: 'Mes', dataKey: 'mes', width: 40 },
+            { header: 'Asist.', dataKey: 'asistencias', width: 20, align: 'center' },
+            { header: 'Tard.', dataKey: 'tardanzas', width: 20, align: 'center' },
+            { header: 'Faltas', dataKey: 'faltas', width: 20, align: 'center' },
+            { header: 'Tarde', dataKey: 'tarde', width: 20, align: 'center' },
+            { header: 'Incid.', dataKey: 'incidencias', width: 20, align: 'center' },
+          ],
+          [
+            ...monthlyRows.map((row) => ({
+              mes: row.label,
+              asistencias: String(row.asistencias),
+              tardanzas: String(row.tardanzas),
+              faltas: String(row.faltas),
+              tarde: String(row.asistenciasTarde),
+              incidencias: String(row.incidencias),
+            })),
+            {
+              mes: 'TOTAL',
+              asistencias: String(only.asistenciasManana),
+              tardanzas: String(only.tardanzas),
+              faltas: String(only.faltas),
+              tarde: String(only.asistenciasTarde),
+              incidencias: String(only.incidencias),
+            },
+          ],
+        );
+      }
 
       const detailBlocks = blocks.slice(0, mode === 'individual' ? blocks.length : PDF_DETAIL_LIMIT);
       if (mode === 'general' && blocks.length > PDF_DETAIL_LIMIT) {
@@ -398,7 +482,8 @@ export const IntegralStudentReport = () => {
         }
       }
 
-      await doc.finalize(`Reporte_Integral_${format(new Date(), 'yyyyMMdd_HHmm')}.pdf`);
+      const fileTag = reportType === 'annual' ? `Anual_${añoEscolar}_` : '';
+      await doc.finalize(`Reporte_Integral_${fileTag}${format(new Date(), 'yyyyMMdd_HHmm')}.pdf`);
       toast.success('PDF generado', { id: 'integral-pdf' });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error al generar PDF', { id: 'integral-pdf' });
@@ -443,6 +528,16 @@ export const IntegralStudentReport = () => {
         ]);
       }
       setColumnWidths(summary, [32, 16, 10, 10, 14, 12, 10, 12, 12, 12]);
+
+      if (monthlyRows.length > 0) {
+        const byMonth = workbook.addWorksheet('Por mes');
+        await addBrandedExcelHeader(workbook, byMonth, 'RESUMEN POR MES', subtitle, 6);
+        styleHeaderRow(byMonth.addRow(['Mes', 'Asist. mañana', 'Tardanzas', 'Faltas', 'Asist. tarde', 'Incidencias']));
+        for (const row of monthlyRows) {
+          byMonth.addRow([row.label, row.asistencias, row.tardanzas, row.faltas, row.asistenciasTarde, row.incidencias]);
+        }
+        setColumnWidths(byMonth, [20, 14, 12, 10, 12, 12]);
+      }
 
       const morning = workbook.addWorksheet('Asistencia mañana');
       await addBrandedExcelHeader(workbook, morning, 'ASISTENCIA MAÑANA', subtitle, 6);
@@ -675,17 +770,29 @@ export const IntegralStudentReport = () => {
         )}
         <div className="space-y-2">
           <Label>Tipo de período</Label>
-          <Select value={reportType} onValueChange={(value: 'monthly' | 'bimestral') => setReportType(value)}>
+          <Select value={reportType} onValueChange={(value: ReportType) => setReportType(value)}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="monthly">Mensual</SelectItem>
               <SelectItem value="bimestral">Bimestral</SelectItem>
+              {mode === 'individual' && <SelectItem value="annual">Anual (año escolar completo)</SelectItem>}
             </SelectContent>
           </Select>
         </div>
-        {reportType === 'monthly' ? (
+        {reportType === 'annual' ? (
+          <div className="space-y-2">
+            <Label>Año escolar</Label>
+            <Input
+              type="number"
+              value={añoEscolar}
+              min={2020}
+              max={2050}
+              onChange={(event) => setAñoEscolar(Number(event.target.value))}
+            />
+          </div>
+        ) : reportType === 'monthly' ? (
           <div className="space-y-2">
             <Label>Mes</Label>
             <Input type="month" value={monthValue} onChange={(event) => setMonthValue(event.target.value)} />
@@ -768,6 +875,23 @@ export const IntegralStudentReport = () => {
                   {selectedBlock.student.level} · {selectedBlock.student.grade} {selectedBlock.student.section}
                 </p>
               </div>
+              {monthlyRows.length > 0 && (
+                <section className="space-y-2">
+                  <h4 className="text-sm font-semibold">Resumen por mes</h4>
+                  <SimpleTable
+                    headers={['Mes', 'Asist. mañana', 'Tardanzas', 'Faltas', 'Asist. tarde', 'Incidencias']}
+                    rows={monthlyRows.map((row) => [
+                      row.label,
+                      String(row.asistencias),
+                      String(row.tardanzas),
+                      String(row.faltas),
+                      String(row.asistenciasTarde),
+                      String(row.incidencias),
+                    ])}
+                    empty="Sin datos"
+                  />
+                </section>
+              )}
               <IntegralBlockTables block={selectedBlock} />
             </div>
           ) : (

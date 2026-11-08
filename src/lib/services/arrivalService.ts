@@ -912,18 +912,41 @@ export async function getBimestralAttendance(filters: {
   grade?: string;
   section?: string;
 }): Promise<{ rows: MonthlyAttendanceRow[]; daysInBimestre: number; error: string | null }> {
-  try {
-    // Importar utilidades de bimestres
-    const { getBimestreDates } = await import('@/lib/utils/bimestreUtils');
-    const { inicio, fin } = getBimestreDates(filters.bimestre as 1 | 2 | 3 | 4, filters.añoEscolar);
-    
-    const startStr = inicio.toISOString().split('T')[0];
-    const endStr = fin.toISOString().split('T')[0];
-    
-    // Calcular días totales en el bimestre
-    const daysInBimestre = Math.ceil((fin.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  const { getBimestreDates } = await import('@/lib/utils/bimestreUtils');
+  const { inicio, fin } = getBimestreDates(filters.bimestre as 1 | 2 | 3 | 4, filters.añoEscolar);
+  const { rows, days, error } = await getRangeAttendance({
+    start: localDateKey(inicio),
+    end: localDateKey(fin),
+    level: filters.level,
+    grade: filters.grade,
+    section: filters.section,
+  });
+  return { rows, daysInBimestre: days, error };
+}
 
-    const { students: studentsList, error: studentsError } = await studentsService.listLite({
+function localDateKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Asistencia de mañana día por día en un rango [start, end] (YYYY-MM-DD).
+ * `row.days[i]` corresponde a la i-ésima fecha del rango. Con `studentId` trae solo a ese alumno.
+ */
+export async function getRangeAttendance(filters: {
+  start: string;
+  end: string;
+  level?: EducationalLevel;
+  grade?: string;
+  section?: string;
+  studentId?: number;
+}): Promise<{ rows: MonthlyAttendanceRow[]; days: number; error: string | null }> {
+  const startStr = filters.start;
+  const endStr = filters.end;
+  const allDates: string[] = [];
+  for (let key = startStr; key <= endStr; key = shiftDateKey(key, 1)) allDates.push(key);
+  const daysInBimestre = allDates.length;
+  try {
+    const { students: listed, error: studentsError } = await studentsService.listLite({
       active: true,
       level: filters.level,
       grade: filters.grade,
@@ -931,9 +954,10 @@ export async function getBimestralAttendance(filters: {
     });
 
     if (studentsError) {
-      console.error('Error al obtener estudiantes para reporte bimestral:', studentsError);
-      return { rows: [], daysInBimestre, error: studentsError };
+      console.error('Error al obtener estudiantes para reporte por rango:', studentsError);
+      return { rows: [], days: daysInBimestre, error: studentsError };
     }
+    const studentsList = filters.studentId == null ? listed : listed.filter((st) => st.id === filters.studentId);
 
     const studentsData = studentsList.map((st) => ({
       id_estudiante: st.id,
@@ -948,7 +972,7 @@ export async function getBimestralAttendance(filters: {
 
     const studentIds = (studentsData || []).map((st) => st.id_estudiante);
     if (studentIds.length === 0) {
-      return { rows: [], daysInBimestre, error: null };
+      return { rows: [], days: daysInBimestre, error: null };
     }
 
     const todayKey = getLimaTodayDate();
@@ -959,19 +983,11 @@ export async function getBimestralAttendance(filters: {
     );
 
     if (arrivalsError) {
-      console.error('Error al obtener registros bimestrales de llegada:', arrivalsError);
-      return { rows: [], daysInBimestre, error: arrivalsError };
+      console.error('Error al obtener registros de llegada por rango:', arrivalsError);
+      return { rows: [], days: daysInBimestre, error: arrivalsError };
     }
 
     const recordsMap = buildArrivalRecordsMap(arrivalsData);
-
-    // Crear array de todas las fechas del bimestre
-    const allDates: string[] = [];
-    const currentDate = new Date(inicio);
-    while (currentDate <= fin) {
-      allDates.push(currentDate.toISOString().split('T')[0]);
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
 
     const rows: MonthlyAttendanceRow[] = (studentsData || []).map((student) => {
       const dayStatusMap = recordsMap.get(studentRecordId(student.id_estudiante)) || new Map();
@@ -1010,10 +1026,10 @@ export async function getBimestralAttendance(filters: {
       };
     });
 
-    return { rows, daysInBimestre, error: null };
+    return { rows, days: daysInBimestre, error: null };
   } catch (error: any) {
-    console.error('Error en getBimestralAttendance:', error);
-    return { rows: [], daysInBimestre: 0, error: error.message || 'Error al generar reporte bimestral' };
+    console.error('Error en getRangeAttendance:', error);
+    return { rows: [], days: 0, error: error.message || 'Error al generar reporte por rango' };
   }
 }
 
@@ -2018,6 +2034,7 @@ export const arrivalService = {
   getArrivalsForStudents,
   getMonthlyAttendance,
   getBimestralAttendance,
+  getRangeAttendance,
   getWeeklyAttendanceTrend,
   getTodayStats,
   createDepartureRecord,
