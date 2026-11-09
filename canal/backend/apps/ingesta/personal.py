@@ -54,11 +54,16 @@ def _fecha(valor: Any) -> str:
     return texto
 
 
+def puesto(p: dict[str, Any]) -> str:
+    """Cargo del empleado (ej. "COORDINADORA DE TOECE"); si no tiene, su categoría."""
+    return str(p.get("cargo") or "").strip() or str(p.get("categoria") or "").strip()
+
+
 def redactar(tipo: str, p: dict[str, Any]) -> str:
     """Texto del aviso. Una o dos frases, sin emojis."""
     nombre = str(p.get("nombre_completo") or "").strip() or "Un trabajador"
-    categoria = str(p.get("categoria") or "").strip()
-    quien = f"{nombre} ({categoria})" if categoria else nombre
+    cargo = puesto(p)
+    quien = f"{nombre} ({cargo})" if cargo else nombre
     hora = _hhmm(p.get("hora"))
     fecha = _fecha(p.get("fecha"))
 
@@ -138,13 +143,14 @@ def crear_mensajes_personal(
         "id_estudiante": virtual,
         "estudiante_nombre": payload.get("nombre_completo"),
         "grado": "Personal",
-        "seccion": payload.get("categoria"),
+        "seccion": puesto(payload),
         "id_registro": id_registro_app,
         "fecha": payload.get("fecha"),
         "hora": _hhmm(payload.get("hora")) or None,
         "estado": payload.get("estado"),
         "tipo_salida": payload.get("tipo_salida"),
         "es_grave": bool(payload.get("es_grave")) if tipo == "personal_incidencia" else None,
+        "observaciones": str(payload.get("observaciones") or "").strip() if tipo == "personal_incidencia" else None,
     }
     metadata = {k: v for k, v in metadata.items() if v not in (None, "")}
 

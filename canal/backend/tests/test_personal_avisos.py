@@ -17,6 +17,24 @@ def test_entrada_tarde_incluye_hora_esperada():
     assert "07:05" in texto and "(07:00)" in texto and "tardanza" in texto
 
 
+def test_usa_cargo_en_vez_de_categoria():
+    texto = redactar(
+        "personal_incidencia",
+        {"nombre_completo": "ACEVEDO TALAVERA, Karina Ketty", "categoria": "Directivo y Jerárquico",
+         "cargo": "COORDINADORA DE TOECE", "nombre_falta": "Tardanza", "observaciones": "Llegó sin aviso"},
+    )
+    assert "(COORDINADORA DE TOECE)" in texto and "Directivo" not in texto
+    assert "Observaciones: Llegó sin aviso" in texto
+
+
+def test_sin_cargo_usa_categoria():
+    texto = redactar(
+        "personal_salida",
+        {"nombre_completo": "PEREZ, Ana", "categoria": "Administrativo", "cargo": "  ", "hora": "13:00"},
+    )
+    assert "PEREZ, Ana (Administrativo) salió a las 13:00" in texto
+
+
 def test_falta_del_cierre():
     texto = redactar("personal_entrada", {"nombre_completo": "PEREZ, Ana", "fecha": "2026-10-26", "estado": "Falta"})
     assert "26/10/2026" in texto and "inasistencia" in texto
