@@ -3,6 +3,8 @@
 #  * Hoy: quien tenía horario y no marcó pasados N min de su entrada
 #    (configuracion_sistema.personal_minutos_inasistencia, por defecto 120).
 #  * Ayer: cierre completo del día (por si el cron no corrió).
+#  * Salidas: desde las 22:00 (personal_hora_cierre_salida), quien llegó y no
+#    marcó salida queda con salida Normal a su hora (sie_jp_cerrar_salidas_personal).
 # Omite feriados (calendario_no_lectivo). Idempotente.
 set -euo pipefail
 
@@ -19,5 +21,10 @@ with connections[alias].cursor() as cur:
     row = cur.fetchone()
     if row[0] or row[1]:
         print('personal_marcado', row[0], 'incidencias', row[1])
+    # Salida automática: quien no marcó salida hasta las 22:00 (personal_hora_cierre_salida)
+    cur.execute('SELECT sie_jp_cerrar_salidas_personal()')
+    n = cur.fetchone()[0]
+    if n:
+        print('salidas_cerradas', n)
 connections[alias].commit()
 PY

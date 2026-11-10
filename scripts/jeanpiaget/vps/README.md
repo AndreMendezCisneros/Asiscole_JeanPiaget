@@ -12,7 +12,7 @@ cópialo a mano a su ruta en el VPS. Ninguno lleva secretos; los tokens se leen 
 | `wpp_patch_autoclose.js` | `/opt/sie-jp/` | Manual, dentro del contenedor `sie-wppconnect` (desactiva `autoClose`/`deviceSyncTimeout`). Repetir si se recrea el contenedor. |
 | `wpp-qr-live/server.py` | `/opt/sie-jp/wpp-qr-live/` | servicio systemd `wpp-qr-live` (puerto 3199). Página para escanear el QR del chip. |
 | `wpp-qr-live/wpp-qr-live.service` | `/etc/systemd/system/` | unidad systemd del anterior. |
-| `jp-marcar-faltas-personal-cierre.sh` | `/opt/sie-jp/` | cron `*/10 * * * *` → `/var/log/jp-marcar-faltas-personal.log`. Marca inasistencia al **personal** que no marcó pasados N min de su entrada (`sie_jp_marcar_faltas_personal_pendientes`, N = `personal_minutos_inasistencia`, 120) y cierra el día anterior. Idempotente. **Pausado** (comentado) hasta cargar los horarios reales. |
+| `jp-marcar-faltas-personal-cierre.sh` | `/opt/sie-jp/` | cron `*/10 * * * *` → `/var/log/jp-marcar-faltas-personal.log`. Marca inasistencia al **personal** que no marcó pasados N min de su entrada (`sie_jp_marcar_faltas_personal_pendientes`, N = `personal_minutos_inasistencia`, 120) y cierra el día anterior. Desde las 22:00 (`personal_hora_cierre_salida`) pone salida Normal a su hora a quien no marcó salida (`sie_jp_cerrar_salidas_personal`, motivo "Cierre automático", sin aviso a la app). Idempotente. Activo desde 2026-11-09. |
 
 Crontab actual (`crontab -l` como root):
 
