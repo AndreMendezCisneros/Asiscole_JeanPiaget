@@ -64,6 +64,7 @@ import { parentMeetingsService, type SuggestedCitationStudent } from '@/lib/serv
 import { studentsService } from '@/lib/services';
 import { whatsappService } from '@/lib/services';
 import { ParentMeeting, Student } from '@/types';
+import { isDniLikeQuery } from '@/lib/utils/studentSearch';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
@@ -168,6 +169,12 @@ const bulkMeetingDefaults: MeetingFormValues = {
   studentIds: undefined,
 };
 
+/** El texto escrito en el registro rápido es un nombre (tiene letras), no un DNI/código. */
+function looksLikeNameQuery(value: string): boolean {
+  const q = value.trim();
+  return q.length >= 3 && /[a-záéíóúñü]/i.test(q) && !isDniLikeQuery(q);
+}
+
 export const ParentMeetings = () => {
   const [meetings, setMeetings] = useState<ParentMeeting[]>([]);
   const [loading, setLoading] = useState(true);
@@ -178,6 +185,9 @@ export const ParentMeetings = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | ParentMeeting['estado']>('all');
   const [barcodeInput, setBarcodeInput] = useState('');
   const [scanning, setScanning] = useState(false);
+  /** Resultados al escribir el nombre del estudiante en el registro rápido. */
+  const [nameResults, setNameResults] = useState<Student[]>([]);
+  const [nameSearching, setNameSearching] = useState(false);
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
@@ -554,11 +564,94 @@ export const ParentMeetings = () => {
     }
   };
 
+  const isNameQuery = looksLikeNameQuery(barcodeInput);
+
+  useEffect(() => {
+    const query = barcodeInput.trim();
+    if (!looksLikeNameQuery(query)) {
+      setNameResults([]);
+      setNameSearching(false);
+      return;
+    }
+    let cancelled = false;
+    setNameSearching(true);
+    const timer = setTimeout(async () => {
+      const { students } = await studentsService.searchForTutorScanner(query, 8);
+      if (cancelled || !isMountedRef.current) return;
+      setNameResults(students);
+      setNameSearching(false);
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [barcodeInput]);
+
+  const studentsWithMeetingOnDate = useMemo(
+    () =>
+      new Set(
+        meetings
+          .filter(
+            (m) =>
+              m.fecha.slice(0, 10) === scanTargetDate &&
+              (m.estado === 'Pendiente' || m.estado === 'Confirmada') &&
+              !m.asistencia,
+          )
+          .map((m) => m.studentId),
+      ),
+    [meetings, scanTargetDate],
+  );
+
+  const sortedNameResults = useMemo(
+    () =>
+      [...nameResults].sort(
+        (a, b) => Number(studentsWithMeetingOnDate.has(b.id)) - Number(studentsWithMeetingOnDate.has(a.id)),
+      ),
+    [nameResults, studentsWithMeetingOnDate],
+  );
+
+  const handleNameSelect = async (selected: Student) => {
+    setScanning(true);
+    try {
+      const { success, error } = await parentMeetingsService.markAttendanceForStudent(
+        { id: selected.id, fullName: selected.fullName },
+        false,
+        scanTargetDate,
+      );
+      if (error) {
+        toast.error(error);
+      } else if (success) {
+        toast.success(`Asistencia registrada: ${selected.fullName}`);
+        setBarcodeInput('');
+        setNameResults([]);
+        loadMeetings();
+        loadStats();
+      }
+    } catch (error) {
+      console.error('Error al registrar asistencia por nombre:', error);
+      toast.error('Error al registrar asistencia');
+    } finally {
+      setScanning(false);
+    }
+  };
+
   const handleBarcodeScan = async (e?: React.FormEvent | React.KeyboardEvent) => {
     e?.preventDefault();
 
     if (!barcodeInput.trim()) {
       toast.error('Por favor ingrese o escanee el código de barras');
+      return;
+    }
+
+    if (looksLikeNameQuery(barcodeInput)) {
+      const withMeeting = sortedNameResults.filter((st) => studentsWithMeetingOnDate.has(st.id));
+      if (sortedNameResults.length === 1) {
+        void handleNameSelect(sortedNameResults[0]);
+      } else if (withMeeting.length === 1) {
+        void handleNameSelect(withMeeting[0]);
+      } else {
+        toast.message('Elija al estudiante de la lista');
+      }
       return;
     }
 
@@ -851,7 +944,7 @@ export const ParentMeetings = () => {
       <StaffDataPanel>
         <StaffDataPanelHeader
           title="Registro rápido de asistencia"
-          description={`Escanee el DNI o carnet del estudiante. Citas del ${format(new Date(scanTargetDate + 'T12:00:00'), 'dd/MM/yyyy', { locale: es })}`}
+          description={`Escanee el DNI o carnet, o escriba el nombre del estudiante. Citas del ${format(new Date(scanTargetDate + 'T12:00:00'), 'dd/MM/yyyy', { locale: es })}`}
           accent="primary"
           action={
             <Badge variant="outline" className="border-success/40 bg-success/10 text-success">
@@ -865,7 +958,7 @@ export const ParentMeetings = () => {
             <div className="relative">
               <Scan className="absolute left-4 top-1/2 -translate-y-1/2 h-6 w-6 text-primary" />
               <Input
-                placeholder="Escanee o ingrese el DNI / código de barras del estudiante"
+                placeholder="Escanee el DNI / código o escriba el nombre del estudiante"
                 value={barcodeInput}
                 onChange={(e) => setBarcodeInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -877,11 +970,53 @@ export const ParentMeetings = () => {
                 className="pl-12 h-14 text-lg font-mono border-2 border-primary/30 focus:border-primary focus:ring-2 focus:ring-primary/20"
                 autoFocus
                 disabled={scanning}
+                aria-describedby={isNameQuery ? 'cita-name-results' : undefined}
               />
             </div>
+            {isNameQuery && (
+              <div id="cita-name-results" className="rounded-xl border bg-background" aria-live="polite">
+                {nameSearching ? (
+                  <p className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Buscando…
+                  </p>
+                ) : sortedNameResults.length === 0 ? (
+                  <p className="p-3 text-sm text-muted-foreground">No se encontró ningún estudiante con ese nombre.</p>
+                ) : (
+                  <ul className="max-h-72 divide-y overflow-y-auto">
+                    {sortedNameResults.map((st) => {
+                      const hasMeeting = studentsWithMeetingOnDate.has(st.id);
+                      return (
+                        <li key={st.id}>
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none disabled:opacity-50"
+                            onClick={() => void handleNameSelect(st)}
+                            disabled={scanning}
+                          >
+                            <span className="min-w-0">
+                              <span className="block truncate font-medium">{st.fullName}</span>
+                              <span className="block text-xs text-muted-foreground">
+                                {st.grade} {st.section} · DNI {st.barcode}
+                              </span>
+                            </span>
+                            {hasMeeting ? (
+                              <Badge variant="outline" className="shrink-0 border-success/40 bg-success/10 text-success">
+                                Tiene cita
+                              </Badge>
+                            ) : (
+                              <span className="shrink-0 text-xs text-muted-foreground">Sin cita ese día</span>
+                            )}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            )}
             <Button 
               type="submit" 
-              disabled={scanning || !barcodeInput.trim()}
+              disabled={scanning || !barcodeInput.trim() || (isNameQuery && sortedNameResults.length === 0)}
               className="w-full h-14 text-lg bg-gradient-to-r from-primary via-primary-dark to-primary hover:from-primary-dark hover:via-primary hover:to-primary-dark shadow-lg hover:shadow-xl transition-all"
             >
               {scanning ? (

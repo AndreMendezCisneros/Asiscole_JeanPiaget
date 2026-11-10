@@ -80,7 +80,7 @@ const ALL_STAFF_NAV_ITEMS: StaffNavItem[] = [
       { path: '/personal/reporte-asistencias', label: 'Reporte de Asistencias' },
       { path: '/personal/reporte-integral', label: 'Reporte Integral' },
       { path: '/personal/horas', label: 'Horas no trabajadas' },
-      { path: '/personal/horas-extra', label: 'Horas extra' },
+      { path: '/personal/horas-extra', label: 'Horas adicionales' },
       { path: '/personal/promotoria', label: 'Promotoría (avisos)' },
     ],
   },

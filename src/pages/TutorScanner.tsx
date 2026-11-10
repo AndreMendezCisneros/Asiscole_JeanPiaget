@@ -14,6 +14,7 @@ import {
   Loader2,
   Zap,
   CalendarClock,
+  CheckCircle2,
 } from 'lucide-react';
 import { StudentPhoto } from '@/components/shared/StudentPhoto';
 import { GuardyMark } from '@/components/brand/GuardyMark';
@@ -54,6 +55,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { MIN_JUSTIFICATION_REASON_LENGTH } from '@/lib/utils/attendanceJustification';
 import { getLimaNow, getLimaTodayDate } from '@/lib/utils/limaDateTime';
 import {
   resolveArrivalLimitForLevel,
@@ -136,6 +138,10 @@ export const TutorScanner = () => {
   const [showStudentIncident, setShowStudentIncident] = useState(false);
   /** undefined = cerrado; null = abierto sin empleado elegido. */
   const [personalIncidentFor, setPersonalIncidentFor] = useState<Personal | null | undefined>(undefined);
+  /** Salida anticipada del personal que el tutor va a autorizar. */
+  const [authorizeDeparture, setAuthorizeDeparture] = useState<{ personal: Personal; record: PersonalArrivalRecord } | null>(null);
+  const [authorizeReason, setAuthorizeReason] = useState('');
+  const [authorizeSaving, setAuthorizeSaving] = useState(false);
   /** Con cualquier diálogo abierto, el lector de carnets no toma el foco. */
   const showIncidentDialog = showStudentIncident || personalIncidentFor !== undefined;
   const [faults, setFaults] = useState<FaultType[]>([]);
@@ -405,7 +411,7 @@ export const TutorScanner = () => {
   }, [showStudentProfile, showIncidentDialog, focusBarcodeInput]);
 
   const bumpProfileIdle = useTutorProfileIdle({
-    active: (showStudentProfile || personalProfile !== null) && !showIncidentDialog,
+    active: (showStudentProfile || personalProfile !== null) && !showIncidentDialog && authorizeDeparture === null,
     onIdle: () => {
       clearScanRef.current();
       toast.message('Pantalla limpiada por inactividad', { duration: 2500 });
@@ -1212,6 +1218,27 @@ export const TutorScanner = () => {
     },
     [clasePhase, isTallerMode, nowHHMM, releaseScanFocus, tallerPhase, user?.id]
   );
+
+  const submitAuthorizeDeparture = async () => {
+    if (!authorizeDeparture || !user?.id) return;
+    setAuthorizeSaving(true);
+    const { personal: staff, record } = authorizeDeparture;
+    const reason = authorizeReason.trim();
+    const { success, error } = await personalAttendanceService.authorizeEarlyDeparture(record.id, user.id, reason);
+    setAuthorizeSaving(false);
+    if (!success) {
+      toast.error(error ?? 'No se pudo autorizar la salida');
+      return;
+    }
+    toast.success(`Salida de ${staff.fullName} autorizada`);
+    setAuthorizeDeparture(null);
+    setPersonalProfile((prev) =>
+      prev && !prev.taller && prev.record.id === record.id
+        ? { ...prev, record: { ...record, departureType: 'Autorizada', departureReason: reason } }
+        : prev,
+    );
+    bumpProfileIdle();
+  };
 
   const handlePersonalSearchSelect = (selected: Personal) => {
     prepareForHardwareScan();
@@ -2271,6 +2298,20 @@ export const TutorScanner = () => {
                           <AlertCircle className="mr-2 h-4 w-4" />
                           Registrar incidencia
                         </Button>
+                        {classRecord?.departureType === 'Anticipada' && (
+                          <Button
+                            type="button"
+                            variant="default"
+                            size="lg"
+                            onClick={() => {
+                              setAuthorizeReason('');
+                              setAuthorizeDeparture({ personal: staff, record: classRecord });
+                            }}
+                          >
+                            <CheckCircle2 className="mr-2 h-4 w-4" />
+                            Autorizar salida
+                          </Button>
+                        )}
                         <Button
                           type="button"
                           variant="outline"
@@ -2623,6 +2664,49 @@ export const TutorScanner = () => {
             onDone={() => setPersonalIncidentFor(undefined)}
             onCancel={() => setPersonalIncidentFor(undefined)}
           />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={authorizeDeparture !== null}
+        onOpenChange={(open) => {
+          if (!open && !authorizeSaving) setAuthorizeDeparture(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Autorizar salida del personal</DialogTitle>
+            <DialogDescription>
+              {authorizeDeparture
+                ? `${authorizeDeparture.personal.fullName} salió a las ${authorizeDeparture.record.departureTime ?? '—'}, antes de su hora de salida. Quedará como salida autorizada.`
+                : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="tutor-auth-salida">Motivo</Label>
+            <Textarea
+              id="tutor-auth-salida"
+              value={authorizeReason}
+              onChange={(e) => setAuthorizeReason(e.target.value)}
+              placeholder="Ej.: cita médica, permiso de Dirección…"
+              rows={3}
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground">Mínimo {MIN_JUSTIFICATION_REASON_LENGTH} caracteres.</p>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setAuthorizeDeparture(null)} disabled={authorizeSaving}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={authorizeSaving || authorizeReason.trim().length < MIN_JUSTIFICATION_REASON_LENGTH}
+              onClick={() => void submitAuthorizeDeparture()}
+            >
+              {authorizeSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Autorizar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

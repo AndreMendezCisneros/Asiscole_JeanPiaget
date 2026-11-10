@@ -100,7 +100,10 @@ export const sessionService = {
   },
 
   /**
-   * Reinicia el temporizador de inactividad (solo ante actividad real del usuario)
+   * Registra actividad real del usuario. NO alarga la expiración local: esa solo
+   * la fija el servidor (syncServerExpiry tras sie_renovar_sesion). Si el cliente
+   * la alargara solo, el token podría vencer en el servidor mientras la página
+   * cree que sigue activa, y las tablas con RLS devolverían todo vacío sin error.
    */
   touchActivity(): void {
     const session = this.readSessionRaw();
@@ -111,10 +114,7 @@ export const sessionService = {
       return;
     }
 
-    const now = Date.now();
-    const duration = this.getIdleDurationMs(session.user.role);
-    session.lastActivity = now;
-    session.expiresAt = now + duration;
+    session.lastActivity = Date.now();
 
     try {
       sessionStorage.setItem(this.STORAGE_KEY, JSON.stringify(session));

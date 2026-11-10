@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService, sessionService } from '@/lib/services';
+import { SESSION_EXPIRED_EVENT } from '@/lib/services/authService';
 
 const ACTIVITY_THROTTLE_MS = 1000;
 
@@ -91,12 +92,18 @@ export const useSessionMonitor = () => {
 
     document.addEventListener('visibilitychange', onVisibilityChange);
 
+    // El servidor rechazó el token al renovar: volver al login en vez de
+    // seguir mostrando pantallas vacías.
+    const onServerExpired = () => logoutExpired();
+    window.addEventListener(SESSION_EXPIRED_EVENT, onServerExpired);
+
     return () => {
       if (idleTimerRef.current) {
         clearTimeout(idleTimerRef.current);
       }
       clearInterval(intervalId);
       document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener(SESSION_EXPIRED_EVENT, onServerExpired);
       activityEvents.forEach((event) => {
         document.removeEventListener(event, onUserActivity);
       });

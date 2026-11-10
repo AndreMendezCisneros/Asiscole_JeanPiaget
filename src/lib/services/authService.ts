@@ -11,7 +11,21 @@ import { sanitize } from '@/lib/utils/sanitize';
  * ventana en el servidor ante actividad real, pero limitamos la frecuencia de llamadas.
  */
 const RENEW_THROTTLE_MS = 4 * 60 * 1000;
+/** Con menos de esto por vencer, se renueva ante cualquier actividad. */
+const RENEW_NEAR_EXPIRY_MS = 5 * 60 * 1000;
+const RENEW_MIN_GAP_MS = 15 * 1000;
 let lastRenewAttempt = 0;
+
+/** Evento global: el servidor rechazó el token; la app debe volver al login. */
+export const SESSION_EXPIRED_EVENT = 'sie:session-expired';
+
+function notifySessionExpired(): void {
+  try {
+    window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+  } catch {
+    /* entorno sin window (tests) */
+  }
+}
 
 interface SieRenewResponse {
   ok?: boolean;
@@ -114,7 +128,13 @@ export const authService = {
         return false;
       }
       const result = data as SieRenewResponse | null;
-      if (!result?.ok) return false;
+      if (!result?.ok) {
+        // El servidor ya no reconoce el token (venció o se cerró). Seguir con él
+        // haría que todas las consultas con RLS devuelvan vacío sin error.
+        sessionService.clearSession();
+        notifySessionExpired();
+        return false;
+      }
 
       sessionService.syncServerExpiry(result.expiresInMs);
       return true;
@@ -128,10 +148,14 @@ export const authService = {
    * Renueva la sesión en el servidor como máximo cada pocos minutos.
    * Pensado para llamarse libremente ante cualquier actividad (incluido cada escaneo)
    * sin saturar la red: mantiene viva la sesión del tutor mientras trabaja.
+   * Si a la sesión le quedan pocos minutos, renueva sin esperar el intervalo.
    */
   renewSessionThrottled(): void {
     const now = Date.now();
-    if (now - lastRenewAttempt < RENEW_THROTTLE_MS) return;
+    const session = sessionService.readSessionRaw();
+    const nearExpiry = session ? session.expiresAt - now < RENEW_NEAR_EXPIRY_MS : false;
+    const minGap = nearExpiry ? RENEW_MIN_GAP_MS : RENEW_THROTTLE_MS;
+    if (now - lastRenewAttempt < minGap) return;
     lastRenewAttempt = now;
     void this.renewSession();
   },

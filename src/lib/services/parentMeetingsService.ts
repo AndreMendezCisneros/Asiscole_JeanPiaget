@@ -499,6 +499,27 @@ export const parentMeetingsService = {
         };
       }
 
+      return await this.markAttendanceForStudent(
+        { id: student.id, fullName: student.fullName },
+        llegadaTarde,
+        fechaCita,
+      );
+    } catch (error: any) {
+      console.error('Error en markAttendanceByBarcode:', error);
+      return { success: false, meetingId: null, error: error.message || 'Error al registrar asistencia' };
+    }
+  },
+
+  /**
+   * Marca la asistencia a la cita pendiente del estudiante en la fecha indicada
+   * (o hoy). Lo usan el escaneo de DNI/carnet y la búsqueda por nombre.
+   */
+  async markAttendanceForStudent(
+    student: { id: number; fullName: string },
+    llegadaTarde: boolean = false,
+    fechaCita?: string,
+  ): Promise<{ success: boolean; meetingId: number | null; error: string | null }> {
+    try {
       const today = getLimaTodayDate();
       const targetDates = [...new Set([fechaCita?.trim().slice(0, 10), today].filter(Boolean))];
 
@@ -577,7 +598,7 @@ export const parentMeetingsService = {
 
       return { success: true, meetingId: meeting.id_cita, error: null };
     } catch (error: any) {
-      console.error('Error en markAttendanceByBarcode:', error);
+      console.error('Error en markAttendanceForStudent:', error);
       return { success: false, meetingId: null, error: error.message || 'Error al registrar asistencia' };
     }
   },

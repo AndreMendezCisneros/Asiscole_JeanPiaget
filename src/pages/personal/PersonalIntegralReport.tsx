@@ -199,15 +199,15 @@ export const PersonalIntegralReport = () => {
       { label: 'Tardanzas', value: summary.late + summary.lateJustified, tone: 'warning' },
       { label: 'Faltas', value: summary.absent + summary.noRecord, tone: 'error' },
       { label: 'H. trabajadas', value: formatMinutes(worked.workedMin), tone: 'primary' },
-      { label: 'H. extra', value: formatMinutes(overtime.totalMin), tone: 'info' },
+      { label: 'H. adicionales', value: formatMinutes(overtime.totalMin), tone: 'info' },
     ]);
     const kv = [
       { label: 'Días programados', value: String(summary.scheduledDays) },
       { label: 'Puntualidad', value: summary.punctuality == null ? '—' : `${summary.punctuality}%` },
       { label: 'Salidas sin autorización', value: String(unauthorized.length) },
-      { label: 'Horas extra: salida después de hora', value: formatMinutes(overtime.afterExitMin) },
-      { label: 'Horas extra: taller', value: formatMinutes(overtime.tallerMin) },
-      { label: 'Horas extra: día sin horario', value: formatMinutes(overtime.offDayMin) },
+      { label: 'Horas adicionales: salida después de hora', value: formatMinutes(overtime.afterExitMin) },
+      { label: 'Horas adicionales: taller', value: formatMinutes(overtime.tallerMin) },
+      { label: 'Horas adicionales: día sin horario', value: formatMinutes(overtime.offDayMin) },
     ];
     if (lost) {
       kv.push(
@@ -234,7 +234,7 @@ export const PersonalIntegralReport = () => {
           { header: 'Faltas', dataKey: 'faltas', width: 16, align: 'center' },
           { header: 'Sal. sin aut.', dataKey: 'sinaut', width: 20, align: 'center' },
           { header: 'H. trabajadas', dataKey: 'trab', width: 24, align: 'center' },
-          { header: 'H. extra', dataKey: 'extra', width: 20, align: 'center' },
+          { header: 'H. adicionales', dataKey: 'extra', width: 20, align: 'center' },
           { header: 'Incid.', dataKey: 'inc', align: 'center' },
         ],
         monthRows.map((m) => ({
@@ -295,7 +295,7 @@ export const PersonalIntegralReport = () => {
       { fontSize: 7.5 },
     );
 
-    doc.drawSectionTitle(`Horas extra (${formatMinutes(overtime.totalMin)})`);
+    doc.drawSectionTitle(`Horas adicionales (${formatMinutes(overtime.totalMin)})`);
     doc.drawTable(
       [
         { header: 'Fecha', dataKey: 'fecha', width: 26 },
@@ -314,7 +314,7 @@ export const PersonalIntegralReport = () => {
       { fontSize: 7.5 },
     );
     doc.drawParagraph(
-      'Hora extra = hora en que salió − su hora de salida (ej.: sale a las 14:00 y se va a las 15:00 = 1 h). Llegar antes no cuenta. Taller y días sin horario suman salida − entrada. Horas trabajadas = salida − llegada reales; sin salida marcada cuenta 0.',
+      'Hora adicional = hora en que salió − su hora de salida (ej.: sale a las 14:00 y se va a las 15:00 = 1 h). Llegar antes no cuenta. Taller y días sin horario suman salida − entrada. Horas trabajadas = salida − llegada reales; sin salida marcada cuenta 0.',
       7.5,
     );
 
@@ -325,12 +325,14 @@ export const PersonalIntegralReport = () => {
         { header: 'Falta', dataKey: 'falta' },
         { header: 'Estado', dataKey: 'estado', width: 24 },
         { header: 'Observación', dataKey: 'obs' },
+        { header: 'Registró', dataKey: 'registro', width: 36 },
       ],
       activeIncidents.map((i) => ({
         fecha: formatLimaDateTime(i.registeredAt),
         falta: i.faultName,
         estado: i.status,
         obs: i.observations ?? '',
+        registro: i.registeredByName ?? '—',
       })),
       { fontSize: 7.5 },
     );
@@ -346,7 +348,7 @@ export const PersonalIntegralReport = () => {
         icon={UserSquare2}
         eyebrow="Personal"
         title="Reporte Integral del Personal"
-        description="Datos, asistencia, horas trabajadas, horas extra e incidencias de un empleado"
+        description="Datos, asistencia, horas trabajadas, horas adicionales e incidencias de un empleado"
         accent="info"
       >
         <Button variant="info" onClick={() => void exportPdf()} disabled={!selected || loadingData}>
@@ -465,7 +467,7 @@ export const PersonalIntegralReport = () => {
               tone="primary"
             />
             <StaffKpiStat
-              label="Horas extra"
+              label="Horas adicionales"
               value={formatMinutes(overtime.totalMin)}
               hint={overtime.daysWithoutExit > 0 ? `${overtime.daysWithoutExit} días sin hora de salida en horario` : 'Salida tarde + taller'}
               icon={Timer}
@@ -474,7 +476,7 @@ export const PersonalIntegralReport = () => {
           </div>
 
           <StaffDataPanel>
-            <StaffDataPanelHeader title="Resumen" description="Puntualidad, salidas, tiempo no trabajado y horas extra" />
+            <StaffDataPanelHeader title="Resumen" description="Puntualidad, salidas, tiempo no trabajado y horas adicionales" />
             <div className="grid gap-2 p-4 pt-0 text-sm sm:grid-cols-3 sm:p-5 sm:pt-0">
               <p>Días programados: <strong>{summary.scheduledDays}</strong></p>
               <p>Puntualidad: <strong>{summary.punctuality == null ? '—' : `${summary.punctuality}%`}</strong></p>
@@ -486,9 +488,9 @@ export const PersonalIntegralReport = () => {
                   <p>Sin justificar: <strong>{formatMinutes(lost.lostNetMin)}</strong></p>
                 </>
               )}
-              <p>Extra por salida tarde: <strong>{formatMinutes(overtime.afterExitMin)}</strong></p>
-              <p>Extra por taller: <strong>{formatMinutes(overtime.tallerMin)}</strong></p>
-              <p>Extra día sin horario: <strong>{formatMinutes(overtime.offDayMin)}</strong></p>
+              <p>Adicional por salida tarde: <strong>{formatMinutes(overtime.afterExitMin)}</strong></p>
+              <p>Adicional por taller: <strong>{formatMinutes(overtime.tallerMin)}</strong></p>
+              <p>Adicional día sin horario: <strong>{formatMinutes(overtime.offDayMin)}</strong></p>
             </div>
           </StaffDataPanel>
 
@@ -506,7 +508,7 @@ export const PersonalIntegralReport = () => {
                         <TableHead className="text-center">Faltas</TableHead>
                         <TableHead className="text-center">Sal. sin aut.</TableHead>
                         <TableHead className="text-center">H. trabajadas</TableHead>
-                        <TableHead className="text-center">H. extra</TableHead>
+                        <TableHead className="text-center">H. adicionales</TableHead>
                         <TableHead className="text-center">Incid.</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -613,13 +615,13 @@ export const PersonalIntegralReport = () => {
 
           <StaffDataPanel>
             <StaffDataPanelHeader
-              title={`Horas extra (${formatMinutes(overtime.totalMin)})`}
+              title={`Horas adicionales (${formatMinutes(overtime.totalMin)})`}
               description="Salió después de su hora de salida, talleres y días sin horario. Llegar antes no cuenta."
             />
             <div className="p-4 pt-0 sm:p-5 sm:pt-0">
               {overtime.items.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  Sin horas extra en el periodo.
+                  Sin horas adicionales en el periodo.
                   {overtime.daysWithoutExit > 0 &&
                     ` Hay ${overtime.daysWithoutExit} días en que su horario no tiene hora de salida: no se pueden calcular.`}
                 </p>
@@ -666,6 +668,7 @@ export const PersonalIntegralReport = () => {
                         <TableHead>Falta</TableHead>
                         <TableHead>Estado</TableHead>
                         <TableHead>Observación</TableHead>
+                        <TableHead>Registró</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -677,6 +680,7 @@ export const PersonalIntegralReport = () => {
                             <Badge variant={i.status === 'Activa' ? 'destructive' : 'info'}>{i.status}</Badge>
                           </TableCell>
                           <TableCell className="max-w-xs text-sm">{i.observations ?? ''}</TableCell>
+                          <TableCell className="text-sm">{i.registeredByName ?? '—'}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

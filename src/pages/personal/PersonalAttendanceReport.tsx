@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarDays, CheckCircle2, ClipboardList, FileDown, FileSpreadsheet, RefreshCw, UserX } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ClipboardList, FileDown, FileSpreadsheet, RefreshCw, UserX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -89,7 +89,6 @@ export const PersonalAttendanceReport = () => {
     const doc = new PdfReportDocument('landscape', 'Reporte de Asistencias del Personal', subtitle);
     await doc.drawCoverHeader();
     doc.drawKpiCards([
-      { label: 'Días programados', value: totals.scheduledDays, tone: 'primary' },
       { label: 'A tiempo', value: totals.onTime, tone: 'success' },
       { label: 'Tardanzas', value: totals.late, tone: 'warning' },
       { label: 'Inasistencias', value: totals.absent, tone: 'error' },
@@ -172,8 +171,7 @@ export const PersonalAttendanceReport = () => {
         </div>
       </PageHeader>
 
-      <div className="app-kpi-grid !grid-cols-2 sm:!grid-cols-4">
-        <StaffKpiStat label="Días programados" value={totals.scheduledDays} hint="Suma de todos" icon={CalendarDays} tone="info" />
+      <div className="app-kpi-grid !grid-cols-1 sm:!grid-cols-3">
         <StaffKpiStat label="A tiempo" value={totals.onTime} hint="Llegadas puntuales" icon={CheckCircle2} tone="success" />
         <StaffKpiStat label="Tardanzas" value={totals.late} hint="Incluye justificadas" icon={AlertTriangle} tone="warning" />
         <StaffKpiStat label="Inasistencias" value={totals.absent} hint="Sin justificar" icon={UserX} tone="accent" />

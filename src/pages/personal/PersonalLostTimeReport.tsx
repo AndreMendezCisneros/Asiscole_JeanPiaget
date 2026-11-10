@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
-  Clock,
   FileDown,
   FileSpreadsheet,
   Hourglass,
@@ -124,7 +123,6 @@ export const PersonalLostTimeReport = () => {
     const doc = new PdfReportDocument('landscape', 'Horas no trabajadas del Personal', subtitle);
     await doc.drawCoverHeader();
     doc.drawKpiCards([
-      { label: 'Programado', value: formatMinutes(totals.scheduled), tone: 'primary' },
       { label: 'No trabajado (total)', value: formatMinutes(totals.total), tone: 'warning' },
       { label: 'Justificado', value: formatMinutes(totals.justified), tone: 'info' },
       { label: 'Sin justificar', value: formatMinutes(totals.net), tone: 'error' },
@@ -217,12 +215,11 @@ export const PersonalLostTimeReport = () => {
         aria-label="Vista"
       />
 
-      <div className="app-kpi-grid !grid-cols-2 sm:!grid-cols-4">
-        <StaffKpiStat label="Programado" value={formatMinutes(totals.scheduled)} hint="Suma de jornadas" icon={Clock} tone="info" />
+      <div className="app-kpi-grid !grid-cols-1 sm:!grid-cols-3">
         <StaffKpiStat
           label={view === 'total' ? 'No trabajado (total)' : 'No trabajado sin justificar'}
           value={formatMinutes(lost)}
-          hint={totals.scheduled > 0 ? `${Math.round((lost / totals.scheduled) * 100)}% de lo programado` : '—'}
+          hint={totals.scheduled > 0 ? `${Math.round((lost / totals.scheduled) * 100)}% de la jornada` : '—'}
           icon={TimerOff}
           tone="accent"
         />

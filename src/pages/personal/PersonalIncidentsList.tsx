@@ -35,7 +35,7 @@ import { TABLE_PAGE_SIZE } from '@/lib/constants/tablePagination';
 import { getLimaTodayDate } from '@/lib/utils/limaDateTime';
 import { MIN_JUSTIFICATION_REASON_LENGTH } from '@/lib/utils/attendanceJustification';
 import { monthStartOf } from '@/lib/utils/personalAttendanceRows';
-import { formatLimaDateTime } from '@/lib/utils/personalReportStats';
+import { formatLimaDateTime, formatLimaLongDateTime } from '@/lib/utils/personalReportStats';
 import { addDataSheet, createWorkbook, runExcelExport, saveWorkbook } from '@/lib/utils/excelExport';
 import type { EstadoIncidencia } from '@/types';
 
@@ -234,6 +234,7 @@ export const PersonalIncidentsList = () => {
                       <TableHead>Empleado</TableHead>
                       <TableHead>Falta</TableHead>
                       <TableHead>Estado</TableHead>
+                      <TableHead>Registró</TableHead>
                       <TableHead>Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -261,6 +262,7 @@ export const PersonalIncidentsList = () => {
                         <TableCell>
                           <Badge variant={STATUS_BADGE[i.status]}>{i.status}</Badge>
                         </TableCell>
+                        <TableCell className="text-sm">{i.registeredByName ?? '—'}</TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           {i.status === 'Activa' && (
                             <div className="flex gap-1">
@@ -361,8 +363,6 @@ export const PersonalIncidentsList = () => {
               </dd>
               <dt className="text-muted-foreground">Observación</dt>
               <dd>{detail.observations || '—'}</dd>
-              <dt className="text-muted-foreground">Registró</dt>
-              <dd>{detail.registeredByName ?? '—'}</dd>
               {detail.resolutionReason && (
                 <>
                   <dt className="text-muted-foreground">Motivo</dt>
@@ -370,6 +370,16 @@ export const PersonalIncidentsList = () => {
                 </>
               )}
             </dl>
+          )}
+          {detail && (
+            <div className="space-y-1 border-t pt-3 text-sm">
+              <p>
+                Registrado por: <span className="font-semibold">{detail.registeredByName ?? 'No registrado'}</span>
+              </p>
+              <p>
+                Fecha: <span className="font-semibold">{formatLimaLongDateTime(detail.registeredAt)}</span>
+              </p>
+            </div>
           )}
         </DialogContent>
       </Dialog>

@@ -109,3 +109,19 @@ export function formatLimaDateTime(iso: string): string {
     hour12: false,
   }).format(new Date(iso));
 }
+
+/** "09 de noviembre de 2026 a las 18:03" en hora de Lima. */
+export function formatLimaLongDateTime(iso: string): string {
+  const parts = new Intl.DateTimeFormat('es-PE', {
+    timeZone: 'America/Lima',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(iso));
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? '';
+  const hour = get('hour') === '24' ? '00' : get('hour');
+  return `${get('day')} de ${get('month')} de ${get('year')} a las ${hour}:${get('minute')}`;
+}

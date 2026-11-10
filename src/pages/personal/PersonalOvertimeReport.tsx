@@ -114,10 +114,10 @@ export const PersonalOvertimeReport = () => {
   });
 
   const exportPdf = async () => {
-    const doc = new PdfReportDocument('landscape', 'Horas extra del Personal', subtitle);
+    const doc = new PdfReportDocument('landscape', 'Horas adicionales del Personal', subtitle);
     await doc.drawCoverHeader();
     doc.drawKpiCards([
-      { label: 'Total extra', value: formatMinutes(totals.total), tone: 'primary' },
+      { label: 'Total adicional', value: formatMinutes(totals.total), tone: 'primary' },
       { label: 'Salida tarde', value: formatMinutes(totals.afterExit), tone: 'info' },
       { label: 'Taller', value: formatMinutes(totals.taller), tone: 'info' },
       { label: 'Día sin horario', value: formatMinutes(totals.offDay), tone: 'info' },
@@ -130,7 +130,7 @@ export const PersonalOvertimeReport = () => {
         { header: 'Salida tarde', dataKey: 'salida', width: 28, align: 'center' },
         { header: 'Taller', dataKey: 'taller', width: 28, align: 'center' },
         { header: 'Día sin horario', dataKey: 'dia', width: 28, align: 'center' },
-        { header: 'Total extra', dataKey: 'total', width: 28, align: 'center' },
+        { header: 'Total adicional', dataKey: 'total', width: 28, align: 'center' },
       ],
       summary.map(rowFor),
       { fontSize: 8 },
@@ -138,41 +138,41 @@ export const PersonalOvertimeReport = () => {
     doc.drawParagraph(
       'Salida tarde = hora en que salió − hora de salida. Taller = salida − entrada, fuera de su horario. Día sin horario = salida − entrada. Llegar antes de la entrada no cuenta. Sin salida marcada cuenta 0.',
     );
-    await doc.finalize(`horas-extra-${from}-a-${to}.pdf`);
+    await doc.finalize(`horas-adicionales-${from}-a-${to}.pdf`);
   };
 
   const exportExcel = () =>
-    runExcelExport('Horas extra', async () => {
-      const wb = createWorkbook('Horas extra del personal');
+    runExcelExport('Horas adicionales', async () => {
+      const wb = createWorkbook('Horas adicionales del personal');
       await addDataSheet(
         wb,
         'Resumen',
-        'Horas extra — resumen',
+        'Horas adicionales — resumen',
         subtitle,
-        ['Empleado', 'Categoría', 'Salida tarde', 'Taller', 'Día sin horario', 'Total extra', 'Total (min)', 'Días sin marcar salida', 'Días sin hora de salida'],
+        ['Empleado', 'Categoría', 'Salida tarde', 'Taller', 'Día sin horario', 'Total adicional', 'Total (min)', 'Días sin marcar salida', 'Días sin hora de salida'],
         summary.map((s) => [...Object.values(rowFor(s)), s.totalMin, s.missingDepartureDays, s.daysWithoutExit]),
       );
       await addDataSheet(
         wb,
         'Detalle',
-        'Horas extra — detalle por día',
+        'Horas adicionales — detalle por día',
         subtitle,
         ['Fecha', 'Empleado', 'Motivo', 'Detalle', 'Tiempo', 'Minutos'],
         summary.flatMap((s) =>
           s.items.map((i) => [formatDate(i.date), s.personal.fullName, i.kind, i.detail, formatMinutes(i.minutes), i.minutes]),
         ),
       );
-      await saveWorkbook(wb, `horas-extra-${from}-a-${to}.xlsx`);
+      await saveWorkbook(wb, `horas-adicionales-${from}-a-${to}.xlsx`);
     });
 
-  if (loading) return <PageLoader message="Calculando horas extra..." />;
+  if (loading) return <PageLoader message="Calculando horas adicionales..." />;
 
   return (
     <div className="app-page app-page-shell">
       <PageHeader
         icon={TimerReset}
         eyebrow="Personal"
-        title="Horas extra"
+        title="Horas adicionales"
         description="Tiempo después de su hora de salida, en taller y en días que no le toca. Llegar antes de su entrada no cuenta."
         accent="info"
       >
@@ -189,7 +189,7 @@ export const PersonalOvertimeReport = () => {
       </PageHeader>
 
       <div className="app-kpi-grid !grid-cols-2 sm:!grid-cols-4">
-        <StaffKpiStat label="Total extra" value={formatMinutes(totals.total)} hint="Suma del periodo" icon={Timer} tone="info" />
+        <StaffKpiStat label="Total adicional" value={formatMinutes(totals.total)} hint="Suma del periodo" icon={Timer} tone="info" />
         <StaffKpiStat label="Salida tarde" value={formatMinutes(totals.afterExit)} hint="Después de su hora de salida" icon={Clock} tone="accent" />
         <StaffKpiStat label="Taller y días sin horario" value={formatMinutes(totals.taller + totals.offDay)} hint={`Taller ${formatMinutes(totals.taller)} · Días ${formatMinutes(totals.offDay)}`} icon={Hammer} tone="success" />
         <StaffKpiStat label="Por revisar" value={totals.review} hint="Días sin marcar salida o sin hora de salida" icon={AlertTriangle} tone="warning" />
@@ -234,14 +234,14 @@ export const PersonalOvertimeReport = () => {
           ) : (
             <>
               <div className="app-table-wrap">
-                <Table aria-label="Horas extra por empleado">
+                <Table aria-label="Horas adicionales por empleado">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Empleado</TableHead>
                       <TableHead className="text-center">Salida tarde</TableHead>
                       <TableHead className="text-center">Taller</TableHead>
                       <TableHead className="text-center">Día sin horario</TableHead>
-                      <TableHead className="text-center">Total extra</TableHead>
+                      <TableHead className="text-center">Total adicional</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -282,7 +282,7 @@ export const PersonalOvertimeReport = () => {
                             <TableRow>
                               <TableCell colSpan={5} className="bg-muted/30">
                                 {s.items.length === 0 ? (
-                                  <p className="text-sm text-muted-foreground">Sin horas extra en el periodo.</p>
+                                  <p className="text-sm text-muted-foreground">Sin horas adicionales en el periodo.</p>
                                 ) : (
                                   <ul className="space-y-1 text-sm">
                                     {s.items.map((i, idx) => (

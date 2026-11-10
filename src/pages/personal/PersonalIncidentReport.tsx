@@ -122,12 +122,14 @@ export const PersonalIncidentReport = () => {
         { header: 'Empleado', dataKey: 'empleado' },
         { header: 'Falta', dataKey: 'falta' },
         { header: 'Estado', dataKey: 'estado', width: 24 },
+        { header: 'Registró', dataKey: 'registro', width: 40 },
       ],
       incidents.map((i) => ({
         fecha: formatLimaDateTime(i.registeredAt),
         empleado: i.personalName,
         falta: i.faultName,
         estado: i.status,
+        registro: i.registeredByName ?? '—',
       })),
       { fontSize: 7.5 },
     );
@@ -145,7 +147,7 @@ export const PersonalIncidentReport = () => {
         'Detalle',
         'Detalle de incidencias del personal',
         subtitle,
-        ['Fecha y hora', 'Empleado', 'DNI', 'Categoría', 'Falta', 'Grave', 'Estado', 'Observación'],
+        ['Fecha y hora', 'Empleado', 'DNI', 'Categoría', 'Falta', 'Grave', 'Estado', 'Observación', 'Registró'],
         incidents.map((i) => [
           formatLimaDateTime(i.registeredAt),
           i.personalName,
@@ -155,6 +157,7 @@ export const PersonalIncidentReport = () => {
           i.isSerious ? 'Sí' : 'No',
           i.status,
           i.observations ?? '',
+          i.registeredByName ?? '',
         ]),
       );
       await saveWorkbook(wb, `reporte-incidencias-personal-${from}-a-${to}.xlsx`);

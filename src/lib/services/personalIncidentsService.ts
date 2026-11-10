@@ -32,6 +32,7 @@ type Row = {
   observaciones: string | null;
   estado: EstadoIncidencia;
   motivo_anulacion: string | null;
+  registrado_por_nombre: string | null;
   personal: { nombre_completo: string; codigo_barras: string; categoria: PersonalCategoria } | null;
   catalogo_faltas: { nombre_falta: string; categoria: string | null; es_grave: boolean } | null;
   usuarios_registro: { nombre_completo: string } | null;
@@ -39,13 +40,28 @@ type Row = {
 
 const SELECT = `
   id_incidencia, id_personal, id_falta, fecha_hora_registro, id_usuario_registro,
-  observaciones, estado, motivo_anulacion,
+  observaciones, estado, motivo_anulacion, registrado_por_nombre,
   personal:id_personal ( nombre_completo, codigo_barras, categoria ),
   catalogo_faltas:id_falta ( nombre_falta, categoria, es_grave ),
   usuarios_registro:id_usuario_registro ( nombre_completo )
 `;
 
 const AUTO_PREFIX = 'Generada automáticamente';
+
+/**
+ * Quién registró la incidencia. RRHH no puede leer la tabla usuarios (RLS), por
+ * eso se usa primero el nombre guardado al insertar (registrado_por_nombre).
+ */
+export function resolveRegisteredByName(
+  row: Pick<Row, 'registrado_por_nombre' | 'usuarios_registro' | 'observaciones'>,
+): string | null {
+  const saved = row.registrado_por_nombre?.trim();
+  if (saved) return saved;
+  const joined = row.usuarios_registro?.nombre_completo?.trim();
+  if (joined) return joined;
+  if ((row.observaciones ?? '').startsWith(AUTO_PREFIX)) return 'Sistema (automática)';
+  return null;
+}
 
 function mapRow(row: Row): PersonalIncident {
   return {
@@ -60,7 +76,7 @@ function mapRow(row: Row): PersonalIncident {
     isSerious: Boolean(row.catalogo_faltas?.es_grave),
     registeredAt: row.fecha_hora_registro,
     registeredById: row.id_usuario_registro,
-    registeredByName: row.usuarios_registro?.nombre_completo ?? null,
+    registeredByName: resolveRegisteredByName(row),
     observations: row.observaciones,
     status: row.estado,
     resolutionReason: row.motivo_anulacion,

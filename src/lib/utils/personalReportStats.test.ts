@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countBy, summarizePersonalAttendance, totalsOf } from './personalReportStats';
+import { countBy, summarizePersonalAttendance, totalsOf, formatLimaLongDateTime } from './personalReportStats';
 import type { Personal, PersonalArrivalRecord } from '@/types/personal';
 
 const base: Personal = {
@@ -77,5 +77,12 @@ describe('countBy', () => {
       { label: 'a', count: 2 },
       { label: 'b', count: 1 },
     ]);
+  });
+});
+
+describe('formatLimaLongDateTime', () => {
+  it('muestra fecha larga y hora de Lima', () => {
+    // 23:03 UTC = 18:03 en Lima
+    expect(formatLimaLongDateTime('2026-11-09T23:03:00Z')).toBe('09 de noviembre de 2026 a las 18:03');
   });
 });
