@@ -119,3 +119,60 @@ export function computeOvertime(
     return s;
   });
 }
+
+export interface NetOvertimeSummary {
+  personal: Personal;
+  /** Horas adicionales (salida tarde + taller + día sin horario). */
+  overtimeMin: number;
+  /** Tardanzas sin justificar. */
+  lateMin: number;
+  /** Inasistencias sin justificar (jornada completa). */
+  absenceMin: number;
+  /** Salidas anticipadas sin autorizar. */
+  earlyMin: number;
+  /** Total descontado = tardanzas + inasistencias + salidas anticipadas (solo lo NO justificado). */
+  discountMin: number;
+  /** Horas adicionales reales = adicionales − descontado. Negativo = debe horas. */
+  realMin: number;
+}
+
+/**
+ * Horas adicionales reales: a las horas adicionales se les resta el tiempo no trabajado
+ * que NO está justificado (tardanza, inasistencia, salida anticipada sin autorización).
+ * Lo justificado no se descuenta.
+ */
+export function computeNetOvertime(
+  overtime: Pick<OvertimeSummary, 'personal' | 'totalMin'>[],
+  lost: { personal: Personal; items: { kind: string; minutes: number | null; justified: boolean }[] }[],
+): NetOvertimeSummary[] {
+  const lostById = new Map(lost.map((l) => [l.personal.id, l]));
+  return overtime.map((o) => {
+    const s: NetOvertimeSummary = {
+      personal: o.personal,
+      overtimeMin: o.totalMin,
+      lateMin: 0,
+      absenceMin: 0,
+      earlyMin: 0,
+      discountMin: 0,
+      realMin: 0,
+    };
+    for (const item of lostById.get(o.personal.id)?.items ?? []) {
+      if (item.justified || item.minutes == null) continue;
+      if (item.kind === 'tardanza') s.lateMin += item.minutes;
+      else if (item.kind === 'inasistencia') s.absenceMin += item.minutes;
+      else s.earlyMin += item.minutes;
+    }
+    s.discountMin = s.lateMin + s.absenceMin + s.earlyMin;
+    s.realMin = s.overtimeMin - s.discountMin;
+    return s;
+  });
+}
+
+/** Minutos con signo: -90 → "-1 h 30 min"; 45 → "45 min". */
+export function formatSignedMinutes(total: number): string {
+  const m = Math.round(Math.abs(total));
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  const body = h === 0 ? `${r} min` : r === 0 ? `${h} h` : `${h} h ${r} min`;
+  return total < 0 && m > 0 ? `-${body}` : body;
+}

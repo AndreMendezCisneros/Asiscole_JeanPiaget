@@ -78,6 +78,7 @@ const ALL_STAFF_NAV_ITEMS: StaffNavItem[] = [
       { path: '/personal/registrar-incidencia', label: 'Registrar Incidencia' },
       { path: '/personal/reporte-incidencias', label: 'Reporte de Incidencias' },
       { path: '/personal/reporte-asistencias', label: 'Reporte de Asistencias' },
+      { path: '/personal/reporte-justificaciones', label: 'Reporte de Justificaciones' },
       { path: '/personal/reporte-integral', label: 'Reporte Integral' },
       { path: '/personal/horas', label: 'Horas no trabajadas' },
       { path: '/personal/horas-extra', label: 'Horas adicionales' },

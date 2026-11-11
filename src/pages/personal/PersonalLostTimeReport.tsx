@@ -105,7 +105,10 @@ export const PersonalLostTimeReport = () => {
   }, [search, category, employeeId, from, to, view]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pageRows = summary.slice((page - 1) * pageSize, page * pageSize);
-  const subtitle = buildFilterSubtitle([`Del ${from} al ${to}`, category !== 'all' && category, VIEW_LABEL[view]]);
+  const subtitle = buildFilterSubtitle([`Del ${from} al ${to}`, category !== 'all' && category, VIEW_LABEL[view],
+    employeeId !== null && personal.find((p) => p.id === employeeId)?.fullName,
+    search.trim() && `Búsqueda: ${search.trim()}`,
+  ]);
 
   const rowFor = (s: LostTimeSummary) => ({
     empleado: s.personal.fullName,

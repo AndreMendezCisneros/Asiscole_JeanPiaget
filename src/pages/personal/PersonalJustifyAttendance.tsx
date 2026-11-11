@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { CalendarCheck, CheckCircle2, Clock, FilePlus2, Loader2, RefreshCw, UserX } from 'lucide-react';
+import { CalendarCheck, CheckCircle2, Clock, FilePlus2, Loader2, Paperclip, RefreshCw, UserX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -28,6 +28,7 @@ import {
 import { PageHeader } from '@/components/layout/PageHeader';
 import { PageLoader } from '@/components/ui/page-loader';
 import { PersonalCategorySelect, PersonalEmployeeFilter, PersonalSearchField } from '@/components/personal/PersonalFilters';
+import { JustificationEvidencePicker, JustificationRowActions } from '@/components/personal/JustificationEvidence';
 import { matchesPersonalFilter, type CategoryFilter } from '@/lib/utils/personalFilter';
 import { authService } from '@/lib/services';
 import { personalAttendanceService } from '@/lib/services/personalAttendanceService';
@@ -74,7 +75,10 @@ export const PersonalJustifyAttendance = () => {
   const [kind, setKind] = useState<'all' | Kind>('all');
   const [target, setTarget] = useState<JustifyItem | null>(null);
   const [reason, setReason] = useState('');
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const [evidenceTarget, setEvidenceTarget] = useState<{ record: PersonalArrivalRecord; personal: Personal } | null>(null);
+  const [evidenceOnlyFile, setEvidenceOnlyFile] = useState<File | null>(null);
   const [newOpen, setNewOpen] = useState(false);
   const [newPersonalId, setNewPersonalId] = useState('');
   const [newDate, setNewDate] = useState(now.date);
@@ -145,6 +149,13 @@ export const PersonalJustifyAttendance = () => {
   const openJustify = (item: JustifyItem) => {
     setTarget(item);
     setReason('');
+    setEvidenceFile(null);
+  };
+
+  const uploadEvidence = async (recordId: number, file: File, userId: number): Promise<boolean> => {
+    const up = await personalAttendanceService.uploadJustificationEvidence(recordId, file, userId);
+    if (up.error) toast.error(`No se pudo subir la evidencia: ${up.error}`);
+    return up.success;
   };
 
   const submit = async () => {
@@ -159,12 +170,14 @@ export const PersonalJustifyAttendance = () => {
       target.kind === 'tardanza' && target.record
         ? await personalAttendanceService.justifyTardiness(target.record.id, userId, reason)
         : await personalAttendanceService.justifyAbsence({ personal: target.personal, date: target.date, userId, reason });
-    setSaving(false);
     if (result.error) {
+      setSaving(false);
       toast.error(result.error);
       return;
     }
-    toast.success('Justificación registrada');
+    const evidenceOk = evidenceFile && result.recordId ? await uploadEvidence(result.recordId, evidenceFile, userId) : true;
+    setSaving(false);
+    toast.success(evidenceOk ? 'Justificación registrada' : 'Justificación registrada sin evidencia; puede agregarla desde "Justificadas"');
     setTarget(null);
     void reload(true);
   };
@@ -177,6 +190,18 @@ export const PersonalJustifyAttendance = () => {
     }
     setNewOpen(false);
     openJustify({ key: 'new', personal: p, date: newDate, kind: 'inasistencia', record: null, label: 'Inasistencia (permiso)' });
+  };
+
+  const submitEvidenceOnly = async () => {
+    const userId = authService.getCurrentUser()?.id;
+    if (!evidenceTarget || !evidenceOnlyFile || !userId) return;
+    setSaving(true);
+    const ok = await uploadEvidence(evidenceTarget.record.id, evidenceOnlyFile, userId);
+    setSaving(false);
+    if (!ok) return;
+    toast.success('Evidencia guardada');
+    setEvidenceTarget(null);
+    void reload(true);
   };
 
   if (loading) return <PageLoader message="Cargando asistencia del personal..." />;
@@ -197,9 +222,9 @@ export const PersonalJustifyAttendance = () => {
       </PageHeader>
 
       <div className="app-kpi-grid !grid-cols-2 sm:!grid-cols-3">
-        <StaffKpiStat label="Tardanzas pendientes" value={pending.filter((i) => i.kind === 'tardanza').length} hint="En el rango" icon={Clock} tone="warning" />
-        <StaffKpiStat label="Inasistencias pendientes" value={pending.filter((i) => i.kind === 'inasistencia').length} hint="Debían asistir" icon={UserX} tone="accent" />
-        <StaffKpiStat label="Justificadas" value={done.length} hint="En el rango" icon={CheckCircle2} tone="success" />
+        <StaffKpiStat label="Tardanzas pendientes" value={pendingFiltered.filter((i) => i.kind === 'tardanza').length} hint="Con los filtros" icon={Clock} tone="warning" />
+        <StaffKpiStat label="Inasistencias pendientes" value={pendingFiltered.filter((i) => i.kind === 'inasistencia').length} hint="Debían asistir" icon={UserX} tone="accent" />
+        <StaffKpiStat label="Justificadas" value={doneFiltered.length} hint="Con los filtros" icon={CheckCircle2} tone="success" />
       </div>
 
       <StaffToolbar title="Filtros" description="Rango de fechas, nombre, empleado, categoría o tipo">
@@ -239,8 +264,8 @@ export const PersonalJustifyAttendance = () => {
         value={view}
         onValueChange={(v) => setView(v as typeof view)}
         options={[
-          { value: 'pending', label: `Pendientes (${pending.length})` },
-          { value: 'done', label: `Justificadas (${done.length})` },
+          { value: 'pending', label: `Pendientes (${pendingFiltered.length})` },
+          { value: 'done', label: `Justificadas (${doneFiltered.length})` },
         ]}
         listClassName="sm:grid-cols-2"
         aria-label="Vista"
@@ -263,7 +288,9 @@ export const PersonalJustifyAttendance = () => {
                       <TableHead>Fecha</TableHead>
                       <TableHead>Empleado</TableHead>
                       <TableHead>Detalle</TableHead>
-                      <TableHead>{view === 'pending' ? 'Acción' : 'Motivo'}</TableHead>
+                      {view === 'done' && <TableHead>Motivo</TableHead>}
+                      {view === 'done' && <TableHead>Registró</TableHead>}
+                      <TableHead>{view === 'pending' ? 'Acción' : 'Evidencia / PDF'}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -296,6 +323,23 @@ export const PersonalJustifyAttendance = () => {
                               <Badge variant={PERSONAL_STATUS_BADGE[record.status]}>{PERSONAL_STATUS_LABEL[record.status]}</Badge>
                             </TableCell>
                             <TableCell className="max-w-xs text-sm">{record.justificationReason ?? '—'}</TableCell>
+                            <TableCell className="text-sm">{record.justifiedByName ?? '—'}</TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap gap-1">
+                                <JustificationRowActions record={record} personal={p} />
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEvidenceOnlyFile(null);
+                                    setEvidenceTarget({ record, personal: p });
+                                  }}
+                                >
+                                  <Paperclip className="mr-1 h-3.5 w-3.5" />
+                                  {record.evidence ? 'Cambiar evidencia' : 'Agregar evidencia'}
+                                </Button>
+                              </div>
+                            </TableCell>
                           </TableRow>
                         ))}
                   </TableBody>
@@ -336,6 +380,7 @@ export const PersonalJustifyAttendance = () => {
               rows={3}
             />
           </div>
+          <JustificationEvidencePicker file={evidenceFile} onChange={setEvidenceFile} disabled={saving} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setTarget(null)} disabled={saving}>
               Cancelar
@@ -347,6 +392,28 @@ export const PersonalJustifyAttendance = () => {
             >
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Justificar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={evidenceTarget !== null} onOpenChange={(open) => !open && setEvidenceTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{evidenceTarget?.record.evidence ? 'Cambiar evidencia' : 'Agregar evidencia'}</DialogTitle>
+            <DialogDescription>
+              {evidenceTarget?.personal.fullName} · {evidenceTarget ? formatDate(evidenceTarget.record.date) : ''}
+              {evidenceTarget?.record.evidence ? ` · actual: ${evidenceTarget.record.evidence.fileName}` : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <JustificationEvidencePicker file={evidenceOnlyFile} onChange={setEvidenceOnlyFile} disabled={saving} label="Evidencia" />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEvidenceTarget(null)} disabled={saving}>
+              Cancelar
+            </Button>
+            <Button variant="info" onClick={() => void submitEvidenceOnly()} disabled={saving || !evidenceOnlyFile}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Guardar
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -368,7 +435,7 @@ export const PersonalJustifyAttendance = () => {
                   <SelectValue placeholder="Elegir..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {personal.map((p) => (
+                  {personal.filter((p) => p.active).map((p) => (
                     <SelectItem key={p.id} value={String(p.id)}>
                       {p.fullName}
                     </SelectItem>

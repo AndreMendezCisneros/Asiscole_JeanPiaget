@@ -31,6 +31,7 @@ import { PersonalIncidentReport } from "./pages/personal/PersonalIncidentReport"
 import { PersonalAttendanceReport } from "./pages/personal/PersonalAttendanceReport";
 import { PersonalIntegralReport } from "./pages/personal/PersonalIntegralReport";
 import { PersonalLostTimeReport } from "./pages/personal/PersonalLostTimeReport";
+import { PersonalJustificationReport } from "./pages/personal/PersonalJustificationReport";
 import { PersonalOvertimeReport } from "./pages/personal/PersonalOvertimeReport";
 import { PersonalPromotoria } from "./pages/personal/PersonalPromotoria";
 import { AttendanceReport } from "./pages/AttendanceReport";
@@ -226,6 +227,14 @@ const AppContent = () => {
           element={
             <ProtectedRoute requiredRole={[...RRHH_ROLES, 'Admin']}>
               <PersonalRegisterIncident />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/personal/reporte-justificaciones"
+          element={
+            <ProtectedRoute requiredRole={[...RRHH_ROLES]}>
+              <PersonalJustificationReport />
             </ProtectedRoute>
           }
         />

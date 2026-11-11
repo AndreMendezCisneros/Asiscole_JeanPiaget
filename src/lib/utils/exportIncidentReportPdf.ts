@@ -18,7 +18,7 @@ interface LoadedPdfImage {
   height: number;
 }
 
-async function loadImageForPdf(url: string): Promise<LoadedPdfImage | null> {
+export async function loadImageForPdf(url: string): Promise<LoadedPdfImage | null> {
   try {
     const response = await fetch(url, { mode: 'cors' });
     if (!response.ok) return null;
@@ -47,7 +47,7 @@ async function loadImageForPdf(url: string): Promise<LoadedPdfImage | null> {
   }
 }
 
-function fitImageBox(
+export function fitImageBox(
   imgW: number,
   imgH: number,
   maxW: number,

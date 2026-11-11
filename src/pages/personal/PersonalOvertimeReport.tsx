@@ -22,6 +22,7 @@ import {
   StaffDataPanelHeader,
   StaffEmptyState,
   StaffKpiStat,
+  StaffSegmentedControl,
   StaffTablePagination,
   StaffToolbar,
 } from '@/components/staff';
@@ -34,8 +35,14 @@ import { useTablePagination } from '@/hooks/useTablePagination';
 import { TABLE_PAGE_SIZE } from '@/lib/constants/tablePagination';
 import { getLimaNow } from '@/lib/utils/limaDateTime';
 import { monthStartOf } from '@/lib/utils/personalAttendanceRows';
-import { formatMinutes } from '@/lib/utils/personalLostTime';
-import { computeOvertime, type OvertimeSummary } from '@/lib/utils/personalOvertime';
+import { computeLostTime, formatMinutes, type LostTimeItem } from '@/lib/utils/personalLostTime';
+import {
+  computeNetOvertime,
+  computeOvertime,
+  formatSignedMinutes,
+  type NetOvertimeSummary,
+  type OvertimeSummary,
+} from '@/lib/utils/personalOvertime';
 import { personalTallerService } from '@/lib/services/personalTallerService';
 import { addDataSheet, createWorkbook, runExcelExport, saveWorkbook } from '@/lib/utils/excelExport';
 import { PdfReportDocument, buildFilterSubtitle } from '@/lib/utils/pdfReportBuilder';
@@ -50,7 +57,8 @@ export const PersonalOvertimeReport = () => {
   const now = getLimaNow();
   const [from, setFrom] = useState(monthStartOf(now.date));
   const [to, setTo] = useState(now.date);
-  const { personal, records, loading, refreshing, reload } = usePersonalAttendance(from, to);
+  const { personal, records, absenceAfterMin, loading, refreshing, reload } = usePersonalAttendance(from, to);
+  const [view, setView] = useState<'adicionales' | 'reales'>('adicionales');
   const [talleres, setTalleres] = useState<PersonalTallerRecord[]>([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<CategoryFilter>('all');
@@ -94,15 +102,88 @@ export const PersonalOvertimeReport = () => {
     [summary],
   );
 
+  // Horas adicionales reales: se descuenta lo NO justificado (tardanzas, inasistencias, salidas anticipadas).
+  const lostById = useMemo(() => {
+    const lost = computeLostTime(
+      summary.map((s) => s.personal),
+      records,
+      from,
+      to,
+      now.date,
+      now.time,
+      absenceAfterMin,
+    );
+    return new Map(lost.map((l) => [l.personal.id, l]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [summary, records, from, to, absenceAfterMin]);
+
+  const netById = useMemo(
+    () => new Map(computeNetOvertime(summary, [...lostById.values()]).map((n) => [n.personal.id, n])),
+    [summary, lostById],
+  );
+
+  const netTotals = useMemo(
+    () =>
+      [...netById.values()].reduce(
+        (acc, n) => ({
+          late: acc.late + n.lateMin,
+          absence: acc.absence + n.absenceMin,
+          early: acc.early + n.earlyMin,
+          discount: acc.discount + n.discountMin,
+          real: acc.real + n.realMin,
+          inDebt: acc.inDebt + (n.realMin < 0 ? 1 : 0),
+        }),
+        { late: 0, absence: 0, early: 0, discount: 0, real: 0, inDebt: 0 },
+      ),
+    [netById],
+  );
+
+  const rows = useMemo(
+    () =>
+      view === 'reales'
+        ? [...summary].sort(
+            (a, b) =>
+              (netById.get(b.personal.id)?.realMin ?? 0) - (netById.get(a.personal.id)?.realMin ?? 0) ||
+              a.personal.fullName.localeCompare(b.personal.fullName),
+          )
+        : summary,
+    [summary, netById, view],
+  );
+
   const { page, pageSize, totalPages, goToPage, nextPage, prevPage, changePageSize, resetPage } =
-    useTablePagination({ totalItems: summary.length, initialPageSize: TABLE_PAGE_SIZE });
+    useTablePagination({ totalItems: rows.length, initialPageSize: TABLE_PAGE_SIZE });
 
   useEffect(() => {
     resetPage();
-  }, [search, category, employeeId, from, to]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, category, employeeId, from, to, view]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const pageRows = summary.slice((page - 1) * pageSize, page * pageSize);
-  const subtitle = buildFilterSubtitle([`Del ${from} al ${to}`, category !== 'all' && category]);
+  const pageRows = rows.slice((page - 1) * pageSize, page * pageSize);
+  const employeeName = employeeId !== null ? personal.find((p) => p.id === employeeId)?.fullName : null;
+  const subtitle = buildFilterSubtitle([
+    `Del ${formatDate(from)} al ${formatDate(to)}`,
+    category !== 'all' && category,
+    employeeName,
+    search.trim() && `Búsqueda: ${search.trim()}`,
+    view === 'reales' && 'Reales: descontando lo no justificado',
+  ]);
+  const netOf = (id: number): NetOvertimeSummary =>
+    netById.get(id) ?? { personal: summary[0].personal, overtimeMin: 0, lateMin: 0, absenceMin: 0, earlyMin: 0, discountMin: 0, realMin: 0 };
+  const unjustifiedItems = (id: number): LostTimeItem[] =>
+    (lostById.get(id)?.items ?? []).filter((i) => !i.justified && i.minutes != null);
+
+  const netRowFor = (s: OvertimeSummary) => {
+    const n = netOf(s.personal.id);
+    return {
+      empleado: s.personal.fullName,
+      categoria: s.personal.category,
+      adicional: formatMinutes(n.overtimeMin),
+      tarde: formatMinutes(n.lateMin),
+      falta: formatMinutes(n.absenceMin),
+      anticipada: formatMinutes(n.earlyMin),
+      descontado: formatMinutes(n.discountMin),
+      real: formatSignedMinutes(n.realMin),
+    };
+  };
 
   const rowFor = (s: OvertimeSummary) => ({
     empleado: s.personal.fullName,
@@ -114,6 +195,36 @@ export const PersonalOvertimeReport = () => {
   });
 
   const exportPdf = async () => {
+    if (view === 'reales') {
+      const doc = new PdfReportDocument('landscape', 'Horas adicionales reales del Personal', subtitle);
+      await doc.drawCoverHeader();
+      doc.drawKpiCards([
+        { label: 'Horas adicionales', value: formatMinutes(totals.total), tone: 'info' },
+        { label: 'Descontado (sin justificar)', value: formatMinutes(netTotals.discount), tone: 'warning' },
+        { label: 'Reales', value: formatSignedMinutes(netTotals.real), tone: netTotals.real < 0 ? 'error' : 'success' },
+        { label: 'Empleados que deben horas', value: netTotals.inDebt, tone: netTotals.inDebt > 0 ? 'error' : 'neutral' },
+      ]);
+      doc.drawSectionTitle('Por empleado');
+      doc.drawTable(
+        [
+          { header: 'Empleado', dataKey: 'empleado' },
+          { header: 'Categoría', dataKey: 'categoria', width: 36 },
+          { header: 'Adicionales', dataKey: 'adicional', width: 24, align: 'center' },
+          { header: 'Tardanzas', dataKey: 'tarde', width: 24, align: 'center' },
+          { header: 'Inasistencias', dataKey: 'falta', width: 24, align: 'center' },
+          { header: 'Salidas antic.', dataKey: 'anticipada', width: 24, align: 'center' },
+          { header: 'Descontado', dataKey: 'descontado', width: 24, align: 'center' },
+          { header: 'Reales', dataKey: 'real', width: 26, align: 'center' },
+        ],
+        rows.map(netRowFor),
+        { fontSize: 8 },
+      );
+      doc.drawParagraph(
+        'Reales = horas adicionales − (tardanzas + inasistencias + salidas anticipadas) SIN justificar. Lo justificado o autorizado no se descuenta. Un valor negativo indica horas que el trabajador debe.',
+      );
+      await doc.finalize(`horas-adicionales-reales-${from}-a-${to}.pdf`);
+      return;
+    }
     const doc = new PdfReportDocument('landscape', 'Horas adicionales del Personal', subtitle);
     await doc.drawCoverHeader();
     doc.drawKpiCards([
@@ -162,6 +273,31 @@ export const PersonalOvertimeReport = () => {
           s.items.map((i) => [formatDate(i.date), s.personal.fullName, i.kind, i.detail, formatMinutes(i.minutes), i.minutes]),
         ),
       );
+      await addDataSheet(
+        wb,
+        'Reales',
+        'Horas adicionales reales (descontando lo no justificado)',
+        subtitle,
+        ['Empleado', 'Categoría', 'Adicionales', 'Tardanzas', 'Inasistencias', 'Salidas anticipadas', 'Descontado', 'Reales', 'Reales (min)'],
+        rows.map((s) => [...Object.values(netRowFor(s)), netOf(s.personal.id).realMin]),
+      );
+      await addDataSheet(
+        wb,
+        'Descuentos',
+        'Tiempo no trabajado sin justificar — detalle por día',
+        subtitle,
+        ['Fecha', 'Empleado', 'Motivo', 'Detalle', 'Tiempo', 'Minutos'],
+        rows.flatMap((s) =>
+          unjustifiedItems(s.personal.id).map((i) => [
+            formatDate(i.date),
+            s.personal.fullName,
+            i.kind,
+            i.detail,
+            formatMinutes(i.minutes),
+            i.minutes ?? 0,
+          ]),
+        ),
+      );
       await saveWorkbook(wb, `horas-adicionales-${from}-a-${to}.xlsx`);
     });
 
@@ -188,12 +324,21 @@ export const PersonalOvertimeReport = () => {
         </div>
       </PageHeader>
 
+      {view === 'reales' ? (
+        <div className="app-kpi-grid !grid-cols-2 sm:!grid-cols-4">
+          <StaffKpiStat label="Horas adicionales" value={formatMinutes(totals.total)} hint="Sin descontar" icon={Timer} tone="info" />
+          <StaffKpiStat label="Descontado" value={formatMinutes(netTotals.discount)} hint={`Tard. ${formatMinutes(netTotals.late)} · Inas. ${formatMinutes(netTotals.absence)} · Antic. ${formatMinutes(netTotals.early)}`} icon={Clock} tone="warning" />
+          <StaffKpiStat label="Reales" value={formatSignedMinutes(netTotals.real)} hint="Adicionales − no justificado" icon={TimerReset} tone={netTotals.real < 0 ? 'accent' : 'success'} />
+          <StaffKpiStat label="Deben horas" value={netTotals.inDebt} hint="Empleados con reales negativas" icon={AlertTriangle} tone="warning" />
+        </div>
+      ) : (
       <div className="app-kpi-grid !grid-cols-2 sm:!grid-cols-4">
         <StaffKpiStat label="Total adicional" value={formatMinutes(totals.total)} hint="Suma del periodo" icon={Timer} tone="info" />
         <StaffKpiStat label="Salida tarde" value={formatMinutes(totals.afterExit)} hint="Después de su hora de salida" icon={Clock} tone="accent" />
         <StaffKpiStat label="Taller y días sin horario" value={formatMinutes(totals.taller + totals.offDay)} hint={`Taller ${formatMinutes(totals.taller)} · Días ${formatMinutes(totals.offDay)}`} icon={Hammer} tone="success" />
         <StaffKpiStat label="Por revisar" value={totals.review} hint="Días sin marcar salida o sin hora de salida" icon={AlertTriangle} tone="warning" />
       </div>
+      )}
 
       <StaffToolbar title="Filtros" description="Rango, nombre o categoría">
         <div className="space-y-2">
@@ -223,10 +368,25 @@ export const PersonalOvertimeReport = () => {
         </div>
       </StaffToolbar>
 
+      <StaffSegmentedControl
+        value={view}
+        onValueChange={(v) => setView(v as typeof view)}
+        options={[
+          { value: 'adicionales', label: 'Horas adicionales' },
+          { value: 'reales', label: 'Reales (descontando tardanzas e inasistencias)' },
+        ]}
+        listClassName="sm:grid-cols-2"
+        aria-label="Vista"
+      />
+
       <StaffDataPanel>
         <StaffDataPanelHeader
-          title={`Por empleado (${summary.length})`}
-          description="Clic en un empleado para ver el detalle por día."
+          title={`Por empleado (${rows.length})`}
+          description={
+            view === 'reales'
+              ? 'Reales = adicionales − tardanzas, inasistencias y salidas anticipadas SIN justificar. Clic para ver el detalle.'
+              : 'Clic en un empleado para ver el detalle por día.'
+          }
         />
         <div className="p-4 pt-0 sm:p-5 sm:pt-0">
           {summary.length === 0 ? (
@@ -238,15 +398,29 @@ export const PersonalOvertimeReport = () => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Empleado</TableHead>
-                      <TableHead className="text-center">Salida tarde</TableHead>
-                      <TableHead className="text-center">Taller</TableHead>
-                      <TableHead className="text-center">Día sin horario</TableHead>
-                      <TableHead className="text-center">Total adicional</TableHead>
+                      {view === 'reales' ? (
+                        <>
+                          <TableHead className="text-center">Adicionales</TableHead>
+                          <TableHead className="text-center">Tardanzas</TableHead>
+                          <TableHead className="text-center">Inasistencias</TableHead>
+                          <TableHead className="text-center">Salidas antic.</TableHead>
+                          <TableHead className="text-center">Reales</TableHead>
+                        </>
+                      ) : (
+                        <>
+                          <TableHead className="text-center">Salida tarde</TableHead>
+                          <TableHead className="text-center">Taller</TableHead>
+                          <TableHead className="text-center">Día sin horario</TableHead>
+                          <TableHead className="text-center">Total adicional</TableHead>
+                        </>
+                      )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {pageRows.map((s) => {
                       const open = expanded === s.personal.id;
+                      const n = netOf(s.personal.id);
+                      const lostItems = view === 'reales' ? unjustifiedItems(s.personal.id) : [];
                       return (
                         <Fragment key={s.personal.id}>
                           <TableRow className="cursor-pointer" onClick={() => setExpanded(open ? null : s.personal.id)}>
@@ -273,14 +447,48 @@ export const PersonalOvertimeReport = () => {
                                 </div>
                               </div>
                             </TableCell>
-                            <TableCell className="text-center">{formatMinutes(s.afterExitMin)}</TableCell>
-                            <TableCell className="text-center">{formatMinutes(s.tallerMin)}</TableCell>
-                            <TableCell className="text-center">{formatMinutes(s.offDayMin)}</TableCell>
-                            <TableCell className="text-center font-semibold">{formatMinutes(s.totalMin)}</TableCell>
+                            {view === 'reales' ? (
+                              <>
+                                <TableCell className="text-center">{formatMinutes(n.overtimeMin)}</TableCell>
+                                <TableCell className="text-center">{n.lateMin ? `-${formatMinutes(n.lateMin)}` : '0 min'}</TableCell>
+                                <TableCell className="text-center">{n.absenceMin ? `-${formatMinutes(n.absenceMin)}` : '0 min'}</TableCell>
+                                <TableCell className="text-center">{n.earlyMin ? `-${formatMinutes(n.earlyMin)}` : '0 min'}</TableCell>
+                                <TableCell className={`text-center font-semibold ${n.realMin < 0 ? 'text-destructive' : ''}`}>
+                                  {formatSignedMinutes(n.realMin)}
+                                </TableCell>
+                              </>
+                            ) : (
+                              <>
+                                <TableCell className="text-center">{formatMinutes(s.afterExitMin)}</TableCell>
+                                <TableCell className="text-center">{formatMinutes(s.tallerMin)}</TableCell>
+                                <TableCell className="text-center">{formatMinutes(s.offDayMin)}</TableCell>
+                                <TableCell className="text-center font-semibold">{formatMinutes(s.totalMin)}</TableCell>
+                              </>
+                            )}
                           </TableRow>
                           {open && (
                             <TableRow>
-                              <TableCell colSpan={5} className="bg-muted/30">
+                              <TableCell colSpan={view === 'reales' ? 6 : 5} className="bg-muted/30">
+                                {view === 'reales' && (
+                                  <div className="mb-2">
+                                    <p className="mb-1 text-xs font-semibold uppercase text-muted-foreground">Se descuenta (sin justificar)</p>
+                                    {lostItems.length === 0 ? (
+                                      <p className="text-sm text-muted-foreground">Nada que descontar.</p>
+                                    ) : (
+                                      <ul className="space-y-1 text-sm">
+                                        {lostItems.map((i, idx) => (
+                                          <li key={`l-${i.date}-${i.kind}-${idx}`} className="flex flex-wrap items-center gap-2">
+                                            <span className="font-mono text-xs">{formatDate(i.date)}</span>
+                                            <Badge variant="destructive">{i.kind}</Badge>
+                                            <span className="text-muted-foreground">{i.detail}</span>
+                                            <span className="font-semibold">-{formatMinutes(i.minutes)}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                    <p className="mb-1 mt-3 text-xs font-semibold uppercase text-muted-foreground">Horas adicionales</p>
+                                  </div>
+                                )}
                                 {s.items.length === 0 ? (
                                   <p className="text-sm text-muted-foreground">Sin horas adicionales en el periodo.</p>
                                 ) : (
@@ -304,12 +512,12 @@ export const PersonalOvertimeReport = () => {
                   </TableBody>
                 </Table>
               </div>
-              {summary.length > pageSize && (
+              {rows.length > pageSize && (
                 <StaffTablePagination
                   page={page}
                   totalPages={totalPages}
                   pageSize={pageSize}
-                  totalItems={summary.length}
+                  totalItems={rows.length}
                   onPrev={prevPage}
                   onNext={nextPage}
                   onGoToPage={goToPage}

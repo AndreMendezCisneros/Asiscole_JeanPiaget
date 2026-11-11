@@ -25,7 +25,7 @@ import { personalTallerService } from '@/lib/services/personalTallerService';
 import { getLimaNow, getLimaTodayDate } from '@/lib/utils/limaDateTime';
 import { DEPARTURE_STATUS_LABEL, monthStartOf, PERSONAL_STATUS_BADGE, PERSONAL_STATUS_LABEL } from '@/lib/utils/personalAttendanceRows';
 import { computeLostTime, formatMinutes } from '@/lib/utils/personalLostTime';
-import { computeOvertime } from '@/lib/utils/personalOvertime';
+import { computeNetOvertime, computeOvertime, formatSignedMinutes } from '@/lib/utils/personalOvertime';
 import {
   computeWorkedTime,
   monthEndOf,
@@ -148,6 +148,11 @@ export const PersonalIntegralReport = () => {
     () => (selected ? computeWorkedTime(selected.id, records, talleres, today) : null),
     [selected, records, talleres, today],
   );
+  /** Horas adicionales − (tardanzas + inasistencias + salidas anticipadas) sin justificar. */
+  const netOvertime = useMemo(
+    () => (overtime && lost ? computeNetOvertime([overtime], [lost])[0] : null),
+    [overtime, lost],
+  );
   const unauthorized = useMemo(
     () => (selected ? unauthorizedDepartures(selected, records) : []),
     [selected, records],
@@ -215,6 +220,12 @@ export const PersonalIntegralReport = () => {
         { label: 'Justificado', value: formatMinutes(lost.lostJustifiedMin) },
         { label: 'No trabajado sin justificar', value: formatMinutes(lost.lostNetMin) },
       );
+    }
+    if (netOvertime) {
+      kv.push({
+        label: 'Horas adicionales reales (descontando lo no justificado)',
+        value: formatSignedMinutes(netOvertime.realMin),
+      });
     }
     if (worked.noDepartureDays > 0) {
       kv.push({ label: 'Días sin salida marcada (cuentan 0 h)', value: String(worked.noDepartureDays) });
@@ -491,6 +502,12 @@ export const PersonalIntegralReport = () => {
               <p>Adicional por salida tarde: <strong>{formatMinutes(overtime.afterExitMin)}</strong></p>
               <p>Adicional por taller: <strong>{formatMinutes(overtime.tallerMin)}</strong></p>
               <p>Adicional día sin horario: <strong>{formatMinutes(overtime.offDayMin)}</strong></p>
+              {netOvertime && (
+                <p className="sm:col-span-3">
+                  Horas adicionales reales (adicionales − tardanzas, inasistencias y salidas anticipadas sin justificar):{' '}
+                  <strong className={netOvertime.realMin < 0 ? 'text-destructive' : ''}>{formatSignedMinutes(netOvertime.realMin)}</strong>
+                </p>
+              )}
             </div>
           </StaffDataPanel>
 

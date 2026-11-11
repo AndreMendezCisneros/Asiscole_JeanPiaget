@@ -82,6 +82,18 @@ export const PersonalIncidentsList = () => {
     void load();
   }, [load]);
 
+  // Filtro por persona y búsqueda (sin el de estado): base de los cuadros de arriba.
+  const byPerson = useMemo(() => {
+    const terms = fold(search.trim()).split(/\s+/).filter(Boolean);
+    return incidents.filter((i) => {
+      if (employeeId !== null && i.personalId !== employeeId) return false;
+      if (category !== 'all' && i.personalCategory !== category) return false;
+      if (terms.length === 0) return true;
+      const hay = fold(`${i.personalName} ${i.personalBarcode} ${i.faultName}`);
+      return terms.every((t) => hay.includes(t));
+    });
+  }, [incidents, search, category, employeeId]);
+
   const filtered = useMemo(() => {
     const terms = fold(search.trim()).split(/\s+/).filter(Boolean);
     return incidents.filter((i) => {
@@ -104,12 +116,12 @@ export const PersonalIncidentsList = () => {
 
   const stats = useMemo(
     () => ({
-      total: incidents.length,
-      active: incidents.filter((i) => i.status === 'Activa').length,
-      serious: incidents.filter((i) => i.isSerious && i.status === 'Activa').length,
-      justified: incidents.filter((i) => i.status === 'Justificada').length,
+      total: byPerson.length,
+      active: byPerson.filter((i) => i.status === 'Activa').length,
+      serious: byPerson.filter((i) => i.isSerious && i.status === 'Activa').length,
+      justified: byPerson.filter((i) => i.status === 'Justificada').length,
     }),
-    [incidents],
+    [byPerson],
   );
 
   const { page, pageSize, totalPages, goToPage, nextPage, prevPage, changePageSize, resetPage } =
@@ -179,7 +191,7 @@ export const PersonalIncidentsList = () => {
       </PageHeader>
 
       <div className="app-kpi-grid !grid-cols-2 sm:!grid-cols-4">
-        <StaffKpiStat label="Total" value={stats.total} hint="En el rango" icon={FileText} tone="info" />
+        <StaffKpiStat label="Total" value={stats.total} hint="Con los filtros" icon={FileText} tone="info" />
         <StaffKpiStat label="Activas" value={stats.active} hint="Sin resolver" icon={AlertTriangle} tone="warning" />
         <StaffKpiStat label="Graves activas" value={stats.serious} hint="Falta grave" icon={XCircle} tone="accent" />
         <StaffKpiStat label="Justificadas" value={stats.justified} hint="Con motivo" icon={CheckCircle2} tone="success" />

@@ -69,7 +69,10 @@ export const PersonalAttendanceReport = () => {
   }, [search, category, employeeId, from, to]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pageRows = summary.slice((page - 1) * pageSize, page * pageSize);
-  const subtitle = buildFilterSubtitle([`Del ${from} al ${to}`, category !== 'all' && category]);
+  const subtitle = buildFilterSubtitle([`Del ${from} al ${to}`, category !== 'all' && category,
+    employeeId !== null && personal.find((p) => p.id === employeeId)?.fullName,
+    search.trim() && `Búsqueda: ${search.trim()}`,
+  ]);
 
   const summaryRow = (s: (typeof summary)[number]) => ({
     empleado: s.personal.fullName,

@@ -69,16 +69,17 @@ export const PersonalArrivalControl = () => {
       (statusFilter === 'all' || r.status === statusFilter),
   );
 
+  // Los cuadros respetan búsqueda, empleado y categoría (no el filtro de estado).
   const stats = useMemo(() => {
-    const expected = rows.filter((r) => r.horario);
+    const people = rows.filter((r) => matchesPersonalFilter(r.personal, search, category, employeeId));
     return {
-      expected: expected.length,
-      onTime: rows.filter((r) => r.status === 'A tiempo').length,
-      late: rows.filter((r) => r.status === 'Tarde' || r.status === 'Tarde justificada').length,
-      pending: rows.filter((r) => r.status === 'Sin llegada').length,
-      missing: rows.filter((r) => r.status === 'Falta').length,
+      expected: people.filter((r) => r.horario).length,
+      onTime: people.filter((r) => r.status === 'A tiempo').length,
+      late: people.filter((r) => r.status === 'Tarde' || r.status === 'Tarde justificada').length,
+      pending: people.filter((r) => r.status === 'Sin llegada').length,
+      missing: people.filter((r) => r.status === 'Falta').length,
     };
-  }, [rows]);
+  }, [rows, search, category, employeeId]);
 
   const { page, pageSize, totalPages, goToPage, nextPage, prevPage, changePageSize, resetPage } =
     useTablePagination({ totalItems: filtered.length, initialPageSize: TABLE_PAGE_SIZE });

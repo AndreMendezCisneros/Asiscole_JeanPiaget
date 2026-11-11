@@ -97,6 +97,19 @@ export interface PersonalArrivalRecord {
   /** Motivo de la salida anticipada autorizada. */
   departureReason: string | null;
   registeredBy: number | null;
+  /** Nombre de quien justificó (tardanza o inasistencia). */
+  justifiedByName?: string | null;
+  /** Fecha y hora (ISO) en que se registró la justificación. */
+  justifiedAt?: string | null;
+  /** Evidencia de la justificación (bucket evidencias). */
+  evidence?: PersonalJustificationEvidence | null;
+}
+
+export interface PersonalJustificationEvidence {
+  path: string;
+  fileName: string;
+  mime: string;
+  uploadedAt: string | null;
 }
 
 /** Tramo de taller: independiente de la jornada; puede haber varios por día. */

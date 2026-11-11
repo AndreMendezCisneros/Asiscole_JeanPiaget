@@ -10,6 +10,18 @@ import type { Personal, PersonalArrivalRecord } from '@/types/personal';
 export const ABSENCE_AFTER_KEY = 'personal_minutos_inasistencia';
 
 /**
+ * Personal activo + los desactivados que tienen registros en el rango (para que sus
+ * tardanzas/justificaciones sigan saliendo en reportes). A los desactivados se les quita
+ * el horario: no hay fecha de baja, así que no se les inventan inasistencias.
+ */
+export function withInactiveWithRecords(all: Personal[], records: PersonalArrivalRecord[]): Personal[] {
+  const withRecords = new Set(records.map((r) => r.personalId));
+  return all
+    .filter((p) => p.active || withRecords.has(p.id))
+    .map((p) => (p.active ? p : { ...p, schedule: [] }));
+}
+
+/**
  * Carga el personal activo y sus registros en un rango de fechas, más el
  * margen de inasistencia configurado. Pocas decenas de empleados: se trae
  * todo y se filtra en el cliente.
@@ -25,7 +37,7 @@ export function usePersonalAttendance(from: string, to: string) {
     async (silent = false) => {
       if (silent) setRefreshing(true);
       const [staff, regs, cfg] = await Promise.all([
-        personalService.getAll({ active: true }),
+        personalService.getAll(),
         personalAttendanceService.getRecords({ from, to }),
         configService.getByKeys([ABSENCE_AFTER_KEY]),
       ]);
@@ -33,7 +45,7 @@ export function usePersonalAttendance(from: string, to: string) {
       if (regs.error) toast.error(regs.error);
       const minutes = Number.parseInt(cfg.configs[ABSENCE_AFTER_KEY]?.value ?? '', 10);
       setAbsenceAfterMin(Number.isFinite(minutes) && minutes > 0 ? minutes : DEFAULT_ABSENCE_AFTER_MIN);
-      setPersonal(staff.personal);
+      setPersonal(withInactiveWithRecords(staff.personal, regs.records));
       setRecords(regs.records);
       setLoading(false);
       setRefreshing(false);

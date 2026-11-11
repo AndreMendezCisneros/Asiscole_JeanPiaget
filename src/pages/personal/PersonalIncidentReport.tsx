@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { StaffDataPanel, StaffDataPanelHeader, StaffEmptyState, StaffKpiStat, StaffToolbar } from '@/components/staff';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { PageLoader } from '@/components/ui/page-loader';
-import { PersonalCategorySelect } from '@/components/personal/PersonalFilters';
+import { PersonalCategorySelect, PersonalEmployeeFilter } from '@/components/personal/PersonalFilters';
 import { type CategoryFilter } from '@/lib/utils/personalFilter';
 import { personalIncidentsService, type PersonalIncident } from '@/lib/services/personalIncidentsService';
 import { getLimaTodayDate } from '@/lib/utils/limaDateTime';
@@ -52,6 +52,7 @@ export const PersonalIncidentReport = () => {
   const [from, setFrom] = useState(monthStartOf(today));
   const [to, setTo] = useState(today);
   const [category, setCategory] = useState<CategoryFilter>('all');
+  const [employeeId, setEmployeeId] = useState<number | null>(null);
   const [all, setAll] = useState<PersonalIncident[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -74,9 +75,21 @@ export const PersonalIncidentReport = () => {
 
   // Las anuladas no cuentan en el reporte.
   const incidents = useMemo(
-    () => all.filter((i) => i.status !== 'Anulada' && (category === 'all' || i.personalCategory === category)),
-    [all, category],
+    () =>
+      all.filter(
+        (i) =>
+          i.status !== 'Anulada' &&
+          (category === 'all' || i.personalCategory === category) &&
+          (employeeId === null || i.personalId === employeeId),
+      ),
+    [all, category, employeeId],
   );
+
+  const employees = useMemo(() => {
+    const map = new Map<number, { id: number; fullName: string; category: string }>();
+    for (const i of all) map.set(i.personalId, { id: i.personalId, fullName: i.personalName, category: i.personalCategory ?? '' });
+    return [...map.values()];
+  }, [all]);
 
   const byFault = useMemo(() => countBy(incidents, (i) => i.faultName), [incidents]);
   const byCategory = useMemo(() => countBy(incidents, (i) => i.personalCategory ?? 'Sin categoría'), [incidents]);
@@ -94,7 +107,11 @@ export const PersonalIncidentReport = () => {
     serious: incidents.filter((i) => i.isSerious).length,
   };
 
-  const subtitle = buildFilterSubtitle([`Del ${from} al ${to}`, category !== 'all' && category]);
+  const subtitle = buildFilterSubtitle([
+    `Del ${from} al ${to}`,
+    category !== 'all' && category,
+    employeeId !== null && employees.find((e) => e.id === employeeId)?.fullName,
+  ]);
 
   const exportPdf = async () => {
     const doc = new PdfReportDocument('portrait', 'Reporte de Incidencias del Personal', subtitle);
@@ -202,6 +219,7 @@ export const PersonalIncidentReport = () => {
           <Label htmlFor="pir-to">Hasta</Label>
           <Input id="pir-to" type="date" value={to} min={from} onChange={(e) => setTo(e.target.value || to)} />
         </div>
+        <PersonalEmployeeFilter employees={employees} value={employeeId} onChange={setEmployeeId} />
         <PersonalCategorySelect value={category} onChange={setCategory} />
         <div className="flex items-end">
           <Button variant="outline" onClick={() => void load(true)} className="w-full" disabled={refreshing}>

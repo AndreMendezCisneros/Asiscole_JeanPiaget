@@ -115,3 +115,40 @@ describe('computeOvertime', () => {
     expect(run([rec({ personalId: 2, departureTime: '15:00' })], [taller({ personalId: 2 })]).totalMin).toBe(0);
   });
 });
+
+describe('computeNetOvertime', () => {
+  it('resta solo lo no justificado de las horas adicionales', async () => {
+    const { computeNetOvertime } = await import('./personalOvertime');
+    const [s] = computeNetOvertime(
+      [{ personal: base, totalMin: 120 }],
+      [
+        {
+          personal: base,
+          items: [
+            { kind: 'tardanza', minutes: 30, justified: false },
+            { kind: 'tardanza', minutes: 15, justified: true },
+            { kind: 'inasistencia', minutes: 360, justified: true },
+            { kind: 'salida anticipada', minutes: 20, justified: false },
+            { kind: 'inasistencia', minutes: null, justified: false },
+          ],
+        },
+      ],
+    );
+    expect(s.lateMin).toBe(30);
+    expect(s.absenceMin).toBe(0);
+    expect(s.earlyMin).toBe(20);
+    expect(s.discountMin).toBe(50);
+    expect(s.realMin).toBe(70);
+  });
+
+  it('puede quedar negativo (debe horas)', async () => {
+    const { computeNetOvertime, formatSignedMinutes } = await import('./personalOvertime');
+    const [s] = computeNetOvertime(
+      [{ personal: base, totalMin: 30 }],
+      [{ personal: base, items: [{ kind: 'inasistencia', minutes: 360, justified: false }] }],
+    );
+    expect(s.realMin).toBe(-330);
+    expect(formatSignedMinutes(s.realMin)).toBe('-5 h 30 min');
+    expect(formatSignedMinutes(0)).toBe('0 min');
+  });
+});

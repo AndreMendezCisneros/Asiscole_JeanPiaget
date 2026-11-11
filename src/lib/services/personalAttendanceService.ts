@@ -6,6 +6,7 @@ import {
   scheduleForDate,
 } from '@/lib/utils/personalSchedule';
 import { MIN_JUSTIFICATION_REASON_LENGTH } from '@/lib/utils/attendanceJustification';
+import { compressImageForUpload } from '@/lib/utils/compressImage';
 import type {
   Personal,
   PersonalArrivalEstado,
@@ -26,10 +27,19 @@ type RegistroPersonalRow = {
   motivo_justificacion: string | null;
   motivo_salida: string | null;
   registrado_por: number | null;
+  justificado_por_nombre?: string | null;
+  fecha_justificacion?: string | null;
+  evidencia_ruta?: string | null;
+  evidencia_nombre?: string | null;
+  evidencia_mime?: string | null;
+  evidencia_fecha?: string | null;
 };
 
 const SELECT_COLS =
-  'id_registro, id_personal, fecha, hora_llegada, estado, hora_entrada_esperada, hora_salida_esperada, hora_salida, tipo_salida, motivo_justificacion, motivo_salida, registrado_por';
+  'id_registro, id_personal, fecha, hora_llegada, estado, hora_entrada_esperada, hora_salida_esperada, hora_salida, tipo_salida, motivo_justificacion, motivo_salida, registrado_por, justificado_por_nombre, fecha_justificacion, evidencia_ruta, evidencia_nombre, evidencia_mime, evidencia_fecha';
+
+const EVIDENCE_BUCKET = 'evidencias';
+const MAX_EVIDENCE_BYTES = 5 * 1024 * 1024;
 
 /** Hora 00:00 = registro sin llegada real (falta marcada o justificada sin escaneo). */
 const NO_ARRIVAL_TIME = '00:00:00';
@@ -55,7 +65,27 @@ export function mapPersonalArrivalRow(row: RegistroPersonalRow): PersonalArrival
     justificationReason: row.motivo_justificacion,
     departureReason: row.motivo_salida,
     registeredBy: row.registrado_por,
+    justifiedByName: row.justificado_por_nombre ?? null,
+    justifiedAt: row.fecha_justificacion ?? null,
+    evidence: row.evidencia_ruta
+      ? {
+          path: row.evidencia_ruta,
+          fileName: row.evidencia_nombre ?? 'evidencia',
+          mime: row.evidencia_mime ?? '',
+          uploadedAt: row.evidencia_fecha ?? null,
+        }
+      : null,
   };
+}
+
+/** Normaliza el tipo del archivo de evidencia: JPG, PNG o PDF; null si no se acepta. */
+export function evidenceMimeOf(file: Pick<File, 'name' | 'type'>): 'image/jpeg' | 'image/png' | 'application/pdf' | null {
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  const type = file.type.toLowerCase();
+  if (type === 'application/pdf' || ext === 'pdf') return 'application/pdf';
+  if (type === 'image/png' || ext === 'png') return 'image/png';
+  if (type === 'image/jpeg' || type === 'image/jpg' || ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+  return null;
 }
 
 export type PersonalScanResult =
@@ -233,7 +263,7 @@ export const personalAttendanceService = {
     recordId: number,
     userId: number,
     reason: string,
-  ): Promise<{ success: boolean; error: string | null }> {
+  ): Promise<{ success: boolean; error: string | null; recordId?: number }> {
     if (reason.trim().length < MIN_JUSTIFICATION_REASON_LENGTH) {
       return { success: false, error: `El motivo debe tener al menos ${MIN_JUSTIFICATION_REASON_LENGTH} caracteres.` };
     }
@@ -250,7 +280,7 @@ export const personalAttendanceService = {
       .select('id_registro');
     if (error) return { success: false, error: error.message };
     if (!data?.length) return { success: false, error: 'La tardanza ya no está pendiente.' };
-    return { success: true, error: null };
+    return { success: true, error: null, recordId };
   },
 
   /**
@@ -262,13 +292,14 @@ export const personalAttendanceService = {
     date: string;
     userId: number;
     reason: string;
-  }): Promise<{ success: boolean; error: string | null }> {
+  }): Promise<{ success: boolean; error: string | null; recordId?: number }> {
     const reason = input.reason.trim();
     if (reason.length < MIN_JUSTIFICATION_REASON_LENGTH) {
       return { success: false, error: `El motivo debe tener al menos ${MIN_JUSTIFICATION_REASON_LENGTH} caracteres.` };
     }
     const existing = await this.getRecordForDate(input.personal.id, input.date);
     if (existing.error) return { success: false, error: existing.error };
+    let recordId: number | undefined;
     const justification = {
       estado: 'Falta justificada',
       motivo_justificacion: reason,
@@ -285,9 +316,10 @@ export const personalAttendanceService = {
         .update(justification)
         .eq('id_registro', existing.record.id);
       if (error) return { success: false, error: error.message };
+      recordId = existing.record.id;
     } else {
       const horario = scheduleForDate(input.personal.schedule, input.date);
-      const { error } = await supabase.from('registros_llegada_personal').insert({
+      const { data: inserted, error } = await supabase.from('registros_llegada_personal').insert({
         id_personal: input.personal.id,
         fecha: input.date,
         hora_llegada: NO_ARRIVAL_TIME,
@@ -295,8 +327,9 @@ export const personalAttendanceService = {
         hora_salida_esperada: horario?.exit ?? null,
         registrado_por: input.userId,
         ...justification,
-      });
+      }).select('id_registro').single();
       if (error) return { success: false, error: error.message };
+      recordId = (inserted as { id_registro: number }).id_registro;
     }
 
     // La incidencia "Falta" automática de ese día pasa a Justificada.
@@ -316,7 +349,60 @@ export const personalAttendanceService = {
       .lte('fecha_hora_registro', dayEnd)
       .like('observaciones', 'Generada automáticamente%');
 
+    return { success: true, error: null, recordId };
+  },
+
+  /**
+   * Sube (o reemplaza) la evidencia de una justificación: foto JPG/PNG o PDF, máx. 5 MB.
+   * Va al bucket "evidencias", carpeta personal/{id_registro}/.
+   */
+  async uploadJustificationEvidence(
+    recordId: number,
+    file: File,
+    userId: number,
+  ): Promise<{ success: boolean; error: string | null }> {
+    const mime = evidenceMimeOf(file);
+    if (!mime) return { success: false, error: 'Solo se permiten fotos (JPG o PNG) o PDF.' };
+    const upload = mime === 'application/pdf' ? file : await compressImageForUpload(file);
+    if (upload.size > MAX_EVIDENCE_BYTES) return { success: false, error: 'El archivo no puede superar los 5 MB.' };
+
+    const ext = mime === 'application/pdf' ? 'pdf' : mime === 'image/png' ? 'png' : 'jpg';
+    const path = `personal/${recordId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const { error: upErr } = await supabase.storage
+      .from(EVIDENCE_BUCKET)
+      .upload(path, upload, { cacheControl: '3600', upsert: false, contentType: mime });
+    if (upErr) return { success: false, error: 'No se pudo subir el archivo.' };
+
+    const { data: prev } = await supabase
+      .from('registros_llegada_personal')
+      .select('evidencia_ruta')
+      .eq('id_registro', recordId)
+      .maybeSingle();
+    const { data, error } = await supabase
+      .from('registros_llegada_personal')
+      .update({
+        evidencia_ruta: path,
+        evidencia_nombre: file.name,
+        evidencia_mime: mime,
+        evidencia_subida_por: userId,
+        evidencia_fecha: new Date().toISOString(),
+      })
+      .eq('id_registro', recordId)
+      .select('id_registro');
+    if (error || !data?.length) {
+      await supabase.storage.from(EVIDENCE_BUCKET).remove([path]);
+      return { success: false, error: error?.message ?? 'No se encontró el registro.' };
+    }
+    const oldPath = (prev as { evidencia_ruta: string | null } | null)?.evidencia_ruta;
+    if (oldPath && oldPath !== path) await supabase.storage.from(EVIDENCE_BUCKET).remove([oldPath]);
     return { success: true, error: null };
+  },
+
+  /** URL (firmada si se puede) para ver o descargar la evidencia. */
+  async evidenceUrl(path: string): Promise<string> {
+    const { data, error } = await supabase.storage.from(EVIDENCE_BUCKET).createSignedUrl(path, 3600);
+    if (!error && data?.signedUrl) return data.signedUrl;
+    return supabase.storage.from(EVIDENCE_BUCKET).getPublicUrl(path).data.publicUrl;
   },
 
   today(): string {

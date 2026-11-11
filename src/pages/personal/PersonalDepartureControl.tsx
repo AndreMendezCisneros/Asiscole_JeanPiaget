@@ -90,16 +90,17 @@ export const PersonalDepartureControl = () => {
     (r) => matchesPersonalFilter(r.personal, search, category, employeeId) && (filter === 'all' || r.departure === filter),
   );
 
-  const stats = useMemo(
-    () => ({
-      present: rows.length,
-      out: rows.filter((r) => r.record?.departureTime).length,
-      unauthorized: rows.filter((r) => r.departure === 'Anticipada').length,
-      authorized: rows.filter((r) => r.departure === 'Autorizada').length,
-      missing: rows.filter((r) => r.departure === 'No marcó salida').length,
-    }),
-    [rows],
-  );
+  // Los cuadros respetan búsqueda, empleado y categoría (no el filtro de salida).
+  const stats = useMemo(() => {
+    const people = rows.filter((r) => matchesPersonalFilter(r.personal, search, category, employeeId));
+    return {
+      present: people.length,
+      out: people.filter((r) => r.record?.departureTime).length,
+      unauthorized: people.filter((r) => r.departure === 'Anticipada').length,
+      authorized: people.filter((r) => r.departure === 'Autorizada').length,
+      missing: people.filter((r) => r.departure === 'No marcó salida').length,
+    };
+  }, [rows, search, category, employeeId]);
 
   const { page, pageSize, totalPages, goToPage, nextPage, prevPage, changePageSize, resetPage } =
     useTablePagination({ totalItems: filtered.length, initialPageSize: TABLE_PAGE_SIZE });
