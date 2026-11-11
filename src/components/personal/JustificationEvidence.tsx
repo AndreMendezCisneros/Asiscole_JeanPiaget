@@ -4,7 +4,7 @@ import { FileDown, FileText, Loader2, Paperclip, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { evidenceMimeOf, personalAttendanceService } from '@/lib/services/personalAttendanceService';
-import { exportPersonalJustificationPdf } from '@/lib/utils/exportPersonalJustificationPdf';
+import { exportPersonalDeparturePdf, exportPersonalJustificationPdf } from '@/lib/utils/exportPersonalJustificationPdf';
 import type { Personal, PersonalArrivalRecord } from '@/types/personal';
 
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -74,15 +74,27 @@ export function JustificationEvidencePicker({
   );
 }
 
-/** Botones de una justificación ya hecha: ver/descargar evidencia y PDF de la justificación. */
-export function JustificationRowActions({ record, personal }: { record: PersonalArrivalRecord; personal: Personal }) {
+/**
+ * Botones de una justificación (o de una salida anticipada con kind="salida"):
+ * ver/descargar la evidencia y PDF.
+ */
+export function JustificationRowActions({
+  record,
+  personal,
+  kind = 'justificacion',
+}: {
+  record: PersonalArrivalRecord;
+  personal: Personal;
+  kind?: 'justificacion' | 'salida';
+}) {
   const [busy, setBusy] = useState<'pdf' | 'ev' | null>(null);
+  const evidence = kind === 'salida' ? record.departureEvidence : record.evidence;
 
   const openEvidence = async () => {
-    if (!record.evidence) return;
+    if (!evidence) return;
     setBusy('ev');
     try {
-      const url = await personalAttendanceService.evidenceUrl(record.evidence.path);
+      const url = await personalAttendanceService.evidenceUrl(evidence.path);
       window.open(url, '_blank', 'noopener');
     } finally {
       setBusy(null);
@@ -92,8 +104,9 @@ export function JustificationRowActions({ record, personal }: { record: Personal
   const downloadPdf = async () => {
     setBusy('pdf');
     try {
-      const url = record.evidence ? await personalAttendanceService.evidenceUrl(record.evidence.path) : null;
-      await exportPersonalJustificationPdf(record, personal, url);
+      const url = evidence ? await personalAttendanceService.evidenceUrl(evidence.path) : null;
+      if (kind === 'salida') await exportPersonalDeparturePdf(record, personal, url);
+      else await exportPersonalJustificationPdf(record, personal, url);
     } catch {
       toast.error('No se pudo generar el PDF');
     } finally {
@@ -103,8 +116,8 @@ export function JustificationRowActions({ record, personal }: { record: Personal
 
   return (
     <div className="flex flex-wrap gap-1">
-      {record.evidence && (
-        <Button variant="outline" size="sm" onClick={() => void openEvidence()} disabled={busy !== null} title={record.evidence.fileName}>
+      {evidence && (
+        <Button variant="outline" size="sm" onClick={() => void openEvidence()} disabled={busy !== null} title={evidence.fileName}>
           {busy === 'ev' ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Paperclip className="mr-1 h-3.5 w-3.5" />}
           Evidencia
         </Button>

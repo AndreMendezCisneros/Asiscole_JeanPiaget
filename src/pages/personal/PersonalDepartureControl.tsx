@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { AlertTriangle, CheckCircle2, Clock, Loader2, LogOut, RefreshCw, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Loader2, LogOut, Paperclip, RefreshCw, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -28,6 +28,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { PageLoader } from '@/components/ui/page-loader';
 import { StudentPhoto } from '@/components/shared/StudentPhoto';
 import { PersonalCategorySelect, PersonalEmployeeFilter, PersonalSearchField } from '@/components/personal/PersonalFilters';
+import { JustificationEvidencePicker, JustificationRowActions } from '@/components/personal/JustificationEvidence';
 import { matchesPersonalFilter, type CategoryFilter } from '@/lib/utils/personalFilter';
 import { authService } from '@/lib/services';
 import { personalAttendanceService } from '@/lib/services/personalAttendanceService';
@@ -67,7 +68,10 @@ export const PersonalDepartureControl = () => {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [target, setTarget] = useState<PermissionTarget | null>(null);
   const [reason, setReason] = useState('');
+  const [permFile, setPermFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const [evidenceRow, setEvidenceRow] = useState<DepartureRow | null>(null);
+  const [evidenceOnlyFile, setEvidenceOnlyFile] = useState<File | null>(null);
 
   // Solo quienes llegaron dentro de su jornada (una llegada después de su salida es inasistencia).
   const rows = useMemo<DepartureRow[]>(
@@ -123,7 +127,7 @@ export const PersonalDepartureControl = () => {
     setBusyId(null);
     if ('error' in result) {
       toast.error(result.error);
-      return false;
+      return null;
     }
     const tipo = DEPARTURE_STATUS_LABEL[result.record.departureType ?? 'Normal'];
     toast.success(`${row.personal.fullName}: salida ${result.record.departureTime} (${tipo})`);
@@ -131,29 +135,68 @@ export const PersonalDepartureControl = () => {
       toast.info('Salió a su hora o después: queda como salida normal (no hace falta permiso).');
     }
     void reload(true);
-    return true;
+    return result.record;
+  };
+
+  const uploadDepartureEvidence = async (recordId: number, file: File): Promise<boolean> => {
+    const userId = authService.getCurrentUser()?.id;
+    if (!userId) {
+      toast.error('Sesión expirada');
+      return false;
+    }
+    const up = await personalAttendanceService.uploadJustificationEvidence(recordId, file, userId, 'salida');
+    if (up.error) toast.error(`No se pudo subir la evidencia: ${up.error}`);
+    return up.success;
   };
 
   const submitPermission = async () => {
     if (!target) return;
     setSaving(true);
     let ok = false;
+    let recordId: number | null = null;
+    let authorized = false;
     if (target.mode === 'register') {
-      ok = await registerDeparture(target.row, { reason });
+      const saved = await registerDeparture(target.row, { reason });
+      ok = saved !== null;
+      recordId = saved?.id ?? null;
+      authorized = saved?.departureType === 'Autorizada';
     } else {
       const user = authService.getCurrentUser();
       const res = user && target.row.record
         ? await personalAttendanceService.authorizeEarlyDeparture(target.row.record.id, user.id, reason)
         : { success: false, error: 'Sesión expirada' };
       if (res.error) toast.error(res.error);
-      else {
-        toast.success('Salida anticipada autorizada');
-        void reload(true);
-      }
+      else toast.success('Salida anticipada autorizada');
       ok = res.success;
+      recordId = target.row.record?.id ?? null;
+      authorized = ok;
     }
+    // La evidencia solo aplica si la salida quedó con permiso (antes de su hora).
+    if (ok && authorized && permFile && recordId !== null) {
+      if (!(await uploadDepartureEvidence(recordId, permFile))) {
+        toast.info('La salida quedó registrada; puede agregar la evidencia desde la fila.');
+      }
+    }
+    if (ok) void reload(true);
     setSaving(false);
     if (ok) setTarget(null);
+  };
+
+  const submitEvidenceOnly = async () => {
+    if (!evidenceRow?.record || !evidenceOnlyFile) return;
+    setSaving(true);
+    const okUp = await uploadDepartureEvidence(evidenceRow.record.id, evidenceOnlyFile);
+    setSaving(false);
+    if (!okUp) return;
+    toast.success('Evidencia guardada');
+    setEvidenceRow(null);
+    void reload(true);
+  };
+
+  const openPermission = (row: DepartureRow, mode: PermissionTarget['mode']) => {
+    setTarget({ row, mode });
+    setReason('');
+    setPermFile(null);
   };
 
   if (loading) return <PageLoader message="Cargando salidas del personal..." />;
@@ -273,28 +316,36 @@ export const PersonalDepartureControl = () => {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => {
-                                  setTarget({ row, mode: 'register' });
-                                  setReason('');
-                                }}
+                                onClick={() => openPermission(row, 'register')}
                                 disabled={busyId === row.personal.id}
                                 title="Salida antes de su hora con permiso (pide motivo)"
                               >
                                 Con permiso
                               </Button>
                             </div>
-                          ) : row.departure === 'Anticipada' ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setTarget({ row, mode: 'authorize' });
-                                setReason('');
-                              }}
-                            >
-                              <ShieldCheck className="mr-1 h-4 w-4" />
-                              Autorizar
-                            </Button>
+                          ) : row.departure === 'Anticipada' && row.record ? (
+                            <div className="flex flex-wrap gap-1">
+                              <Button variant="outline" size="sm" onClick={() => openPermission(row, 'authorize')}>
+                                <ShieldCheck className="mr-1 h-4 w-4" />
+                                Autorizar
+                              </Button>
+                              <JustificationRowActions record={row.record} personal={row.personal} kind="salida" />
+                            </div>
+                          ) : row.departure === 'Autorizada' && row.record ? (
+                            <div className="flex flex-wrap gap-1">
+                              <JustificationRowActions record={row.record} personal={row.personal} kind="salida" />
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setEvidenceOnlyFile(null);
+                                  setEvidenceRow(row);
+                                }}
+                              >
+                                <Paperclip className="mr-1 h-3.5 w-3.5" />
+                                {row.record.departureEvidence ? 'Cambiar evidencia' : 'Agregar evidencia'}
+                              </Button>
+                            </div>
                           ) : null}
                         </TableCell>
                       </TableRow>
@@ -340,6 +391,7 @@ export const PersonalDepartureControl = () => {
               placeholder="Ej. Cita médica autorizada por dirección"
             />
           </div>
+          <JustificationEvidencePicker file={permFile} onChange={setPermFile} disabled={saving} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setTarget(null)} disabled={saving}>
               Cancelar
@@ -351,6 +403,28 @@ export const PersonalDepartureControl = () => {
             >
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {target?.mode === 'authorize' ? 'Autorizar' : 'Registrar salida'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={evidenceRow !== null} onOpenChange={(open) => !open && setEvidenceRow(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{evidenceRow?.record?.departureEvidence ? 'Cambiar evidencia del permiso' : 'Agregar evidencia del permiso'}</DialogTitle>
+            <DialogDescription>
+              {evidenceRow?.personal.fullName} · salió {evidenceRow?.record?.departureTime}
+              {evidenceRow?.record?.departureEvidence ? ` · actual: ${evidenceRow.record.departureEvidence.fileName}` : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <JustificationEvidencePicker file={evidenceOnlyFile} onChange={setEvidenceOnlyFile} disabled={saving} label="Evidencia" />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEvidenceRow(null)} disabled={saving}>
+              Cancelar
+            </Button>
+            <Button variant="info" onClick={() => void submitEvidenceOnly()} disabled={saving || !evidenceOnlyFile}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Guardar
             </Button>
           </DialogFooter>
         </DialogContent>

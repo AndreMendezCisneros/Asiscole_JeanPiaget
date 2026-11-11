@@ -101,6 +101,7 @@ import { personalService } from '@/lib/services/personalService';
 import { personalAttendanceService } from '@/lib/services/personalAttendanceService';
 import { personalTallerService } from '@/lib/services/personalTallerService';
 import { PersonalIncidentForm } from '@/components/personal/PersonalIncidentForm';
+import { JustificationEvidencePicker } from '@/components/personal/JustificationEvidence';
 import { scheduleForDate } from '@/lib/utils/personalSchedule';
 import type { Personal, PersonalArrivalRecord, PersonalTallerRecord } from '@/types/personal';
 
@@ -141,6 +142,7 @@ export const TutorScanner = () => {
   /** Salida anticipada del personal que el tutor va a autorizar. */
   const [authorizeDeparture, setAuthorizeDeparture] = useState<{ personal: Personal; record: PersonalArrivalRecord } | null>(null);
   const [authorizeReason, setAuthorizeReason] = useState('');
+  const [authorizeFile, setAuthorizeFile] = useState<File | null>(null);
   const [authorizeSaving, setAuthorizeSaving] = useState(false);
   /** Con cualquier diálogo abierto, el lector de carnets no toma el foco. */
   const showIncidentDialog = showStudentIncident || personalIncidentFor !== undefined;
@@ -1225,11 +1227,16 @@ export const TutorScanner = () => {
     const { personal: staff, record } = authorizeDeparture;
     const reason = authorizeReason.trim();
     const { success, error } = await personalAttendanceService.authorizeEarlyDeparture(record.id, user.id, reason);
-    setAuthorizeSaving(false);
     if (!success) {
+      setAuthorizeSaving(false);
       toast.error(error ?? 'No se pudo autorizar la salida');
       return;
     }
+    if (authorizeFile) {
+      const up = await personalAttendanceService.uploadJustificationEvidence(record.id, authorizeFile, user.id, 'salida');
+      if (up.error) toast.error(`Salida autorizada, pero no se pudo subir la evidencia: ${up.error}`);
+    }
+    setAuthorizeSaving(false);
     toast.success(`Salida de ${staff.fullName} autorizada`);
     setAuthorizeDeparture(null);
     setPersonalProfile((prev) =>
@@ -2305,6 +2312,7 @@ export const TutorScanner = () => {
                             size="lg"
                             onClick={() => {
                               setAuthorizeReason('');
+                              setAuthorizeFile(null);
                               setAuthorizeDeparture({ personal: staff, record: classRecord });
                             }}
                           >
@@ -2694,6 +2702,7 @@ export const TutorScanner = () => {
             />
             <p className="text-xs text-muted-foreground">Mínimo {MIN_JUSTIFICATION_REASON_LENGTH} caracteres.</p>
           </div>
+          <JustificationEvidencePicker file={authorizeFile} onChange={setAuthorizeFile} disabled={authorizeSaving} />
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setAuthorizeDeparture(null)} disabled={authorizeSaving}>
               Cancelar

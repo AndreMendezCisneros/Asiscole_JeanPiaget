@@ -103,6 +103,12 @@ export interface PersonalArrivalRecord {
   justifiedAt?: string | null;
   /** Evidencia de la justificación (bucket evidencias). */
   evidence?: PersonalJustificationEvidence | null;
+  /** Nombre de quien autorizó la salida anticipada. */
+  departureAuthorizedByName?: string | null;
+  /** Fecha y hora (ISO) de la autorización de la salida. */
+  departureAuthorizedAt?: string | null;
+  /** Evidencia del permiso de salida. */
+  departureEvidence?: PersonalJustificationEvidence | null;
 }
 
 export interface PersonalJustificationEvidence {

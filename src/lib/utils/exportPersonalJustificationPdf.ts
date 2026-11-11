@@ -1,7 +1,7 @@
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { SCHOOL_NAME } from '@/config/siteSeo';
-import type { Personal, PersonalArrivalRecord } from '@/types/personal';
+import type { Personal, PersonalArrivalRecord, PersonalJustificationEvidence } from '@/types/personal';
 import { PdfReportDocument, buildFilterSubtitle } from '@/lib/utils/pdfReportBuilder';
 import { fitImageBox, loadImageForPdf } from '@/lib/utils/exportIncidentReportPdf';
 
@@ -23,14 +23,18 @@ export function justificationKindLabel(record: Pick<PersonalArrivalRecord, 'stat
   return record.status === 'Tarde justificada' ? 'Tardanza justificada' : 'Inasistencia justificada';
 }
 
-async function drawEvidence(doc: PdfReportDocument, record: PersonalArrivalRecord, evidenceUrl: string | null) {
-  const ev = record.evidence;
+async function drawEvidence(
+  doc: PdfReportDocument,
+  ev: PersonalJustificationEvidence | null | undefined,
+  evidenceUrl: string | null,
+  where: string,
+) {
   if (!ev || !evidenceUrl) {
-    doc.drawParagraph('No se adjuntó evidencia a esta justificación.');
+    doc.drawParagraph('No se adjuntó evidencia.');
     return;
   }
   if (ev.mime === 'application/pdf') {
-    doc.drawParagraph(`Evidencia adjunta en PDF: ${ev.fileName}. Se descarga aparte desde el sistema (RR.HH. > Justificar asistencia del personal).`);
+    doc.drawParagraph(`Evidencia adjunta en PDF: ${ev.fileName}. Se descarga aparte desde el sistema (${where}).`);
     return;
   }
   const loaded = await loadImageForPdf(evidenceUrl);
@@ -57,14 +61,14 @@ async function drawEvidence(doc: PdfReportDocument, record: PersonalArrivalRecor
   doc.y = frameY + frameH + 10;
 }
 
-function drawSignatures(doc: PdfReportDocument) {
+function drawSignatures(doc: PdfReportDocument, rightTitle = 'Firma de RR.HH.') {
   doc.ensureSpace(44);
   const blockY = doc.y + 4;
   const colW = (doc.contentWidth - 8) / 2;
   const lineY = blockY + 22;
   [
     { title: 'Firma del trabajador', x: doc.margin },
-    { title: 'Firma de RR.HH.', x: doc.margin + colW + 8 },
+    { title: rightTitle, x: doc.margin + colW + 8 },
   ].forEach((b) => {
     doc.pdf.setFont('helvetica', 'bold');
     doc.pdf.setFontSize(9);
@@ -142,11 +146,77 @@ export async function exportPersonalJustificationPdf(
   ]);
 
   doc.drawSectionTitle('Evidencia');
-  await drawEvidence(doc, record, evidenceUrl);
+  await drawEvidence(doc, record.evidence, evidenceUrl, 'RR.HH. > Justificar asistencia del personal');
 
   doc.drawSectionTitle('Conformidad y firmas');
   drawSignatures(doc);
 
   const safeName = personal.fullName.replace(/[^\p{L}\p{N}]+/gu, '_').slice(0, 40);
   await doc.finalize(`Justificacion_${safeName}_${record.date}.pdf`);
+}
+
+/** PDF institucional de una salida anticipada (con o sin autorización), con la evidencia del permiso. */
+export async function exportPersonalDeparturePdf(
+  record: PersonalArrivalRecord,
+  personal: Personal,
+  evidenceUrl: string | null,
+): Promise<void> {
+  const authorized = record.departureType === 'Autorizada';
+  const subtitle = buildFilterSubtitle([
+    SCHOOL_NAME,
+    `Registro Nº ${record.id}`,
+    `Generado ${format(new Date(), 'dd/MM/yyyy HH:mm', { locale: es })}`,
+  ]);
+  const doc = new PdfReportDocument('portrait', 'SALIDA ANTICIPADA DEL PERSONAL', subtitle);
+  await doc.drawCoverHeader();
+
+  const early = record.departureTime && record.expectedExit ? minutesBetween(record.expectedExit, record.departureTime) : null;
+  doc.drawKpiCards([
+    { label: 'Nº registro', value: record.id, tone: 'primary' },
+    { label: 'Estado', value: authorized ? 'Autorizada' : 'Sin autorización', tone: authorized ? 'success' : 'error' },
+    { label: 'Antes de su hora', value: early == null ? '—' : `${early} min`, tone: 'warning' },
+    { label: 'Evidencia', value: record.departureEvidence ? 'Sí' : 'No', tone: record.departureEvidence ? 'success' : 'neutral' },
+  ]);
+
+  doc.drawSectionTitle('Datos del trabajador');
+  doc.drawKeyValueList([
+    { label: 'Nombre completo', value: personal.fullName },
+    { label: 'DNI', value: personal.barcode || '—' },
+    { label: 'Cargo', value: personal.position?.trim() || '—' },
+    { label: 'Categoría', value: personal.category },
+  ]);
+
+  doc.drawSectionTitle('Detalle de la salida');
+  doc.drawKeyValueList([
+    { label: 'Fecha', value: longDate(record.date) },
+    { label: 'Hora de llegada', value: record.arrivalTime ?? '—' },
+    { label: 'Hora de salida (horario)', value: record.expectedExit ?? '—' },
+    { label: 'Hora en que salió', value: record.departureTime ?? '—' },
+    { label: 'Tipo', value: authorized ? 'Salida anticipada con permiso (autorizada)' : 'Salida anticipada sin autorización' },
+  ]);
+
+  doc.drawSectionTitle('Motivo del permiso');
+  doc.drawParagraph(authorized ? record.departureReason?.trim() || 'Sin motivo registrado.' : 'La salida no tiene permiso registrado.');
+
+  if (authorized) {
+    doc.drawSectionTitle('Autorización');
+    doc.drawKeyValueList([
+      { label: 'Autorizado por', value: record.departureAuthorizedByName ?? '—' },
+      {
+        label: 'Fecha y hora',
+        value: record.departureAuthorizedAt
+          ? format(new Date(record.departureAuthorizedAt), "dd 'de' MMMM 'de' yyyy 'a las' HH:mm", { locale: es })
+          : '—',
+      },
+    ]);
+  }
+
+  doc.drawSectionTitle('Evidencia');
+  await drawEvidence(doc, record.departureEvidence, evidenceUrl, 'RR.HH. > Control de Salida');
+
+  doc.drawSectionTitle('Conformidad y firmas');
+  drawSignatures(doc, 'Firma de quien autoriza');
+
+  const safeName = personal.fullName.replace(/[^\p{L}\p{N}]+/gu, '_').slice(0, 40);
+  await doc.finalize(`Salida_anticipada_${safeName}_${record.date}.pdf`);
 }

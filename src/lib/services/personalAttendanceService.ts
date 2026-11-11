@@ -33,10 +33,16 @@ type RegistroPersonalRow = {
   evidencia_nombre?: string | null;
   evidencia_mime?: string | null;
   evidencia_fecha?: string | null;
+  salida_autorizada_por_nombre?: string | null;
+  fecha_autorizacion_salida?: string | null;
+  salida_evidencia_ruta?: string | null;
+  salida_evidencia_nombre?: string | null;
+  salida_evidencia_mime?: string | null;
+  salida_evidencia_fecha?: string | null;
 };
 
 const SELECT_COLS =
-  'id_registro, id_personal, fecha, hora_llegada, estado, hora_entrada_esperada, hora_salida_esperada, hora_salida, tipo_salida, motivo_justificacion, motivo_salida, registrado_por, justificado_por_nombre, fecha_justificacion, evidencia_ruta, evidencia_nombre, evidencia_mime, evidencia_fecha';
+  'id_registro, id_personal, fecha, hora_llegada, estado, hora_entrada_esperada, hora_salida_esperada, hora_salida, tipo_salida, motivo_justificacion, motivo_salida, registrado_por, justificado_por_nombre, fecha_justificacion, evidencia_ruta, evidencia_nombre, evidencia_mime, evidencia_fecha, salida_autorizada_por_nombre, fecha_autorizacion_salida, salida_evidencia_ruta, salida_evidencia_nombre, salida_evidencia_mime, salida_evidencia_fecha';
 
 const EVIDENCE_BUCKET = 'evidencias';
 const MAX_EVIDENCE_BYTES = 5 * 1024 * 1024;
@@ -75,8 +81,26 @@ export function mapPersonalArrivalRow(row: RegistroPersonalRow): PersonalArrival
           uploadedAt: row.evidencia_fecha ?? null,
         }
       : null,
+    departureAuthorizedByName: row.salida_autorizada_por_nombre ?? null,
+    departureAuthorizedAt: row.fecha_autorizacion_salida ?? null,
+    departureEvidence: row.salida_evidencia_ruta
+      ? {
+          path: row.salida_evidencia_ruta,
+          fileName: row.salida_evidencia_nombre ?? 'evidencia',
+          mime: row.salida_evidencia_mime ?? '',
+          uploadedAt: row.salida_evidencia_fecha ?? null,
+        }
+      : null,
   };
 }
+
+/** Evidencia de la justificación (llegada) o del permiso de salida. */
+export type EvidenceTarget = 'justificacion' | 'salida';
+
+const EVIDENCE_COLUMNS: Record<EvidenceTarget, { prefix: string; folder: string }> = {
+  justificacion: { prefix: 'evidencia', folder: 'personal' },
+  salida: { prefix: 'salida_evidencia', folder: 'personal-salida' },
+};
 
 /** Normaliza el tipo del archivo de evidencia: JPG, PNG o PDF; null si no se acepta. */
 export function evidenceMimeOf(file: Pick<File, 'name' | 'type'>): 'image/jpeg' | 'image/png' | 'application/pdf' | null {
@@ -360,14 +384,16 @@ export const personalAttendanceService = {
     recordId: number,
     file: File,
     userId: number,
+    target: EvidenceTarget = 'justificacion',
   ): Promise<{ success: boolean; error: string | null }> {
+    const { prefix, folder } = EVIDENCE_COLUMNS[target];
     const mime = evidenceMimeOf(file);
     if (!mime) return { success: false, error: 'Solo se permiten fotos (JPG o PNG) o PDF.' };
     const upload = mime === 'application/pdf' ? file : await compressImageForUpload(file);
     if (upload.size > MAX_EVIDENCE_BYTES) return { success: false, error: 'El archivo no puede superar los 5 MB.' };
 
     const ext = mime === 'application/pdf' ? 'pdf' : mime === 'image/png' ? 'png' : 'jpg';
-    const path = `personal/${recordId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const path = `${folder}/${recordId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const { error: upErr } = await supabase.storage
       .from(EVIDENCE_BUCKET)
       .upload(path, upload, { cacheControl: '3600', upsert: false, contentType: mime });
@@ -375,17 +401,17 @@ export const personalAttendanceService = {
 
     const { data: prev } = await supabase
       .from('registros_llegada_personal')
-      .select('evidencia_ruta')
+      .select(`${prefix}_ruta`)
       .eq('id_registro', recordId)
       .maybeSingle();
     const { data, error } = await supabase
       .from('registros_llegada_personal')
       .update({
-        evidencia_ruta: path,
-        evidencia_nombre: file.name,
-        evidencia_mime: mime,
-        evidencia_subida_por: userId,
-        evidencia_fecha: new Date().toISOString(),
+        [`${prefix}_ruta`]: path,
+        [`${prefix}_nombre`]: file.name,
+        [`${prefix}_mime`]: mime,
+        [`${prefix}_subida_por`]: userId,
+        [`${prefix}_fecha`]: new Date().toISOString(),
       })
       .eq('id_registro', recordId)
       .select('id_registro');
@@ -393,7 +419,7 @@ export const personalAttendanceService = {
       await supabase.storage.from(EVIDENCE_BUCKET).remove([path]);
       return { success: false, error: error?.message ?? 'No se encontró el registro.' };
     }
-    const oldPath = (prev as { evidencia_ruta: string | null } | null)?.evidencia_ruta;
+    const oldPath = (prev as unknown as Record<string, string | null> | null)?.[`${prefix}_ruta`];
     if (oldPath && oldPath !== path) await supabase.storage.from(EVIDENCE_BUCKET).remove([oldPath]);
     return { success: true, error: null };
   },
