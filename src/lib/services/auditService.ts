@@ -83,6 +83,17 @@ export async function getAuditLogs(filters?: {
 /**
  * Obtener estadísticas de auditoría
  */
+async function countAuditLogs(desde: string, accion?: 'INSERT' | 'UPDATE' | 'DELETE'): Promise<number> {
+  let query = supabase
+    .from('auditoria_logs')
+    .select('id_log', { count: 'exact', head: true })
+    .gte('fecha_hora', desde);
+  if (accion) query = query.eq('accion', accion);
+  const { count, error } = await query;
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
 export async function getAuditStats(days: number = 7): Promise<{
   stats: {
     totalOperations: number;
@@ -96,36 +107,52 @@ export async function getAuditStats(days: number = 7): Promise<{
   try {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
+    const desde = startDate.toISOString();
 
-    const { data, error } = await supabase
-      .from('auditoria_logs')
-      .select('accion, tabla_afectada')
-      .gte('fecha_hora', startDate.toISOString());
+    const [totalOperations, inserts, updates, deletes] = await Promise.all([
+      countAuditLogs(desde),
+      countAuditLogs(desde, 'INSERT'),
+      countAuditLogs(desde, 'UPDATE'),
+      countAuditLogs(desde, 'DELETE'),
+    ]);
 
-    if (error) {
-      console.error('Error al obtener estadísticas de auditoría:', error);
-      return { stats: null, error: error.message };
-    }
-
-    const stats = {
-      totalOperations: data.length,
-      inserts: data.filter((log) => log.accion === 'INSERT').length,
-      updates: data.filter((log) => log.accion === 'UPDATE').length,
-      deletes: data.filter((log) => log.accion === 'DELETE').length,
-      byTable: data.reduce((acc, log) => {
-        acc[log.tabla_afectada] = (acc[log.tabla_afectada] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>),
+    return {
+      stats: { totalOperations, inserts, updates, deletes, byTable: {} },
+      error: null,
     };
-
-    return { stats, error: null };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Error al obtener estadísticas de auditoría';
     console.error('Error al obtener estadísticas de auditoría:', error);
-    return { stats: null, error: error.message };
+    return { stats: null, error: message };
   }
+}
+
+/** Todas las filas del filtro, de a 500, para el Excel. */
+export async function getAllAuditLogs(filters?: {
+  table?: string;
+  operation?: 'INSERT' | 'UPDATE' | 'DELETE';
+  startDate?: string;
+  endDate?: string;
+}): Promise<{ logs: AuditLog[]; total: number; error: string | null }> {
+  const pageSize = 500;
+  const logs: AuditLog[] = [];
+  let total = 0;
+  let offset = 0;
+
+  while (offset <= 20000) {
+    const page = await getAuditLogs({ ...filters, limit: pageSize, offset });
+    if (page.error) return { logs, total, error: page.error };
+    total = page.total;
+    logs.push(...page.logs);
+    if (page.logs.length === 0 || logs.length >= total) break;
+    offset += pageSize;
+  }
+
+  return { logs, total, error: null };
 }
 
 export const auditService = {
   getAuditLogs,
   getAuditStats,
+  getAllAuditLogs,
 };

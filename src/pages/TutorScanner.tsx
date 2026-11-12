@@ -96,8 +96,6 @@ import {
 } from '@/lib/utils/tutorScannerStorage';
 
 const NAME_SEARCH_SCROLL_AFTER = 8;
-/** Libera inFlight si la red cuelga (evita “Registrando…” eterno). */
-const IN_FLIGHT_SAFETY_MS = 20_000;
 
 export const TutorScanner = () => {
   const navigate = useNavigate();
@@ -504,14 +502,21 @@ export const TutorScanner = () => {
     }
   };
 
-  const resolveArrivalSnapshot = useCallback(async (studentLevel?: string | null) => {
-    const limits = await arrivalService.fetchArrivalLimits({ force: true });
-    arrivalLimitsRef.current = limits;
-    setArrivalLimits(limits);
+  const resolveArrivalSnapshot = useCallback((studentLevel?: string | null) => {
+    // Límites en memoria (prefetch al montar) + reloj Lima local → 0 round-trips.
+    const limits = arrivalLimitsRef.current;
     const { date, time } = getLimaNow();
     const limit = resolveArrivalLimitForLevel(limits, studentLevel);
     const status = resolveArrivalStatusForStudent(time, limits, studentLevel);
     return { date, time, status, limit };
+  }, []);
+
+  const preloadStudentPhoto = useCallback((studentToShow: Student) => {
+    const url = studentToShow.profilePhoto?.trim();
+    if (!url || typeof Image === 'undefined') return;
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = url;
   }, []);
 
   const applyScanSuccess = useCallback(
@@ -567,15 +572,6 @@ export const TutorScanner = () => {
     [nowHHMM]
   );
 
-  const revertOptimisticSessionCount = useCallback((status: ArrivalRecord['status']) => {
-    setSessionCount((prev) => ({
-      total: Math.max(0, prev.total - 1),
-      onTime: Math.max(0, prev.onTime - (status === 'A tiempo' ? 1 : 0)),
-      late: Math.max(0, prev.late - (status === 'Tarde' ? 1 : 0)),
-    }));
-    setRecentScans((prev) => prev.slice(1));
-  }, []);
-
   const appendToSessionStats = useCallback(
     (studentToShow: Student, record: ArrivalRecord) => {
       const status = record.status || 'Registrado';
@@ -616,140 +612,6 @@ export const TutorScanner = () => {
       setLookupPending(false);
     }
   }, []);
-
-  const persistArrivalInBackground = useCallback(
-    (
-      studentToShow: Student,
-      arrivalOpts: CreateArrivalOptions,
-      scanSeq: number,
-      optimisticStatus: ArrivalRecord['status'],
-      showedOptimisticUi: boolean
-    ) => {
-      const currentUser = authService.getCurrentUser();
-      const pendingId = `${studentToShow.id}-${arrivalOpts.date ?? ''}-${Date.now()}`;
-      const enqueueFailed = () => {
-        enqueuePendingScan({
-          id: pendingId,
-          studentId: studentToShow.id,
-          studentSnapshot: {
-            id: studentToShow.id,
-            fullName: studentToShow.fullName,
-            grade: studentToShow.grade,
-            section: studentToShow.section,
-            level: studentToShow.level,
-            barcode: studentToShow.barcode,
-            profilePhoto: studentToShow.profilePhoto,
-          },
-          date: arrivalOpts.date ?? '',
-          arrivalTime: arrivalOpts.arrivalTime ?? '',
-          studentLevel: arrivalOpts.studentLevel ?? null,
-          registeredBy: currentUser?.id ?? null,
-          createdAt: Date.now(),
-          attempts: 1,
-        });
-      };
-
-      void arrivalService
-        .createArrivalRecord(studentToShow.id, currentUser?.id, arrivalOpts)
-        .then(({ record, error: arrivalError, alreadyRegistered }) => {
-          inFlightStudentIdsRef.current.delete(studentToShow.id);
-
-          if (arrivalError || !record) {
-            console.error('Error al registrar llegada:', arrivalError);
-            enqueueFailed();
-            if (isMountedRef.current) {
-              toast.warning('Sin conexión: la llegada se guardará cuando vuelva la red.', {
-                duration: 3200,
-              });
-              focusBarcodeInput();
-            }
-            return;
-          }
-
-          todayArrivalsRef.current.set(studentToShow.id, record);
-          saveTodayArrivals(record.date, todayArrivalsRef.current);
-
-          if (!isMountedRef.current) return;
-
-          const isLatestProfile = scanSeq === latestProfileScanRef.current;
-
-          if (alreadyRegistered) {
-            if (isLatestProfile) {
-              if (showedOptimisticUi) {
-                revertOptimisticSessionCount(optimisticStatus);
-              }
-              applyScanSuccess(studentToShow, record, { countInSession: false, duplicate: true });
-            }
-            toast.info(
-              `${studentToShow.fullName} ya fue registrado hoy a las ${record.arrivalTime ?? '—'}`,
-              { duration: 2800 }
-            );
-            focusBarcodeInput();
-            return;
-          }
-
-          if (!showedOptimisticUi) {
-            appendToSessionStats(studentToShow, record);
-          } else if (isLatestProfile) {
-            setArrivalRecord(record);
-            if (record.status !== optimisticStatus) {
-              setSessionCount((prev) => ({
-                total: prev.total,
-                onTime:
-                  prev.onTime -
-                  (optimisticStatus === 'A tiempo' ? 1 : 0) +
-                  (record.status === 'A tiempo' ? 1 : 0),
-                late:
-                  prev.late -
-                  (optimisticStatus === 'Tarde' ? 1 : 0) +
-                  (record.status === 'Tarde' ? 1 : 0),
-              }));
-              setRecentScans((prev) => {
-                if (!prev.length) return prev;
-                const [head, ...tail] = prev;
-                if (head.name !== studentToShow.fullName) return prev;
-                return [
-                  {
-                    ...head,
-                    status: record.status,
-                    time: record.arrivalTime ?? head.time,
-                  },
-                  ...tail,
-                ];
-              });
-            }
-          }
-
-          if (whatsappService.isEnabled()) {
-            void whatsappService.notifyParentArrival(studentToShow, record).then((wa) => {
-              if (!isMountedRef.current) return;
-              if (!wa.ok && wa.error) {
-                toast.warning(`WhatsApp: ${wa.error}`, { duration: 4500 });
-              } else if (wa.skipped) {
-                toast.info('WhatsApp: aviso ya enviado hace poco (sin reenvío)', { duration: 2200 });
-              }
-            });
-          }
-        })
-        .catch((err: unknown) => {
-          console.error('Error al registrar llegada:', err);
-          inFlightStudentIdsRef.current.delete(studentToShow.id);
-          enqueueFailed();
-          if (isMountedRef.current) {
-            toast.warning('Sin conexión: la llegada se guardará cuando vuelva la red.', {
-              duration: 3200,
-            });
-            focusBarcodeInput();
-          }
-        });
-    },
-    [
-      appendToSessionStats,
-      applyScanSuccess,
-      focusBarcodeInput,
-      revertOptimisticSessionCount,
-    ]
-  );
 
   const resolveStudentByBarcode = useCallback(
     async (code: string): Promise<Student | null> => {
@@ -987,6 +849,7 @@ export const TutorScanner = () => {
         return;
       }
 
+      // —— Llegada: guardar PRIMERO; la foto confirma que ya está en BD ——
       const cachedToday = todayArrivalsRef.current.get(foundStudent.id);
       if (cachedToday) {
         if (shouldUpdateProfile) {
@@ -1010,12 +873,13 @@ export const TutorScanner = () => {
         return;
       }
 
-      const { date, time, status } = await resolveArrivalSnapshot(foundStudent.level);
+      const { date, time, status } = resolveArrivalSnapshot(foundStudent.level);
       if (!isMountedRef.current) return;
 
       const arrivalOpts: CreateArrivalOptions = {
         date,
         arrivalTime: time,
+        status,
         studentLevel: foundStudent.level,
       };
 
@@ -1023,48 +887,89 @@ export const TutorScanner = () => {
         barcodeIndexRef.current.set(foundStudent.barcode.trim(), foundStudent);
       }
 
-      const optimisticRecord: ArrivalRecord = {
-        id: 0,
-        studentId: foundStudent.id,
-        date,
-        arrivalTime: time,
-        status,
-        createdAt: new Date().toISOString(),
-        registeredBy: 0,
-      };
-
+      preloadStudentPhoto(foundStudent);
       inFlightStudentIdsRef.current.add(foundStudent.id);
-      window.setTimeout(() => {
-        if (inFlightStudentIdsRef.current.delete(foundStudent.id) && isMountedRef.current) {
-          toast.warning(
-            `La llegada de ${foundStudent.fullName} tarda más de lo normal; se reintentará sola.`,
-            { duration: 3500 },
-          );
-        }
-      }, IN_FLIGHT_SAFETY_MS);
 
-      const showedOptimisticUi = shouldUpdateProfile;
-      if (showedOptimisticUi) {
-        applyScanSuccess(foundStudent, optimisticRecord);
+      const currentUser = authService.getCurrentUser();
+      const { record, error: arrivalError, alreadyRegistered } =
+        await arrivalService.createArrivalRecord(
+          foundStudent.id,
+          currentUser?.id,
+          arrivalOpts,
+        );
+
+      inFlightStudentIdsRef.current.delete(foundStudent.id);
+      if (!isMountedRef.current) return;
+
+      if (arrivalError || !record) {
+        console.error('Error al registrar llegada:', arrivalError);
+        enqueuePendingScan({
+          id: `${foundStudent.id}-${date}-${Date.now()}`,
+          studentId: foundStudent.id,
+          studentSnapshot: {
+            id: foundStudent.id,
+            fullName: foundStudent.fullName,
+            grade: foundStudent.grade,
+            section: foundStudent.section,
+            level: foundStudent.level,
+            barcode: foundStudent.barcode,
+            profilePhoto: foundStudent.profilePhoto,
+          },
+          date,
+          arrivalTime: time,
+          studentLevel: foundStudent.level ?? null,
+          registeredBy: currentUser?.id ?? null,
+          createdAt: Date.now(),
+          attempts: 1,
+        });
+        toast.warning('Sin conexión: la llegada se guardará cuando vuelva la red.', {
+          duration: 3200,
+        });
+        releaseScanFocus();
+        return;
       }
 
-      persistArrivalInBackground(
-        foundStudent,
-        arrivalOpts,
-        scanSeq,
-        status,
-        showedOptimisticUi
-      );
+      todayArrivalsRef.current.set(foundStudent.id, record);
+      saveTodayArrivals(record.date, todayArrivalsRef.current);
+
+      // Foto = confirmación: solo se muestra cuando el insert ya respondió OK.
+      if (shouldUpdateProfile) {
+        applyScanSuccess(foundStudent, record, {
+          countInSession: !alreadyRegistered,
+          duplicate: Boolean(alreadyRegistered),
+        });
+      } else if (!alreadyRegistered) {
+        appendToSessionStats(foundStudent, record);
+      }
+
+      if (alreadyRegistered) {
+        toast.info(
+          `${foundStudent.fullName} ya fue registrado hoy a las ${record.arrivalTime ?? '—'}`,
+          { duration: 2800 },
+        );
+      }
+
+      if (whatsappService.isEnabled()) {
+        void whatsappService.notifyParentArrival(foundStudent, record).then((wa) => {
+          if (!isMountedRef.current) return;
+          if (!wa.ok && wa.error) {
+            toast.warning(`WhatsApp: ${wa.error}`, { duration: 4500 });
+          } else if (wa.skipped) {
+            toast.info('WhatsApp: aviso ya enviado hace poco (sin reenvío)', { duration: 2200 });
+          }
+        });
+      }
 
       releaseScanFocus();
     },
     [
+      appendToSessionStats,
       applyScanSuccess,
       clasePhase,
       handleTallerScan,
       isTallerMode,
+      preloadStudentPhoto,
       resolveArrivalSnapshot,
-      persistArrivalInBackground,
       releaseScanFocus,
       user?.id,
       pensionesEnabled,

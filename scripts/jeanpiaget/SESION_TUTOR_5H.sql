@@ -1,0 +1,15 @@
+-- Jean Piaget — sesión tutor/docente a 5 horas
+-- NO aplicar todavía a producción salvo que lo pidas.
+-- El front local ya usa 5 h; este SQL alinea el token en Supabase
+-- (sie_iniciar_sesion / sie_renovar_sesion).
+--
+-- En SQL Editor, busca en ambas funciones el CASE de v_duracion y deja:
+--
+--   v_duracion := CASE ...rol...
+--     WHEN 'Tutor' THEN interval '5 hours'
+--     WHEN 'Docente' THEN interval '5 hours'
+--     WHEN 'Padre' THEN interval '15 minutes'
+--     ELSE interval '30 minutes'
+--   END;
+--
+-- (Reemplaza '45 minutes' o '15 minutes' del tutor/docente por '5 hours'.)

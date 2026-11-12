@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useTablePagination } from '@/hooks/useTablePagination';
 import { TABLE_PAGE_SIZE } from '@/lib/constants/tablePagination';
+import { getLimaDayRangeISO } from '@/lib/utils/limaDateTime';
 
 type ChangeRow = { field: string; before: string; after: string };
 
@@ -190,8 +191,8 @@ export const AuditLogs = () => {
 
     if (selectedTable) filters.table = selectedTable;
     if (selectedOperation) filters.operation = selectedOperation as 'INSERT' | 'UPDATE' | 'DELETE';
-    if (startDate) filters.startDate = `${startDate}T00:00:00`;
-    if (endDate) filters.endDate = `${endDate}T23:59:59`;
+    if (startDate) filters.startDate = getLimaDayRangeISO(startDate).desde;
+    if (endDate) filters.endDate = getLimaDayRangeISO(endDate).hasta;
 
     const { logs: fetchedLogs, total: fetchedTotal, error } = await auditService.getAuditLogs(filters);
 
@@ -232,7 +233,9 @@ export const AuditLogs = () => {
     [logs]
   );
 
-  const uniqueTables = Array.from(new Set(stats?.byTable ? Object.keys(stats.byTable) : []));
+  const uniqueTables = Array.from(
+    new Set([...Object.keys(TABLE_LABELS), ...Object.keys(stats?.byTable ?? {})]),
+  );
 
   return (
     <div className="app-page app-page-shell animate-fade-in">
@@ -247,11 +250,26 @@ export const AuditLogs = () => {
           variant="outline-primary"
           onClick={() => {
             void (async () => {
+              const filters: {
+                table?: string;
+                operation?: 'INSERT' | 'UPDATE' | 'DELETE';
+                startDate?: string;
+                endDate?: string;
+              } = {};
+              if (selectedTable) filters.table = selectedTable;
+              if (selectedOperation) filters.operation = selectedOperation as 'INSERT' | 'UPDATE' | 'DELETE';
+              if (startDate) filters.startDate = getLimaDayRangeISO(startDate).desde;
+              if (endDate) filters.endDate = getLimaDayRangeISO(endDate).hasta;
+              const { logs: allLogs, error } = await auditService.getAllAuditLogs(filters);
+              if (error || allLogs.length === 0) {
+                toast.error(error || 'No hay registros de auditoría para exportar');
+                return;
+              }
               const { exportAuditLogsExcel } = await import('@/lib/utils/excelListExports');
-              await exportAuditLogsExcel(logs);
+              await exportAuditLogsExcel(allLogs);
             })();
           }}
-          disabled={logs.length === 0 || loading}
+          disabled={total === 0 || loading}
         >
           <FileSpreadsheet className="w-4 h-4 mr-2" />
           Exportar Excel
@@ -295,7 +313,7 @@ export const AuditLogs = () => {
           <div className="grid grid-cols-1 gap-4 sm:col-span-2 lg:col-span-4 md:grid-cols-2 xl:grid-cols-4">
             <div className="space-y-2">
               <Label>Tabla</Label>
-              <Select value={selectedTable} onValueChange={(value) => {
+              <Select value={selectedTable || 'all'} onValueChange={(value) => {
                 setSelectedTable(value === 'all' ? '' : value);
               }}>
                 <SelectTrigger>
@@ -314,7 +332,7 @@ export const AuditLogs = () => {
             
             <div className="space-y-2">
               <Label>Operación</Label>
-              <Select value={selectedOperation} onValueChange={(value) => {
+              <Select value={selectedOperation || 'all'} onValueChange={(value) => {
                 setSelectedOperation(value === 'all' ? '' : value);
               }}>
                 <SelectTrigger>

@@ -1,8 +1,8 @@
-# Sitio Jean Piaget — Caddy (mismo VPS que asiscole.com)
+# Sitio Jean Piaget — Caddy (frontend en ded1; WPP en Hetzner)
 # Se instala en: /etc/caddy/sites.d/10-jeanpiaget.caddy
 # Placeholder __SUPABASE_HOST__ lo reemplaza deploy/bootstrap (ej. xxxxx.supabase.co)
-# Canal móvil: /canal-api → Django asiscole-canal :8000
-# WPP legado (opcional / apagado): /wpp-api + /wpp-notify
+# Canal móvil: /canal-api → Django local :8000
+# WhatsApp: /wpp-notify + /wpp-api → Hetzner 178.104.115.2 (:3102 / :21465)
 
 jeanpiaget.asiscole.com {
 	encode gzip zstd
@@ -43,14 +43,14 @@ jeanpiaget.asiscole.com {
 		reverse_proxy 127.0.0.1:8000
 	}
 
-	# Cola chips JP (legado; servicio puede estar apagado)
+	# WhatsApp chips en Hetzner (178.104.115.2)
 	handle /wpp-notify* {
 		uri strip_prefix /wpp-notify
-		reverse_proxy 127.0.0.1:3102
+		reverse_proxy 178.104.115.2:3102
 	}
 
 	handle /api/* {
-		reverse_proxy 127.0.0.1:21465
+		reverse_proxy 178.104.115.2:21465
 	}
 
 	@wpp_api_root path /wpp-api /wpp-api/
@@ -60,12 +60,12 @@ jeanpiaget.asiscole.com {
 
 	handle /wpp-api* {
 		uri replace /wpp-api /api
-		reverse_proxy 127.0.0.1:21465
+		reverse_proxy 178.104.115.2:21465
 	}
 
 	handle /meta-wa* {
 		uri strip_prefix /meta-wa
-		reverse_proxy 127.0.0.1:3101
+		reverse_proxy 178.104.115.2:3101
 	}
 
 	handle /assets/* {

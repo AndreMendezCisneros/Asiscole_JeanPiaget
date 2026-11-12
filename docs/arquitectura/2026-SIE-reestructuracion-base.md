@@ -156,7 +156,7 @@ Orden sugerido (valor de negocio × dependencia técnica):
 
 8. Inventario / biblioteca / enfermería.  
 9. RRHH docentes (asistencia staff, permisos).  
-10. Aula virtual / sync Classroom (opcional).
+10. Aula virtual / sync Classroom → ver detalle en `2026-SIE-microservicios-aula-siagie.md` (microservicios + SIAGIE por API).
 
 ---
 

@@ -563,7 +563,7 @@ const server = http.createServer((req, res) => {
   res.end();
 });
 
-server.listen(PORT, '127.0.0.1', () => {
+server.listen(PORT, process.env.WPPCONNECT_NOTIFY_BIND || '127.0.0.1', () => {
   const limitsSummary =
     CHIP_HOURLY_LIMITS.size > 0
       ? ` | límites: ${[...CHIP_HOURLY_LIMITS.entries()].map(([s, n]) => `${s}=${n}`).join(', ')}`

@@ -6,7 +6,7 @@ import { loginRateLimiter } from '@/lib/utils/rateLimit';
 import { sanitize } from '@/lib/utils/sanitize';
 
 /**
- * El token de sesión vive en el servidor con una ventana de inactividad (45 min para
+ * El token de sesión vive en el servidor con una ventana de inactividad (5 h para
  * tutor/docente, 15 min para padre). Para que NO caduque mientras el tutor sigue escaneando, deslizamos esa
  * ventana en el servidor ante actividad real, pero limitamos la frecuencia de llamadas.
  */

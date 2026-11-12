@@ -329,7 +329,12 @@ export async function getTodayArrivalForStudent(
       return { record: null, error: null };
     }
 
-    const record = await resolveRecordStatus(mapArrivalRow(data), studentLevel, false);
+    const mapped = mapArrivalRow(data);
+    // Solo recalcular estado si hay nivel (camino rápido del escáner: sin fetch de límites).
+    const record =
+      studentLevel != null && studentLevel !== ''
+        ? await resolveRecordStatus(mapped, studentLevel, false)
+        : mapped;
     return { record, error: null };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error al consultar llegada';
@@ -360,28 +365,35 @@ async function createArrivalRecordInnerOnce(
   options?: CreateArrivalOptions
 ): Promise<CreateArrivalResult> {
   try {
-    const { date: formattedDate, time: formattedTime } =
-      options?.date && options?.arrivalTime
-        ? { date: options.date, time: options.arrivalTime }
-        : getLimaNow();
-
-    let level = options?.studentLevel ?? null;
-    if (!level) {
-      const { data: estRow } = await supabase
-        .from('estudiantes')
-        .select('nivel_educativo')
-        .eq('id_estudiante', studentId)
-        .maybeSingle();
-      level = estRow?.nivel_educativo ?? null;
+    // Preferir fecha/hora/estado del escáner → 1 solo INSERT (sin SELECT previo).
+    let formattedDate = options?.date?.slice(0, 10) || '';
+    let formattedTime = options?.arrivalTime?.slice(0, 5) || '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(formattedDate) || !/^\d{2}:\d{2}$/.test(formattedTime)) {
+      const clock = getLimaNow();
+      formattedDate = clock.date;
+      formattedTime = clock.time;
     }
 
-    const { record: existing } = await getTodayArrivalForStudent(
-      studentId,
-      formattedDate,
-      level,
-    );
-    if (existing) {
-      return { record: existing, error: null, alreadyRegistered: true };
+    let level = options?.studentLevel ?? null;
+    const fastPath = Boolean(options?.status);
+
+    if (!fastPath) {
+      if (!level) {
+        const { data: estRow } = await supabase
+          .from('estudiantes')
+          .select('nivel_educativo')
+          .eq('id_estudiante', studentId)
+          .maybeSingle();
+        level = estRow?.nivel_educativo ?? null;
+      }
+      const { record: existing } = await getTodayArrivalForStudent(
+        studentId,
+        formattedDate,
+        level,
+      );
+      if (existing) {
+        return { record: existing, error: null, alreadyRegistered: true };
+      }
     }
 
     const insertData: Record<string, unknown> = {
@@ -395,13 +407,16 @@ async function createArrivalRecordInnerOnce(
       insertData.registrado_por = registeredBy;
     }
 
-    invalidateArrivalLimitCache();
-    const limits = await fetchArrivalLimits();
-    insertData.estado = resolveArrivalStatusForStudent(
-      normalizeTimeValue(formattedTime, '00:00'),
-      limits,
-      level,
-    );
+    if (options?.status) {
+      insertData.estado = options.status;
+    } else {
+      const limits = await fetchArrivalLimits();
+      insertData.estado = resolveArrivalStatusForStudent(
+        normalizeTimeValue(formattedTime, '00:00'),
+        limits,
+        level,
+      );
+    }
 
     const { data, error } = await supabase
       .from('registros_llegada')
@@ -410,13 +425,9 @@ async function createArrivalRecordInnerOnce(
       .single();
 
     if (error) {
-      // Carrera entre dos tutores: el otro insertó primero.
+      // Ya existía (re-escaneo u otro tutor).
       if (error.code === '23505') {
-        const { record: raced } = await getTodayArrivalForStudent(
-          studentId,
-          formattedDate,
-          level,
-        );
+        const { record: raced } = await getTodayArrivalForStudent(studentId, formattedDate);
         if (raced) {
           return { record: raced, error: null, alreadyRegistered: true };
         }
@@ -425,8 +436,7 @@ async function createArrivalRecordInnerOnce(
       return { record: null, error: error.message };
     }
 
-    const record = await resolveRecordStatus(mapArrivalRow(data), level, false);
-    return { record, error: null };
+    return { record: mapArrivalRow(data), error: null };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error al registrar llegada';
     console.error('Error al registrar llegada:', error);

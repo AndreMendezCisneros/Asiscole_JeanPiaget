@@ -7,10 +7,10 @@ interface SessionData {
   lastActivity: number;
 }
 
-const DEFAULT_SESSION_MS = 30 * 60 * 1000;
-const TUTOR_SESSION_MS = 45 * 60 * 1000;
-const DOCENTE_SESSION_MS = 45 * 60 * 1000;
-const PARENT_SESSION_MS = 15 * 60 * 1000;
+const DEFAULT_SESSION_MS = 30 * 60 * 1000; // Admin / Supervisor
+const TUTOR_SESSION_MS = 5 * 60 * 60 * 1000; // Tutor: 5 h (jornada de escaneo)
+const DOCENTE_SESSION_MS = 5 * 60 * 60 * 1000;
+const PARENT_SESSION_MS = 15 * 60 * 1000; // Padre: se mantiene corto
 
 /**
  * Servicio de gestión de sesiones con expiración por inactividad
@@ -36,7 +36,8 @@ export const sessionService = {
    */
   saveSession(user: User, apiToken: string, expiresInMs?: number): void {
     const now = Date.now();
-    const duration = expiresInMs ?? this.getIdleDurationMs(user.role);
+    const roleMs = this.getIdleDurationMs(user.role);
+    const duration = Math.max(expiresInMs ?? 0, roleMs);
     const sessionData: SessionData = {
       user,
       apiToken,
@@ -132,7 +133,8 @@ export const sessionService = {
     if (!session) return;
 
     const now = Date.now();
-    const duration = expiresInMs ?? this.getIdleDurationMs(session.user.role);
+    const roleMs = this.getIdleDurationMs(session.user.role);
+    const duration = Math.max(expiresInMs ?? 0, roleMs);
     session.lastActivity = now;
     session.expiresAt = now + duration;
 
