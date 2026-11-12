@@ -3119,6 +3119,22 @@
     }
   }
 
+  /* Escáner del tutor dentro del Layout del staff (Caja): sin pantalla completa
+     ni scroll propio; el Layout ya pone el menú lateral y el scroll. */
+  .tutor-page.tutor-page--embedded {
+    min-height: 0;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    background-color: transparent;
+  }
+
+  .tutor-page.tutor-page--embedded .tutor-main {
+    overflow: visible;
+    max-width: none;
+    padding: 0;
+  }
+
   .tutor-header {
     @apply shrink-0 border-b;
     background-color: var(--tutor-slate);

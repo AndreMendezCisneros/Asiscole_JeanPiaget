@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ArrowLeft, Barcode, CalendarClock, CheckCircle2, Clock, Loader2, LogOut, ScanLine, Search, X } from 'lucide-react';
+import { Barcode, CalendarClock, CheckCircle2, Clock, Loader2, ScanLine, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CardContent, CardTitle } from '@/components/ui/card';
@@ -16,7 +15,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { GuardyMark } from '@/components/brand/GuardyMark';
 import { StudentPhoto } from '@/components/shared/StudentPhoto';
 import { JustificationEvidencePicker } from '@/components/personal/JustificationEvidence';
 import { authService } from '@/lib/services';
@@ -50,11 +48,11 @@ function scanLabel(action: 'arrival' | 'departure', record: PersonalArrivalRecor
 
 /**
  * Caja (secretarías): marca la llegada y la salida del personal con el lector
- * o buscando por nombre, y puede autorizar una salida anticipada. Misma
- * presentación que el escáner del tutor, sin estudiantes ni incidencias.
+ * o buscando por nombre, y puede autorizar una salida anticipada. Usa la
+ * presentación del escáner del tutor dentro del menú lateral, sin estudiantes
+ * ni incidencias.
  */
 export const CajaPersonalScanner = () => {
-  const navigate = useNavigate();
   const user = authService.getCurrentUser();
   const [phase, setPhase] = useState<Phase>(() => (getLimaNow().time >= '12:00' ? 'salida' : 'llegada'));
   const [now, setNow] = useState(() => getLimaNow().time);
@@ -169,16 +167,6 @@ export const CajaPersonalScanner = () => {
     focusCode();
   };
 
-  const handleLogout = async () => {
-    try {
-      await authService.logout();
-      toast.success('Sesión cerrada');
-      navigate('/login', { replace: true });
-    } catch {
-      toast.error('No se pudo cerrar la sesión');
-    }
-  };
-
   const openAuthorize = () => {
     if (!last) return;
     setReason('');
@@ -214,48 +202,9 @@ export const CajaPersonalScanner = () => {
   const isSalida = phase === 'salida';
 
   return (
-    <div className="tutor-page">
-      <header className="tutor-header">
-        <div className="tutor-header__inner">
-          <div className="tutor-header__brand">
-            <div className="tutor-header__shield p-1" aria-hidden>
-              <GuardyMark size="sm" />
-            </div>
-            <div className="min-w-0">
-              <p className="tutor-header__title">Asistencia del personal</p>
-              <p className="tutor-header__subtitle hidden sm:block">SIE — Caja</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-            <Badge variant="secondary" className="text-[10px] px-2 py-0.5 shrink-0 lg:hidden">
-              {now}
-            </Badge>
-            <span className="tutor-header__user">{user?.fullName}</span>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => navigate('/pensiones')}
-              className="border-[var(--tutor-lead)] bg-transparent text-[var(--tutor-starlight)] hover:bg-[var(--tutor-graphite)] hover:text-[var(--tutor-starlight)]"
-            >
-              <ArrowLeft className="h-4 w-4 sm:mr-1.5" />
-              <span className="hidden sm:inline">Pensiones</span>
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => void handleLogout()}
-              className="tutor-header__logout border-[var(--tutor-lead)] bg-transparent text-[var(--tutor-starlight)] hover:bg-[var(--tutor-graphite)] hover:text-[var(--tutor-starlight)]"
-            >
-              <LogOut className="h-4 w-4 sm:mr-1.5" />
-              <span className="hidden sm:inline">Salir</span>
-            </Button>
-          </div>
-        </div>
-      </header>
+    <div className="tutor-page tutor-page--embedded">
 
-      <main id="main-content" className="tutor-main">
+      <div className="tutor-main">
         <div className="tutor-grid">
           <section className="tutor-left">
             <div className="tutor-scan-card">
@@ -444,12 +393,6 @@ export const CajaPersonalScanner = () => {
               const timeLabel = (action === 'departure' ? record.departureTime : record.arrivalTime) ?? '—:—';
               return (
                 <>
-                  <button
-                    type="button"
-                    className="tutor-student-backdrop lg:hidden"
-                    aria-label="Cerrar perfil del personal"
-                    onClick={closeProfile}
-                  />
                   <div
                     key={`p-${staff.id}`}
                     className={cn('tutor-student-card', warn ? 'tutor-student-card--late' : 'tutor-student-card--ontime')}
@@ -588,7 +531,7 @@ export const CajaPersonalScanner = () => {
             </div>
           </aside>
         </div>
-      </main>
+      </div>
 
       <Dialog
         open={authorizing !== null}

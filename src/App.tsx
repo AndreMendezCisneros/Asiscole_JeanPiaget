@@ -387,6 +387,14 @@ const AppContent = () => {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/caja/personal"
+          element={
+            <ProtectedRoute requiredRole={[...CAJA_PERSONAL_ROLES]}>
+              <CajaPersonalScanner />
+            </ProtectedRoute>
+          }
+        />
         {isPensionesEnabled() && (
           <Route
             path="/pensiones"
@@ -399,16 +407,6 @@ const AppContent = () => {
         )}
       </Route>
 
-      <Route
-        path="/caja/personal"
-        element={
-          <ProtectedRoute requiredRole={[...CAJA_PERSONAL_ROLES]}>
-            <LazyFullScreen>
-              <CajaPersonalScanner />
-            </LazyFullScreen>
-          </ProtectedRoute>
-        }
-      />
       <Route
         path="/tutor-scanner"
         element={
