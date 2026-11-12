@@ -97,6 +97,12 @@ export interface PersonalArrivalRecord {
   /** Motivo de la salida anticipada autorizada. */
   departureReason: string | null;
   registeredBy: number | null;
+  /** Nombre de quien registró la llegada. */
+  registeredByName?: string | null;
+  /** Usuario que registró la salida; null en el cierre automático de las 22:00. */
+  departureRegisteredBy?: number | null;
+  /** Nombre de quien registró la salida. */
+  departureRegisteredByName?: string | null;
   /** Nombre de quien justificó (tardanza o inasistencia). */
   justifiedByName?: string | null;
   /** Fecha y hora (ISO) en que se registró la justificación. */

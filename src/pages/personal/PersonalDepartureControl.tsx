@@ -268,6 +268,7 @@ export const PersonalDepartureControl = () => {
                       <TableHead>Llegó</TableHead>
                       <TableHead>Hora de salida</TableHead>
                       <TableHead>Salió</TableHead>
+                      <TableHead>Registró</TableHead>
                       <TableHead>Tipo</TableHead>
                       <TableHead>Acciones</TableHead>
                     </TableRow>
@@ -289,6 +290,21 @@ export const PersonalDepartureControl = () => {
                           {row.expectedExit ?? <span className="text-xs text-warning">Sin hora de salida</span>}
                         </TableCell>
                         <TableCell className="font-mono text-sm">{row.record?.departureTime ?? '—'}</TableCell>
+                        <TableCell className="text-sm">
+                          {row.record?.departureTime ? (
+                            row.record.departureRegisteredByName ??
+                            (row.record.departureRegisteredBy == null ? (
+                              <span className="text-xs text-muted-foreground">Cierre automático</span>
+                            ) : (
+                              '—'
+                            ))
+                          ) : (
+                            '—'
+                          )}
+                          {row.record?.registeredByName && (
+                            <p className="text-xs text-muted-foreground">Llegada: {row.record.registeredByName}</p>
+                          )}
+                        </TableCell>
                         <TableCell>
                           <Badge variant={DEPARTURE_STATUS_BADGE[row.departure]} title={row.record?.departureReason ?? undefined}>
                             {DEPARTURE_STATUS_LABEL[row.departure]}

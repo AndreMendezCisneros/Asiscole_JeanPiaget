@@ -27,6 +27,9 @@ type RegistroPersonalRow = {
   motivo_justificacion: string | null;
   motivo_salida: string | null;
   registrado_por: number | null;
+  registrado_por_nombre?: string | null;
+  registrado_salida_por?: number | null;
+  registrado_salida_por_nombre?: string | null;
   justificado_por_nombre?: string | null;
   fecha_justificacion?: string | null;
   evidencia_ruta?: string | null;
@@ -42,7 +45,7 @@ type RegistroPersonalRow = {
 };
 
 const SELECT_COLS =
-  'id_registro, id_personal, fecha, hora_llegada, estado, hora_entrada_esperada, hora_salida_esperada, hora_salida, tipo_salida, motivo_justificacion, motivo_salida, registrado_por, justificado_por_nombre, fecha_justificacion, evidencia_ruta, evidencia_nombre, evidencia_mime, evidencia_fecha, salida_autorizada_por_nombre, fecha_autorizacion_salida, salida_evidencia_ruta, salida_evidencia_nombre, salida_evidencia_mime, salida_evidencia_fecha';
+  'id_registro, id_personal, fecha, hora_llegada, estado, hora_entrada_esperada, hora_salida_esperada, hora_salida, tipo_salida, motivo_justificacion, motivo_salida, registrado_por, registrado_por_nombre, registrado_salida_por, registrado_salida_por_nombre, justificado_por_nombre, fecha_justificacion, evidencia_ruta, evidencia_nombre, evidencia_mime, evidencia_fecha, salida_autorizada_por_nombre, fecha_autorizacion_salida, salida_evidencia_ruta, salida_evidencia_nombre, salida_evidencia_mime, salida_evidencia_fecha';
 
 const EVIDENCE_BUCKET = 'evidencias';
 const MAX_EVIDENCE_BYTES = 5 * 1024 * 1024;
@@ -71,6 +74,9 @@ export function mapPersonalArrivalRow(row: RegistroPersonalRow): PersonalArrival
     justificationReason: row.motivo_justificacion,
     departureReason: row.motivo_salida,
     registeredBy: row.registrado_por,
+    registeredByName: row.registrado_por_nombre ?? null,
+    departureRegisteredBy: row.registrado_salida_por ?? null,
+    departureRegisteredByName: row.registrado_salida_por_nombre ?? null,
     justifiedByName: row.justificado_por_nombre ?? null,
     justifiedAt: row.fecha_justificacion ?? null,
     evidence: row.evidencia_ruta

@@ -182,6 +182,7 @@ export const PersonalArrivalControl = () => {
                       <TableHead>Categoría</TableHead>
                       <TableHead>Hora de entrada</TableHead>
                       <TableHead>Llegó</TableHead>
+                      <TableHead>Registró</TableHead>
                       <TableHead>Estado</TableHead>
                       <TableHead>Acciones</TableHead>
                     </TableRow>
@@ -203,6 +204,7 @@ export const PersonalArrivalControl = () => {
                           {row.record?.expectedEntry ?? row.horario?.entry ?? '—'}
                         </TableCell>
                         <TableCell className="font-mono text-sm">{row.record?.arrivalTime ?? '—'}</TableCell>
+                        <TableCell className="text-sm">{row.record?.registeredByName ?? '—'}</TableCell>
                         <TableCell>
                           <Badge variant={PERSONAL_STATUS_BADGE[row.status]}>{PERSONAL_STATUS_LABEL[row.status]}</Badge>
                         </TableCell>
