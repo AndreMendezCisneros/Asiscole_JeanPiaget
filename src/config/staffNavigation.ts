@@ -110,6 +110,12 @@ const ALL_STAFF_NAV_ITEMS: StaffNavItem[] = [
     ],
   },
   {
+    path: '/caja/personal',
+    label: 'Asistencia del personal',
+    icon: Clock,
+    roles: ['Cajero'],
+  },
+  {
     path: '/pensiones',
     label: 'Pensiones',
     icon: Wallet,

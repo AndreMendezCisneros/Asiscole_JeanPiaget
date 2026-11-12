@@ -17,10 +17,10 @@ describe('roleRoutes Cajero', () => {
 });
 
 describe('staffNavigation Cajero', () => {
-  it('solo muestra Pensiones y Administración sin Auditoría', () => {
+  it('muestra Asistencia del personal, Pensiones y Administración sin Auditoría', () => {
     const items = getStaffNavItems('Cajero');
     const labels = items.map((i) => i.label);
-    expect(labels).toEqual(['Pensiones', 'Administración']);
+    expect(labels).toEqual(['Asistencia del personal', 'Pensiones', 'Administración']);
     const admin = items.find((i) => i.label === 'Administración');
     expect(admin?.subItems?.map((s) => s.label)).toEqual(['Configuración']);
   });

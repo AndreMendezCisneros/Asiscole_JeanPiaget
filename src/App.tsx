@@ -58,8 +58,13 @@ const RRHH_ROLES = ['RRHH'] as const;
 const DIRECTOR_ADMIN = ['Director', 'Admin'] as const;
 const PENSIONES_ROLES = ['Director', 'Admin', 'Cajero'] as const;
 const SYSTEM_CONFIG_ROLES = ['Admin', 'Cajero'] as const;
+/** Caja (secretarías): marca la asistencia del personal; sin incidencias. */
+const CAJA_PERSONAL_ROLES = ['Cajero'] as const;
 
 const Login = lazyPage(() => import("./pages/Login").then(m => ({ default: m.Login })));
+const CajaPersonalScanner = lazyPage(() =>
+  import("./pages/caja/CajaPersonalScanner").then((m) => ({ default: m.CajaPersonalScanner }))
+);
 const TutorScanner = lazyPage(() => import("./pages/TutorScanner").then(m => ({ default: m.TutorScanner })));
 const ParentPortalRoute = lazyPage(() =>
   import("./components/parent/ParentPortalRoute").then((m) => ({ default: m.ParentPortalRoute }))
@@ -379,6 +384,14 @@ const AppContent = () => {
           element={
             <ProtectedRoute requiredRole={[...SYSTEM_CONFIG_ROLES]}>
               <SystemConfig />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/caja/personal"
+          element={
+            <ProtectedRoute requiredRole={[...CAJA_PERSONAL_ROLES]}>
+              <CajaPersonalScanner />
             </ProtectedRoute>
           }
         />
