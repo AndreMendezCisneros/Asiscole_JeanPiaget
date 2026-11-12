@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { CheckCircle2, Loader2, LogIn, LogOut, ScanLine, Search } from 'lucide-react';
+import { ArrowLeft, Barcode, CalendarClock, CheckCircle2, Clock, Loader2, LogOut, ScanLine, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CardContent, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
   Dialog,
   DialogContent,
@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { PageHeader } from '@/components/layout/PageHeader';
+import { GuardyMark } from '@/components/brand/GuardyMark';
 import { StudentPhoto } from '@/components/shared/StudentPhoto';
 import { JustificationEvidencePicker } from '@/components/personal/JustificationEvidence';
 import { authService } from '@/lib/services';
@@ -25,6 +25,7 @@ import { personalAttendanceService } from '@/lib/services/personalAttendanceServ
 import { MIN_JUSTIFICATION_REASON_LENGTH } from '@/lib/utils/attendanceJustification';
 import { getLimaNow } from '@/lib/utils/limaDateTime';
 import { scheduleForDate } from '@/lib/utils/personalSchedule';
+import { cn } from '@/lib/utils';
 import type { Personal, PersonalArrivalRecord } from '@/types/personal';
 
 type Phase = 'llegada' | 'salida';
@@ -49,17 +50,21 @@ function scanLabel(action: 'arrival' | 'departure', record: PersonalArrivalRecor
 
 /**
  * Caja (secretarías): marca la llegada y la salida del personal con el lector
- * o buscando por nombre, y puede autorizar una salida anticipada. No ve
- * estudiantes ni registra incidencias.
+ * o buscando por nombre, y puede autorizar una salida anticipada. Misma
+ * presentación que el escáner del tutor, sin estudiantes ni incidencias.
  */
 export const CajaPersonalScanner = () => {
+  const navigate = useNavigate();
+  const user = authService.getCurrentUser();
   const [phase, setPhase] = useState<Phase>(() => (getLimaNow().time >= '12:00' ? 'salida' : 'llegada'));
+  const [now, setNow] = useState(() => getLimaNow().time);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<Personal[]>([]);
   const [searching, setSearching] = useState(false);
   const [last, setLast] = useState<LastScan | null>(null);
+  const [count, setCount] = useState({ total: 0, onTime: 0, late: 0 });
   const [recent, setRecent] = useState<{ id: string; name: string; time: string; status: string }[]>([]);
   const [authorizing, setAuthorizing] = useState<LastScan | null>(null);
   const [reason, setReason] = useState('');
@@ -68,6 +73,11 @@ export const CajaPersonalScanner = () => {
   const codeRef = useRef<HTMLInputElement>(null);
 
   const focusCode = () => window.setTimeout(() => codeRef.current?.focus(), 0);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(getLimaNow().time), 15_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   useEffect(() => {
     const term = search.trim();
@@ -94,11 +104,10 @@ export const CajaPersonalScanner = () => {
   const register = async (staff: Personal) => {
     if (busy) return;
     setBusy(true);
-    const userId = authService.getCurrentUser()?.id;
     const result =
       phase === 'salida'
-        ? await personalAttendanceService.registerDeparture(staff, userId)
-        : await personalAttendanceService.registerArrival(staff, userId);
+        ? await personalAttendanceService.registerDeparture(staff, user?.id)
+        : await personalAttendanceService.registerArrival(staff, user?.id);
     setBusy(false);
     focusCode();
     if ('error' in result) {
@@ -118,8 +127,12 @@ export const CajaPersonalScanner = () => {
       return;
     }
     const status = scanLabel(action, record);
-    toast.success(`${staff.fullName}: ${status} (${time})`);
-    setRecent((prev) => [{ id: `${Date.now()}-${staff.id}`, name: staff.fullName, time, status }, ...prev].slice(0, 8));
+    setCount((prev) => ({
+      total: prev.total + 1,
+      onTime: prev.onTime + (action === 'arrival' && record.status === 'A tiempo' ? 1 : 0),
+      late: prev.late + (action === 'arrival' && record.status === 'Tarde' ? 1 : 0),
+    }));
+    setRecent((prev) => [{ id: `${Date.now()}-${staff.id}`, name: staff.fullName, time, status }, ...prev].slice(0, 6));
   };
 
   const submitCode = async (e: React.FormEvent) => {
@@ -130,13 +143,8 @@ export const CajaPersonalScanner = () => {
     setBusy(true);
     const { personal, error } = await personalService.getByBarcode(raw);
     setBusy(false);
-    if (error) {
-      toast.error(error);
-      focusCode();
-      return;
-    }
-    if (!personal) {
-      toast.error('Personal no encontrado');
+    if (error || !personal) {
+      toast.error(error ?? 'Personal no encontrado');
       focusCode();
       return;
     }
@@ -149,6 +157,28 @@ export const CajaPersonalScanner = () => {
     void register(staff);
   };
 
+  const clear = () => {
+    setCode('');
+    setSearch('');
+    setResults([]);
+    focusCode();
+  };
+
+  const closeProfile = () => {
+    setLast(null);
+    focusCode();
+  };
+
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+      toast.success('Sesión cerrada');
+      navigate('/login', { replace: true });
+    } catch {
+      toast.error('No se pudo cerrar la sesión');
+    }
+  };
+
   const openAuthorize = () => {
     if (!last) return;
     setReason('');
@@ -157,18 +187,17 @@ export const CajaPersonalScanner = () => {
   };
 
   const submitAuthorize = async () => {
-    const userId = authService.getCurrentUser()?.id;
-    if (!authorizing || !userId) return;
+    if (!authorizing || !user?.id) return;
     setSaving(true);
     const text = reason.trim();
-    const { success, error } = await personalAttendanceService.authorizeEarlyDeparture(authorizing.record.id, userId, text);
+    const { success, error } = await personalAttendanceService.authorizeEarlyDeparture(authorizing.record.id, user.id, text);
     if (!success) {
       setSaving(false);
       toast.error(error ?? 'No se pudo autorizar la salida');
       return;
     }
     if (file) {
-      const up = await personalAttendanceService.uploadJustificationEvidence(authorizing.record.id, file, userId, 'salida');
+      const up = await personalAttendanceService.uploadJustificationEvidence(authorizing.record.id, file, user.id, 'salida');
       if (up.error) toast.error(`Salida autorizada, pero no se pudo subir la evidencia: ${up.error}`);
     }
     setSaving(false);
@@ -182,157 +211,384 @@ export const CajaPersonalScanner = () => {
     focusCode();
   };
 
-  const horarioHoy = last ? scheduleForDate(last.personal.schedule, last.record.date) : null;
-  const lastTime = last ? (last.action === 'departure' ? last.record.departureTime : last.record.arrivalTime) : null;
+  const isSalida = phase === 'salida';
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Asistencia del personal"
-        description="Escanee el carnet o busque por nombre para registrar la llegada o la salida."
-        icon={ScanLine}
-      />
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Registrar</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <ToggleGroup
-              type="single"
-              value={phase}
-              onValueChange={(v) => {
-                if (v) setPhase(v as Phase);
-                focusCode();
-              }}
-              className="justify-start"
-              aria-label="Tipo de registro"
-            >
-              <ToggleGroupItem value="llegada" aria-label="Llegada" className="px-4">
-                <LogIn className="mr-2 h-4 w-4" />
-                Llegada
-              </ToggleGroupItem>
-              <ToggleGroupItem value="salida" aria-label="Salida" className="px-4">
-                <LogOut className="mr-2 h-4 w-4" />
-                Salida
-              </ToggleGroupItem>
-            </ToggleGroup>
-
-            <form onSubmit={(e) => void submitCode(e)} className="space-y-2">
-              <Label htmlFor="caja-codigo">Código del carnet (DNI)</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="caja-codigo"
-                  ref={codeRef}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  inputMode="numeric"
-                  autoComplete="off"
-                  autoFocus
-                  placeholder="Escanee el carnet"
-                  disabled={busy}
-                />
-                <Button type="submit" disabled={busy || !code.trim()}>
-                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Registrar'}
-                </Button>
-              </div>
-            </form>
-
-            <div className="space-y-2">
-              <Label htmlFor="caja-buscar">Buscar por nombre</Label>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="caja-buscar"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Nombre o apellido"
-                  className="pl-9"
-                  autoComplete="off"
-                />
-              </div>
-              {searching && <p className="text-xs text-muted-foreground">Buscando…</p>}
-              {!searching && search.trim().length >= 2 && results.length === 0 && (
-                <p className="text-xs text-muted-foreground">Sin resultados.</p>
-              )}
-              {results.length > 0 && (
-                <ul className="divide-y rounded-md border">
-                  {results.map((p) => (
-                    <li key={p.id}>
-                      <button
-                        type="button"
-                        className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-muted/60 disabled:opacity-50"
-                        onClick={() => pickResult(p)}
-                        disabled={busy}
-                      >
-                        <StudentPhoto src={p.profilePhoto} name={p.fullName} className="h-8 w-8 shrink-0" />
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium">{p.fullName}</span>
-                          <span className="block text-xs text-muted-foreground">{p.position ?? p.category}</span>
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+    <div className="tutor-page">
+      <header className="tutor-header">
+        <div className="tutor-header__inner">
+          <div className="tutor-header__brand">
+            <div className="tutor-header__shield p-1" aria-hidden>
+              <GuardyMark size="sm" />
             </div>
-          </CardContent>
-        </Card>
+            <div className="min-w-0">
+              <p className="tutor-header__title">Asistencia del personal</p>
+              <p className="tutor-header__subtitle hidden sm:block">SIE — Caja</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+            <Badge variant="secondary" className="text-[10px] px-2 py-0.5 shrink-0 lg:hidden">
+              {now}
+            </Badge>
+            <span className="tutor-header__user">{user?.fullName}</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => navigate('/pensiones')}
+              className="border-[var(--tutor-lead)] bg-transparent text-[var(--tutor-starlight)] hover:bg-[var(--tutor-graphite)] hover:text-[var(--tutor-starlight)]"
+            >
+              <ArrowLeft className="h-4 w-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Pensiones</span>
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void handleLogout()}
+              className="tutor-header__logout border-[var(--tutor-lead)] bg-transparent text-[var(--tutor-starlight)] hover:bg-[var(--tutor-graphite)] hover:text-[var(--tutor-starlight)]"
+            >
+              <LogOut className="h-4 w-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Salir</span>
+            </Button>
+          </div>
+        </div>
+      </header>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Último registro</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {last ? (
-              <div className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <StudentPhoto src={last.personal.profilePhoto} name={last.personal.fullName} className="h-16 w-16 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold">{last.personal.fullName}</p>
-                    <p className="text-sm text-muted-foreground">{last.personal.position ?? last.personal.category}</p>
+      <main id="main-content" className="tutor-main">
+        <div className="tutor-grid">
+          <section className="tutor-left">
+            <div className="tutor-scan-card">
+              <div className="tutor-scan-card__head">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
+                    <ScanLine className="h-5 w-5" strokeWidth={2} />
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-primary">
+                      {isSalida ? 'Registro de salida' : 'Registro de llegada'}
+                    </p>
+                    <h2 className="text-lg font-semibold tracking-[-0.02em] text-foreground sm:text-2xl">
+                      {isSalida ? 'Escanear salida del personal' : 'Escanear o buscar personal'}
+                    </h2>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Elija Llegada o Salida, luego carnet con lector o búsqueda por nombre.
+                    </p>
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={last.duplicate ? 'secondary' : 'default'}>{scanLabel(last.action, last.record)}</Badge>
-                  <span className="font-mono text-sm">{lastTime ?? '—'}</span>
-                  {last.duplicate && <span className="text-xs text-muted-foreground">(ya estaba registrado)</span>}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {horarioHoy
-                    ? `Horario de hoy: entrada ${horarioHoy.entry}${horarioHoy.exit ? ` · salida ${horarioHoy.exit}` : ''}`
-                    : 'Hoy no le toca asistir (fuera de horario).'}
-                </p>
-                {last.record.departureType === 'Anticipada' && (
-                  <Button type="button" onClick={openAuthorize}>
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                    Autorizar salida
-                  </Button>
-                )}
               </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Aún no hay registros en esta sesión.</p>
-            )}
 
-            {recent.length > 0 && (
-              <div className="mt-6 space-y-2">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Recientes</p>
-                <ul className="space-y-1 text-sm">
-                  {recent.map((r) => (
-                    <li key={r.id} className="flex justify-between gap-3">
-                      <span className="truncate">{r.name}</span>
-                      <span className="shrink-0 text-muted-foreground">
-                        {r.status} · <span className="font-mono">{r.time}</span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+              <CardContent className="p-5 sm:p-7 pt-5 sm:pt-6">
+                <form onSubmit={(e) => void submitCode(e)} className="space-y-5" aria-busy={busy}>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-foreground">Registro</Label>
+                    <div className="grid max-w-sm grid-cols-2 gap-2 rounded-xl border border-border bg-muted/20 p-1">
+                      <Button
+                        type="button"
+                        variant={phase === 'llegada' ? 'default' : 'ghost'}
+                        onClick={() => {
+                          setPhase('llegada');
+                          focusCode();
+                        }}
+                        className="w-full"
+                      >
+                        Llegada
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={phase === 'salida' ? 'default' : 'ghost'}
+                        onClick={() => {
+                          setPhase('salida');
+                          focusCode();
+                        }}
+                        className="w-full"
+                      >
+                        Salida
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {isSalida
+                        ? 'Escanee para registrar la hora de salida (debe haber llegada primero).'
+                        : 'Escanee para registrar la hora de llegada.'}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="caja-codigo" className="text-sm font-medium text-foreground">
+                      Código de barras
+                    </Label>
+                    <Input
+                      ref={codeRef}
+                      id="caja-codigo"
+                      type="text"
+                      value={code}
+                      onChange={(e) => setCode(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') clear();
+                      }}
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      autoComplete="off"
+                      autoFocus
+                      placeholder="Escanee el carnet o escriba DNI…"
+                      className="tutor-scan-input"
+                    />
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <span className="rounded-full border border-border bg-muted/20 px-2 py-1 font-mono">Enter</span>
+                      <span>Registrar</span>
+                      <span className="mx-1">·</span>
+                      <span className="rounded-full border border-border bg-muted/20 px-2 py-1 font-mono">Esc</span>
+                      <span>Limpiar</span>
+                    </div>
+                  </div>
+
+                  <div className="relative space-y-2">
+                    <Label htmlFor="caja-buscar" className="text-sm font-medium text-foreground">
+                      Buscar por nombre
+                    </Label>
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="caja-buscar"
+                        type="text"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') clear();
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (results.length === 1) pickResult(results[0]);
+                          }
+                        }}
+                        placeholder="Nombre o apellido…"
+                        autoComplete="off"
+                        enterKeyHint="search"
+                        disabled={busy}
+                        className="tutor-field-input pl-9 min-h-12 sm:min-h-10"
+                      />
+                      {searching && (
+                        <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+                      )}
+                    </div>
+                    {!searching && search.trim().length >= 2 && results.length === 0 && (
+                      <p className="text-xs text-muted-foreground">No se encontró personal activo.</p>
+                    )}
+                    {results.length > 0 && (
+                      <div
+                        role="listbox"
+                        aria-label="Personal encontrado"
+                        className="tutor-name-search-results w-full rounded-xl border border-border bg-popover shadow-xl"
+                      >
+                        {results.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            role="option"
+                            aria-selected={false}
+                            onClick={() => pickResult(p)}
+                            className="tutor-name-search-results__row flex w-full items-center gap-3 px-3 py-3.5 text-left transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none sm:px-4 sm:py-4"
+                          >
+                            <StudentPhoto
+                              src={p.profilePhoto}
+                              name={p.fullName}
+                              className="tutor-name-search-results__photo h-16 w-16 shrink-0 rounded-xl sm:h-[4.5rem] sm:w-[4.5rem]"
+                              imageClassName="object-cover object-center"
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block font-semibold text-base leading-snug text-foreground sm:text-lg">
+                                {p.fullName}
+                              </span>
+                              <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-muted-foreground">
+                                <span className="font-mono font-semibold text-foreground/90">DNI {p.barcode}</span>
+                                <span aria-hidden>·</span>
+                                <span>{p.position ?? p.category}</span>
+                              </span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
+                    <Button type="button" variant="outline" onClick={clear} disabled={busy} className="sm:min-w-[120px]">
+                      Limpiar
+                    </Button>
+                    <Button type="submit" disabled={busy || !code.trim()} className="sm:min-w-[180px]">
+                      {busy ? (
+                        <>
+                          <Clock className="h-4 w-4 animate-spin" />
+                          Registrando…
+                        </>
+                      ) : (
+                        <>
+                          <Barcode className="h-4 w-4" />
+                          {isSalida ? 'Registrar salida' : 'Registrar llegada'}
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </div>
+          </section>
+
+          <aside className="tutor-right">
+            {last && (() => {
+              const { personal: staff, record, action } = last;
+              const horarioHoy = scheduleForDate(staff.schedule, record.date);
+              const warn =
+                (action === 'arrival' && (record.status === 'Tarde' || record.status === 'Falta')) ||
+                record.departureType === 'Anticipada';
+              const timeLabel = (action === 'departure' ? record.departureTime : record.arrivalTime) ?? '—:—';
+              return (
+                <>
+                  <button
+                    type="button"
+                    className="tutor-student-backdrop lg:hidden"
+                    aria-label="Cerrar perfil del personal"
+                    onClick={closeProfile}
+                  />
+                  <div
+                    key={`p-${staff.id}`}
+                    className={cn('tutor-student-card', warn ? 'tutor-student-card--late' : 'tutor-student-card--ontime')}
+                    role="region"
+                    aria-label={`Registro de ${staff.fullName}`}
+                  >
+                    <div className="tutor-student-card__banner" aria-hidden />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="tutor-student-card__close"
+                      onClick={closeProfile}
+                    >
+                      <X className="h-5 w-5" />
+                      <span className="sr-only">Cerrar</span>
+                    </Button>
+                    <div className="tutor-student-card__scroll">
+                      <div className="tutor-student-card__hero-sticky">
+                        <div className="tutor-identity tutor-identity--sheet">
+                          <div className="tutor-identity__photo-frame">
+                            <StudentPhoto
+                              src={staff.profilePhoto}
+                              name={staff.fullName}
+                              priority="auto"
+                              className="h-full w-full rounded-2xl"
+                              imageClassName="object-cover object-[center_20%]"
+                            />
+                          </div>
+                          <div className="tutor-identity__meta">
+                            <Badge variant={warn ? 'warning' : 'success'} className="tutor-student-card__status">
+                              {scanLabel(action, record)} · {timeLabel}
+                            </Badge>
+                            <h3 className="tutor-identity__name">{staff.fullName}</h3>
+                            <p className="tutor-identity__grade">Personal · {staff.position ?? staff.category}</p>
+                            <p className="tutor-identity__dni font-mono">{staff.barcode}</p>
+                            {last.duplicate && (
+                              <p className="text-xs text-muted-foreground">Ya estaba registrado hoy.</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="tutor-schedule" aria-label="Horario de hoy">
+                        <div className="tutor-schedule__head">
+                          <CalendarClock className="h-4 w-4 shrink-0" aria-hidden />
+                          <span className="font-semibold text-sm">Horario de hoy</span>
+                        </div>
+                        <p className="text-sm">
+                          {horarioHoy
+                            ? `Entrada ${horarioHoy.entry}${horarioHoy.exit ? ` · Salida ${horarioHoy.exit}` : ''}`
+                            : 'Hoy no le toca asistir (fuera de horario).'}
+                        </p>
+                      </div>
+                      <div className="tutor-student-card__actions">
+                        {record.departureType === 'Anticipada' && (
+                          <Button type="button" variant="default" size="lg" onClick={openAuthorize}>
+                            <CheckCircle2 className="mr-2 h-4 w-4" />
+                            Autorizar salida
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="lg"
+                          onClick={closeProfile}
+                          className="tutor-student-card__btn-next"
+                        >
+                          Siguiente
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+
+            <div className="tutor-side-stack hidden lg:block">
+              <div className="tutor-side-card">
+                <div className="tutor-side-card__head">
+                  <CardTitle className="text-base font-semibold">Estado del turno</CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">Hora local Lima y conteo de registros en esta sesión.</p>
+                </div>
+                <div className="tutor-meta">
+                  <div className="tutor-meta__item">
+                    <p className="tutor-meta__k">Hora actual</p>
+                    <p className="tutor-meta__v">{now}</p>
+                  </div>
+                  <div className="tutor-meta__item">
+                    <p className="tutor-meta__k">Modo</p>
+                    <p className="tutor-meta__v">{isSalida ? 'Salida' : 'Llegada'}</p>
+                  </div>
+                </div>
+                <div className="tutor-kpis">
+                  <div className="tutor-kpi">
+                    <p className="tutor-kpi__value">{count.total}</p>
+                    <p className="tutor-kpi__label">Total</p>
+                  </div>
+                  <div className="tutor-kpi">
+                    <p className="tutor-kpi__value">{count.onTime}</p>
+                    <p className="tutor-kpi__label">A tiempo</p>
+                  </div>
+                  <div className="tutor-kpi">
+                    <p className="tutor-kpi__value">{count.late}</p>
+                    <p className="tutor-kpi__label">Tarde</p>
+                  </div>
+                </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+
+              <div className="tutor-side-card">
+                <div className="tutor-side-card__head">
+                  <CardTitle className="text-base font-semibold">Últimos escaneos</CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">Historial rápido (máx. 6).</p>
+                </div>
+                <div className="tutor-feed">
+                  {recent.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Aún no hay registros en esta sesión. Escanee el primer carnet para empezar.
+                    </p>
+                  ) : (
+                    recent.map((row) => (
+                      <div key={row.id} className="tutor-feed__row">
+                        <span className="tutor-feed__name">{row.name}</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="tutor-feed__time">{row.time}</span>
+                          <Badge
+                            variant={row.status === 'A tiempo' ? 'success' : row.status === 'Tarde' ? 'warning' : 'secondary'}
+                          >
+                            {row.status}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </main>
 
       <Dialog
         open={authorizing !== null}
