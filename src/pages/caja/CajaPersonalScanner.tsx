@@ -1,42 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Barcode, CalendarClock, CheckCircle2, Clock, Loader2, ScanLine, Search, X } from 'lucide-react';
+import { Barcode, CalendarClock, Clock, Loader2, ScanLine, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CardContent, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { StudentPhoto } from '@/components/shared/StudentPhoto';
-import { JustificationEvidencePicker } from '@/components/personal/JustificationEvidence';
 import { authService } from '@/lib/services';
 import { personalService } from '@/lib/services/personalService';
 import { personalAttendanceService } from '@/lib/services/personalAttendanceService';
-import { personalTallerService } from '@/lib/services/personalTallerService';
-import { isTalleresEnabled } from '@/config/features';
-import { MIN_JUSTIFICATION_REASON_LENGTH } from '@/lib/utils/attendanceJustification';
 import { getLimaNow } from '@/lib/utils/limaDateTime';
 import { scheduleForDate } from '@/lib/utils/personalSchedule';
 import { cn } from '@/lib/utils';
-import type { Personal, PersonalArrivalRecord, PersonalTallerRecord } from '@/types/personal';
+import type { Personal, PersonalArrivalRecord } from '@/types/personal';
 
 type Phase = 'llegada' | 'salida';
-type Mode = 'clase' | 'taller';
 
-type ScanBase = { personal: Personal; action: 'arrival' | 'departure'; duplicate: boolean };
-type LastScan =
-  | (ScanBase & { kind: 'clase'; record: PersonalArrivalRecord })
-  | (ScanBase & { kind: 'taller'; record: PersonalTallerRecord });
-
-type AuthorizeTarget = { personal: Personal; record: PersonalArrivalRecord };
+type LastScan = {
+  personal: Personal;
+  action: 'arrival' | 'departure';
+  duplicate: boolean;
+  record: PersonalArrivalRecord;
+};
 
 /** Texto del registro de un empleado (mismo criterio que el escáner del tutor). */
 function scanLabel(action: 'arrival' | 'departure', record: PersonalArrivalRecord): string {
@@ -51,15 +37,10 @@ function scanLabel(action: 'arrival' | 'departure', record: PersonalArrivalRecor
 
 /**
  * Caja (secretarías): marca la llegada y la salida del personal con el lector
- * o buscando por nombre, la entrada y salida de taller, y puede autorizar una
- * salida anticipada. Usa la
- * presentación del escáner del tutor dentro del menú lateral, sin estudiantes
- * ni incidencias.
+ * o buscando por nombre. Sin talleres ni autorización de salida anticipada.
  */
 export const CajaPersonalScanner = () => {
   const user = authService.getCurrentUser();
-  const talleresEnabled = isTalleresEnabled();
-  const [mode, setMode] = useState<Mode>('clase');
   const [phase, setPhase] = useState<Phase>(() => (getLimaNow().time >= '12:00' ? 'salida' : 'llegada'));
   const [now, setNow] = useState(() => getLimaNow().time);
   const [code, setCode] = useState('');
@@ -70,10 +51,6 @@ export const CajaPersonalScanner = () => {
   const [last, setLast] = useState<LastScan | null>(null);
   const [count, setCount] = useState({ total: 0, onTime: 0, late: 0 });
   const [recent, setRecent] = useState<{ id: string; name: string; time: string; status: string }[]>([]);
-  const [authorizing, setAuthorizing] = useState<AuthorizeTarget | null>(null);
-  const [reason, setReason] = useState('');
-  const [file, setFile] = useState<File | null>(null);
-  const [saving, setSaving] = useState(false);
   const codeRef = useRef<HTMLInputElement>(null);
 
   const focusCode = () => window.setTimeout(() => codeRef.current?.focus(), 0);
@@ -108,33 +85,6 @@ export const CajaPersonalScanner = () => {
   const register = async (staff: Personal) => {
     if (busy) return;
     setBusy(true);
-    if (mode === 'taller') {
-      const taller =
-        phase === 'salida'
-          ? await personalTallerService.registerDeparture(staff, user?.id)
-          : await personalTallerService.registerArrival(staff, user?.id);
-      setBusy(false);
-      focusCode();
-      if ('error' in taller) {
-        toast.error(taller.error, { duration: 4000 });
-        return;
-      }
-      const { record, action, duplicate } = taller;
-      setLast({ personal: staff, record, action, duplicate, kind: 'taller' });
-      const time = (action === 'departure' ? record.departureTime : record.arrivalTime) ?? getLimaNow().time;
-      if (duplicate) {
-        toast.info(`${staff.fullName} ya está en el taller desde las ${time}. Para salida, elija Salida.`, { duration: 3000 });
-        return;
-      }
-      const status = action === 'departure' ? 'Salió del taller' : 'Entró al taller';
-      setCount((prev) => ({
-        total: prev.total + 1,
-        onTime: prev.onTime + (action === 'arrival' ? 1 : 0),
-        late: prev.late + (action === 'departure' ? 1 : 0),
-      }));
-      setRecent((prev) => [{ id: `${Date.now()}-${staff.id}`, name: staff.fullName, time, status }, ...prev].slice(0, 6));
-      return;
-    }
     const result =
       phase === 'salida'
         ? await personalAttendanceService.registerDeparture(staff, user?.id)
@@ -146,10 +96,10 @@ export const CajaPersonalScanner = () => {
       return;
     }
     const { record, action, duplicate } = result;
-    setLast({ personal: staff, record, action, duplicate, kind: 'clase' });
+    setLast({ personal: staff, record, action, duplicate });
     const time = (action === 'departure' ? record.departureTime : record.arrivalTime) ?? getLimaNow().time;
     if (action === 'arrival' && !duplicate && record.status === 'Falta') {
-      toast.warning('Pasó su hora de salida. Si viene al taller, márquelo en modo Talleres.', { duration: 5000 });
+      toast.warning('Pasó su hora de salida; quedó como inasistencia.', { duration: 5000 });
     }
     if (duplicate) {
       toast.info(
@@ -203,39 +153,7 @@ export const CajaPersonalScanner = () => {
     focusCode();
   };
 
-  const openAuthorize = () => {
-    if (!last || last.kind !== 'clase') return;
-    setReason('');
-    setFile(null);
-    setAuthorizing({ personal: last.personal, record: last.record });
-  };
-
-  const submitAuthorize = async () => {
-    if (!authorizing || !user?.id) return;
-    setSaving(true);
-    const text = reason.trim();
-    const { success, error } = await personalAttendanceService.authorizeEarlyDeparture(authorizing.record.id, user.id, text);
-    if (!success) {
-      setSaving(false);
-      toast.error(error ?? 'No se pudo autorizar la salida');
-      return;
-    }
-    if (file) {
-      const up = await personalAttendanceService.uploadJustificationEvidence(authorizing.record.id, file, user.id, 'salida');
-      if (up.error) toast.error(`Salida autorizada, pero no se pudo subir la evidencia: ${up.error}`);
-    }
-    setSaving(false);
-    toast.success(`Salida de ${authorizing.personal.fullName} autorizada`);
-    setLast((prev) => {
-      if (!prev || prev.kind !== 'clase' || prev.record.id !== authorizing.record.id) return prev;
-      return { ...prev, record: { ...prev.record, departureType: 'Autorizada', departureReason: text } };
-    });
-    setAuthorizing(null);
-    focusCode();
-  };
-
   const isSalida = phase === 'salida';
-  const isTaller = mode === 'taller';
 
   return (
     <div className="tutor-page tutor-page--embedded">
@@ -251,16 +169,10 @@ export const CajaPersonalScanner = () => {
                   </div>
                   <div className="min-w-0 space-y-1">
                     <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-primary">
-                      {isTaller ? 'Registro de talleres' : isSalida ? 'Registro de salida' : 'Registro de llegada'}
+                      {isSalida ? 'Registro de salida' : 'Registro de llegada'}
                     </p>
                     <h2 className="text-lg font-semibold tracking-[-0.02em] text-foreground sm:text-2xl">
-                      {isTaller
-                        ? isSalida
-                          ? 'Escanear salida de taller'
-                          : 'Escanear llegada a taller'
-                        : isSalida
-                          ? 'Escanear salida del personal'
-                          : 'Escanear o buscar personal'}
+                      {isSalida ? 'Escanear salida del personal' : 'Escanear o buscar personal'}
                     </h2>
                     <p className="text-sm text-muted-foreground leading-relaxed">
                       Elija Llegada o Salida, luego carnet con lector o búsqueda por nombre.
@@ -271,39 +183,8 @@ export const CajaPersonalScanner = () => {
 
               <CardContent className="p-5 sm:p-7 pt-5 sm:pt-6">
                 <form onSubmit={(e) => void submitCode(e)} className="space-y-5" aria-busy={busy}>
-                  {talleresEnabled && (
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium text-foreground">Modo</Label>
-                      <div className="grid max-w-sm grid-cols-2 gap-2 rounded-xl border border-border bg-muted/20 p-1">
-                        <Button
-                          type="button"
-                          variant={mode === 'clase' ? 'default' : 'ghost'}
-                          onClick={() => {
-                            setMode('clase');
-                            focusCode();
-                          }}
-                          className="w-full"
-                        >
-                          Clase
-                        </Button>
-                        <Button
-                          type="button"
-                          variant={mode === 'taller' ? 'default' : 'ghost'}
-                          onClick={() => {
-                            setMode('taller');
-                            focusCode();
-                          }}
-                          className="w-full"
-                        >
-                          Talleres
-                        </Button>
-                      </div>
-                    </div>
-                  )}
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium text-foreground">
-                      {isTaller ? 'Registro de taller' : 'Registro de clase'}
-                    </Label>
+                    <Label className="text-sm font-medium text-foreground">Registro de clase</Label>
                     <div className="grid max-w-sm grid-cols-2 gap-2 rounded-xl border border-border bg-muted/20 p-1">
                       <Button
                         type="button"
@@ -329,13 +210,9 @@ export const CajaPersonalScanner = () => {
                       </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {isTaller
-                        ? isSalida
-                          ? 'Escanee para registrar la hora de salida del taller (debe haber llegada primero).'
-                          : 'Escanee para registrar la hora de llegada al taller. Si marcó clase, primero debe marcar su salida de clase.'
-                        : isSalida
-                          ? 'Escanee para registrar la hora de salida (debe haber llegada primero).'
-                          : 'Escanee para registrar la hora de llegada.'}
+                      {isSalida
+                        ? 'Escanee para registrar la hora de salida (debe haber llegada primero).'
+                        : 'Escanee para registrar la hora de llegada.'}
                     </p>
                   </div>
 
@@ -451,7 +328,6 @@ export const CajaPersonalScanner = () => {
                         <>
                           <Barcode className="h-4 w-4" />
                           {isSalida ? 'Registrar salida' : 'Registrar llegada'}
-                          {isTaller ? ' de taller' : ''}
                         </>
                       )}
                     </Button>
@@ -463,18 +339,13 @@ export const CajaPersonalScanner = () => {
 
           <aside className="tutor-right">
             {last && (() => {
-              const { personal: staff, action } = last;
-              const horarioHoy = scheduleForDate(staff.schedule, last.record.date);
-              const classRecord = last.kind === 'clase' ? last.record : null;
+              const { personal: staff, action, record } = last;
+              const horarioHoy = scheduleForDate(staff.schedule, record.date);
               const warn =
-                (action === 'arrival' && (classRecord?.status === 'Tarde' || classRecord?.status === 'Falta')) ||
-                classRecord?.departureType === 'Anticipada';
-              const statusLabel = classRecord
-                ? scanLabel(action, classRecord)
-                : action === 'departure'
-                  ? 'Salió del taller'
-                  : 'Entró al taller';
-              const timeLabel = (action === 'departure' ? last.record.departureTime : last.record.arrivalTime) ?? '—:—';
+                (action === 'arrival' && (record.status === 'Tarde' || record.status === 'Falta')) ||
+                record.departureType === 'Anticipada';
+              const statusLabel = scanLabel(action, record);
+              const timeLabel = (action === 'departure' ? record.departureTime : record.arrivalTime) ?? '—:—';
               return (
                 <>
                   <div
@@ -531,12 +402,6 @@ export const CajaPersonalScanner = () => {
                         </p>
                       </div>
                       <div className="tutor-student-card__actions">
-                        {classRecord?.departureType === 'Anticipada' && (
-                          <Button type="button" variant="default" size="lg" onClick={openAuthorize}>
-                            <CheckCircle2 className="mr-2 h-4 w-4" />
-                            Autorizar salida
-                          </Button>
-                        )}
                         <Button
                           type="button"
                           variant="outline"
@@ -566,10 +431,7 @@ export const CajaPersonalScanner = () => {
                   </div>
                   <div className="tutor-meta__item">
                     <p className="tutor-meta__k">Modo</p>
-                    <p className="tutor-meta__v">
-                      {isTaller ? 'Taller · ' : ''}
-                      {isSalida ? 'Salida' : 'Llegada'}
-                    </p>
+                    <p className="tutor-meta__v">{isSalida ? 'Salida' : 'Llegada'}</p>
                   </div>
                 </div>
                 <div className="tutor-kpis">
@@ -579,11 +441,11 @@ export const CajaPersonalScanner = () => {
                   </div>
                   <div className="tutor-kpi">
                     <p className="tutor-kpi__value">{count.onTime}</p>
-                    <p className="tutor-kpi__label">{isTaller ? 'Llegadas' : 'A tiempo'}</p>
+                    <p className="tutor-kpi__label">A tiempo</p>
                   </div>
                   <div className="tutor-kpi">
                     <p className="tutor-kpi__value">{count.late}</p>
-                    <p className="tutor-kpi__label">{isTaller ? 'Salidas' : 'Tarde'}</p>
+                    <p className="tutor-kpi__label">Tarde</p>
                   </div>
                 </div>
               </div>
@@ -619,53 +481,6 @@ export const CajaPersonalScanner = () => {
           </aside>
         </div>
       </div>
-
-      <Dialog
-        open={authorizing !== null}
-        onOpenChange={(open) => {
-          if (!open && !saving) {
-            setAuthorizing(null);
-            focusCode();
-          }
-        }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Autorizar salida del personal</DialogTitle>
-            <DialogDescription>
-              {authorizing
-                ? `${authorizing.personal.fullName} salió a las ${authorizing.record.departureTime ?? '—'}, antes de su hora de salida. Quedará como salida autorizada.`
-                : ''}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="caja-auth-salida">Motivo</Label>
-            <Textarea
-              id="caja-auth-salida"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Ej.: cita médica, permiso de Dirección…"
-              rows={3}
-              autoFocus
-            />
-            <p className="text-xs text-muted-foreground">Mínimo {MIN_JUSTIFICATION_REASON_LENGTH} caracteres.</p>
-          </div>
-          <JustificationEvidencePicker file={file} onChange={setFile} disabled={saving} />
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setAuthorizing(null)} disabled={saving}>
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              disabled={saving || reason.trim().length < MIN_JUSTIFICATION_REASON_LENGTH}
-              onClick={() => void submitAuthorize()}
-            >
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Autorizar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

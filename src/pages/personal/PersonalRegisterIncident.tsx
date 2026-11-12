@@ -8,7 +8,7 @@ export const PersonalRegisterIncident = () => (
       icon={FilePlus2}
       eyebrow="Personal"
       title="Registrar Incidencia del Personal"
-      description="Busque al empleado, elija la falta del catálogo y agregue una observación"
+      description="Busque al empleado, elija la falta del catálogo y agregue observación o evidencia"
       accent="accent"
     />
     <PersonalIncidentForm />

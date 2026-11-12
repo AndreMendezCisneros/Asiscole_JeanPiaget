@@ -1,8 +1,16 @@
 import { supabase } from '../supabaseClient';
 import { getLimaDayRangeISO } from '@/lib/utils/limaDateTime';
 import { MIN_JUSTIFICATION_REASON_LENGTH } from '@/lib/utils/attendanceJustification';
-import type { EstadoIncidencia } from '@/types';
+import { compressImageForUpload } from '@/lib/utils/compressImage';
+import {
+  prefetchEvidencePhotoUrls,
+  resolveEvidencePhotoUrl,
+} from '@/lib/utils/evidencePhoto';
+import type { EstadoIncidencia, IncidentEvidence } from '@/types';
 import type { PersonalCategoria } from '@/types/personal';
+
+const EVIDENCE_BUCKET = 'evidencias';
+const MAX_EVIDENCE_BYTES = 5 * 1024 * 1024;
 
 export interface PersonalIncident {
   id: number;
@@ -117,15 +125,95 @@ export const personalIncidentsService = {
     faultId: number;
     userId: number;
     observations?: string;
-  }): Promise<{ error: string | null }> {
-    // Sin .select(): Admin y Tutor pueden registrar, pero no leer incidencias del personal.
-    const { error } = await supabase.from('incidencias_personal').insert({
-      id_personal: input.personalId,
-      id_falta: input.faultId,
-      id_usuario_registro: input.userId,
-      observaciones: input.observations?.trim() || null,
+  }): Promise<{ id: number | null; error: string | null }> {
+    const { data, error } = await supabase.rpc('sie_incidencia_personal_crear', {
+      p_id_personal: input.personalId,
+      p_id_falta: input.faultId,
+      p_id_usuario_registro: input.userId,
+      p_observaciones: input.observations?.trim() || null,
     });
-    return { error: error?.message ?? null };
+    if (error) return { id: null, error: error.message };
+    const payload = (typeof data === 'string' ? JSON.parse(data) : data) as { id_incidencia?: number } | null;
+    const id = Number(payload?.id_incidencia);
+    if (!Number.isFinite(id) || id <= 0) return { id: null, error: 'No se obtuvo el número de la incidencia' };
+    return { id, error: null };
+  },
+
+  async listEvidences(incidentId: number): Promise<{ evidences: IncidentEvidence[]; error: string | null }> {
+    const { data, error } = await supabase
+      .from('evidencias_fotograficas_personal')
+      .select('id_evidencia, id_incidencia, ruta_archivo, nombre_original, id_usuario_subida, fecha_subida')
+      .eq('id_incidencia', incidentId)
+      .order('fecha_subida', { ascending: true });
+    if (error) return { evidences: [], error: error.message };
+    const rows = data ?? [];
+    await prefetchEvidencePhotoUrls(rows.map((ev) => ev.ruta_archivo));
+    const evidences: IncidentEvidence[] = await Promise.all(
+      rows.map(async (ev) => ({
+        id: ev.id_evidencia,
+        incidentId: ev.id_incidencia,
+        filename: ev.nombre_original,
+        url: await resolveEvidencePhotoUrl(ev.ruta_archivo),
+        uploadedBy: ev.id_usuario_subida ?? 0,
+        uploadedAt: ev.fecha_subida,
+      })),
+    );
+    return { evidences, error: null };
+  },
+
+  async uploadEvidence(
+    incidentId: number,
+    file: File,
+    userId: number,
+  ): Promise<{ evidence: IncidentEvidence | null; error: string | null }> {
+    const uploadFile = await compressImageForUpload(file);
+    const ext = (uploadFile.name.split('.').pop() || '').toLowerCase();
+    const mime =
+      uploadFile.type === 'image/jpg' || (ext === 'jpg' && uploadFile.type === '')
+        ? 'image/jpeg'
+        : uploadFile.type;
+    if (!mime.match(/^image\/(jpeg|png)$/)) {
+      return { evidence: null, error: 'Solo se permiten archivos JPG o PNG' };
+    }
+    if (uploadFile.size > MAX_EVIDENCE_BYTES) {
+      return { evidence: null, error: 'El archivo no puede superar los 5MB' };
+    }
+    const fileExt = ext === 'png' ? 'png' : 'jpg';
+    const fileName = `${incidentId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${fileExt}`;
+    const filePath = `personal-incidencias/${incidentId}/${fileName}`;
+    const { error: uploadError } = await supabase.storage.from(EVIDENCE_BUCKET).upload(filePath, uploadFile, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: mime,
+    });
+    if (uploadError) return { evidence: null, error: 'Error al subir el archivo' };
+
+    const { data: urlData } = supabase.storage.from(EVIDENCE_BUCKET).getPublicUrl(filePath);
+    const { data, error } = await supabase.rpc('sie_insertar_evidencia_personal', {
+      p_id_incidencia: incidentId,
+      p_ruta_archivo: filePath,
+      p_nombre_original: file.name,
+      p_nombre_archivo: fileName,
+      p_tamano_bytes: uploadFile.size,
+      p_tipo_mime: mime,
+      p_id_usuario_subida: userId,
+    });
+    if (error || data == null) {
+      await supabase.storage.from(EVIDENCE_BUCKET).remove([filePath]);
+      return { evidence: null, error: error?.message || 'No se pudo registrar la evidencia' };
+    }
+    const row = data as Record<string, unknown>;
+    return {
+      evidence: {
+        id: Number(row.id_evidencia),
+        incidentId: Number(row.id_incidencia ?? incidentId),
+        filename: String(row.nombre_original ?? file.name),
+        url: urlData.publicUrl,
+        uploadedBy: Number(row.id_usuario_subida ?? userId),
+        uploadedAt: String(row.fecha_subida ?? new Date().toISOString()),
+      },
+      error: null,
+    };
   },
 
   /** Justifica (o anula) una incidencia activa con su motivo. */

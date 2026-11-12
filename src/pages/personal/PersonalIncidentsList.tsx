@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { AlertTriangle, CheckCircle2, FileSpreadsheet, FileText, Loader2, RefreshCw, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, FileSpreadsheet, FileText, Loader2, Printer, RefreshCw, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -37,7 +37,7 @@ import { MIN_JUSTIFICATION_REASON_LENGTH } from '@/lib/utils/attendanceJustifica
 import { monthStartOf } from '@/lib/utils/personalAttendanceRows';
 import { formatLimaDateTime, formatLimaLongDateTime } from '@/lib/utils/personalReportStats';
 import { addDataSheet, createWorkbook, runExcelExport, saveWorkbook } from '@/lib/utils/excelExport';
-import type { EstadoIncidencia } from '@/types';
+import type { EstadoIncidencia, IncidentEvidence } from '@/types';
 
 const STATUS_BADGE: Record<EstadoIncidencia, 'destructive' | 'info' | 'secondary' | 'warning'> = {
   Activa: 'destructive',
@@ -65,6 +65,9 @@ export const PersonalIncidentsList = () => {
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [detail, setDetail] = useState<PersonalIncident | null>(null);
+  const [detailEvidences, setDetailEvidences] = useState<IncidentEvidence[]>([]);
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const [printingId, setPrintingId] = useState<number | null>(null);
 
   const load = useCallback(
     async (silent = false) => {
@@ -81,6 +84,45 @@ export const PersonalIncidentsList = () => {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!detail) {
+      setDetailEvidences([]);
+      return;
+    }
+    let cancelled = false;
+    setEvidenceLoading(true);
+    void personalIncidentsService.listEvidences(detail.id).then(({ evidences, error }) => {
+      if (cancelled) return;
+      if (error) toast.error('No se pudieron cargar las fotos de evidencia');
+      setDetailEvidences(evidences);
+      setEvidenceLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [detail]);
+
+  const handlePrintPdf = async (incident: PersonalIncident) => {
+    setPrintingId(incident.id);
+    try {
+      toast.loading('Generando PDF con evidencias…', { id: 'personal-incident-pdf' });
+      let evidences = detail?.id === incident.id && !evidenceLoading ? detailEvidences : [];
+      if (detail?.id !== incident.id || evidenceLoading) {
+        const result = await personalIncidentsService.listEvidences(incident.id);
+        if (result.error) toast.warning('Algunas fotos podrían no incluirse en el PDF', { id: 'personal-incident-pdf' });
+        evidences = result.evidences;
+      }
+      const { exportPersonalIncidentPdf } = await import('@/lib/utils/exportPersonalIncidentPdf');
+      await exportPersonalIncidentPdf(incident, evidences);
+      toast.success('PDF descargado correctamente', { id: 'personal-incident-pdf' });
+    } catch (err) {
+      console.error(err);
+      toast.error('No se pudo generar el PDF', { id: 'personal-incident-pdf' });
+    } finally {
+      setPrintingId(null);
+    }
+  };
 
   // Filtro por persona y búsqueda (sin el de estado): base de los cuadros de arriba.
   const byPerson = useMemo(() => {
@@ -276,30 +318,46 @@ export const PersonalIncidentsList = () => {
                         </TableCell>
                         <TableCell className="text-sm">{i.registeredByName ?? '—'}</TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
-                          {i.status === 'Activa' && (
-                            <div className="flex gap-1">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setTarget({ incident: i, action: 'Justificada' });
-                                  setReason('');
-                                }}
-                              >
-                                Justificar
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setTarget({ incident: i, action: 'Anulada' });
-                                  setReason('');
-                                }}
-                              >
-                                Anular
-                              </Button>
-                            </div>
-                          )}
+                          <div className="flex flex-wrap gap-1">
+                            {i.status === 'Activa' && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setTarget({ incident: i, action: 'Justificada' });
+                                    setReason('');
+                                  }}
+                                >
+                                  Justificar
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setTarget({ incident: i, action: 'Anulada' });
+                                    setReason('');
+                                  }}
+                                >
+                                  Anular
+                                </Button>
+                              </>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => void handlePrintPdf(i)}
+                              disabled={printingId === i.id}
+                              title="Descargar PDF con evidencias"
+                              aria-label={`Descargar PDF incidencia ${i.id}`}
+                            >
+                              {printingId === i.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Printer className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -352,10 +410,10 @@ export const PersonalIncidentsList = () => {
       </Dialog>
 
       <Dialog open={detail !== null} onOpenChange={(open) => !open && setDetail(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Detalle de incidencia</DialogTitle>
-            <DialogDescription>{detail ? formatLimaDateTime(detail.registeredAt) : ''}</DialogDescription>
+            <DialogDescription>Información completa y fotos de evidencia adjuntas</DialogDescription>
           </DialogHeader>
           {detail && (
             <dl className="grid grid-cols-[8rem_1fr] gap-x-3 gap-y-2 text-sm">
@@ -391,6 +449,39 @@ export const PersonalIncidentsList = () => {
               <p>
                 Fecha: <span className="font-semibold">{formatLimaLongDateTime(detail.registeredAt)}</span>
               </p>
+            </div>
+          )}
+          {detail && (
+            <div className="space-y-2 border-t pt-3">
+              <p className="text-sm font-medium">Evidencia fotográfica</p>
+              {evidenceLoading ? (
+                <p className="text-sm text-muted-foreground">Cargando fotos…</p>
+              ) : detailEvidences.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Sin evidencia</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {detailEvidences.map((ev) => (
+                    <a key={ev.id} href={ev.url} target="_blank" rel="noreferrer" className="block">
+                      <img src={ev.url} alt={ev.filename} className="h-28 w-full rounded-md border object-cover" />
+                    </a>
+                  ))}
+                </div>
+              )}
+              <DialogFooter className="pt-2">
+                <Button type="button" onClick={() => void handlePrintPdf(detail)} disabled={printingId === detail.id}>
+                  {printingId === detail.id ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Generando PDF…
+                    </>
+                  ) : (
+                    <>
+                      <Printer className="mr-2 h-4 w-4" />
+                      Imprimir PDF
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
             </div>
           )}
         </DialogContent>
