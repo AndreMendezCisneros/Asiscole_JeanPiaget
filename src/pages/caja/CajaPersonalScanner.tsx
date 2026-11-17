@@ -82,20 +82,17 @@ export const CajaPersonalScanner = () => {
     };
   }, [search]);
 
-  const register = async (staff: Personal) => {
+  const register = async (input: { barcode?: string; personalId?: number }) => {
     if (busy) return;
     setBusy(true);
-    const result =
-      phase === 'salida'
-        ? await personalAttendanceService.registerDeparture(staff, user?.id)
-        : await personalAttendanceService.registerArrival(staff, user?.id);
+    const result = await personalAttendanceService.scanRegister({ ...input, phase });
     setBusy(false);
     focusCode();
-    if ('error' in result) {
+    if (!result.ok) {
       toast.error(result.error, { duration: 4000 });
       return;
     }
-    const { record, action, duplicate } = result;
+    const { personal: staff, record, action, duplicate } = result;
     setLast({ personal: staff, record, action, duplicate });
     const time = (action === 'departure' ? record.departureTime : record.arrivalTime) ?? getLimaNow().time;
     if (action === 'arrival' && !duplicate && record.status === 'Falta') {
@@ -124,21 +121,13 @@ export const CajaPersonalScanner = () => {
     const raw = code.replace(/\r?\n/g, '').trim();
     setCode('');
     if (!raw) return;
-    setBusy(true);
-    const { personal, error } = await personalService.getByBarcode(raw);
-    setBusy(false);
-    if (error || !personal) {
-      toast.error(error ?? 'Personal no encontrado');
-      focusCode();
-      return;
-    }
-    await register(personal);
+    await register({ barcode: raw });
   };
 
   const pickResult = (staff: Personal) => {
     setSearch('');
     setResults([]);
-    void register(staff);
+    void register({ personalId: staff.id });
   };
 
   const clear = () => {

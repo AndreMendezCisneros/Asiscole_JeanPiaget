@@ -7,10 +7,12 @@ import {
 } from '@/lib/utils/personalSchedule';
 import { MIN_JUSTIFICATION_REASON_LENGTH } from '@/lib/utils/attendanceJustification';
 import { compressImageForUpload } from '@/lib/utils/compressImage';
+import { mapPersonalRow } from './personalService';
 import type {
   Personal,
   PersonalArrivalEstado,
   PersonalArrivalRecord,
+  PersonalDB,
   PersonalDepartureType,
 } from '@/types/personal';
 
@@ -122,7 +124,47 @@ export type PersonalScanResult =
   | { ok: true; action: 'arrival' | 'departure'; record: PersonalArrivalRecord; duplicate: boolean }
   | { ok: false; error: string };
 
+export type PersonalScanRegisterResult =
+  | { ok: true; action: 'arrival' | 'departure'; personal: Personal; record: PersonalArrivalRecord; duplicate: boolean }
+  | { ok: false; error: string };
+
 export const personalAttendanceService = {
+  /**
+   * Escaneo (Caja/Tutor): busca al empleado y marca llegada o salida en una
+   * sola llamada al servidor (función `sie_personal_marcar_escaneo`), en vez
+   * de encadenar getByBarcode + getRecordForDate + insert/update por aparte.
+   * Sin permiso de salida anticipada (eso sigue por PersonalDepartureControl).
+   */
+  async scanRegister(input: {
+    barcode?: string;
+    personalId?: number;
+    phase: 'llegada' | 'salida';
+  }): Promise<PersonalScanRegisterResult> {
+    const { data, error } = await supabase.rpc('sie_personal_marcar_escaneo', {
+      p_codigo: input.barcode ?? null,
+      p_id_personal: input.personalId ?? null,
+      p_fase: input.phase,
+    });
+    if (error) return { ok: false, error: error.message };
+    const row = data as {
+      error?: string;
+      duplicate?: boolean;
+      action?: 'arrival' | 'departure';
+      personal?: PersonalDB;
+      record?: RegistroPersonalRow;
+    };
+    if (row.error || !row.personal || !row.record) {
+      return { ok: false, error: row.error ?? 'No se pudo registrar la marca.' };
+    }
+    return {
+      ok: true,
+      action: row.action === 'departure' ? 'departure' : 'arrival',
+      personal: mapPersonalRow(row.personal),
+      record: mapPersonalArrivalRow(row.record),
+      duplicate: Boolean(row.duplicate),
+    };
+  },
+
   async getRecordForDate(
     personalId: number,
     date: string,

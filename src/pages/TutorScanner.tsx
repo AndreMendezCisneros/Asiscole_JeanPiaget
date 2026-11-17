@@ -1168,12 +1168,12 @@ export const TutorScanner = () => {
           setScanAnnouncement(`${found.fullName}, personal: ${status}, hora ${time}`);
           return;
         }
-        const result =
-          clasePhase === 'salida'
-            ? await personalAttendanceService.registerDeparture(found, user?.id)
-            : await personalAttendanceService.registerArrival(found, user?.id);
+        const result = await personalAttendanceService.scanRegister({
+          personalId: found.id,
+          phase: clasePhase,
+        });
         if (!isMountedRef.current) return;
-        if ('error' in result) {
+        if (!result.ok) {
           toast.error(result.error, { duration: 3200 });
           return;
         }
