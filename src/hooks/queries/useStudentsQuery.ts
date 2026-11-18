@@ -13,6 +13,8 @@ export interface StudentsListFilters {
   level?: EducationalLevel;
   grade?: string;
   section?: string;
+  /** true (por defecto) = matriculados; false = retirados. */
+  active?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -35,7 +37,7 @@ const EMPTY_STATS: StudentsListStatsRow = {
  */
 async function fetchStudentsStats(filters: Omit<StudentsListFilters, 'page'>): Promise<StudentsListStatsRow> {
   // Query base: IDs de estudiantes que matchean filtros
-  let base = supabase.from('estudiantes').select('id_estudiante').eq('activo', true);
+  let base = supabase.from('estudiantes').select('id_estudiante').eq('activo', filters.active ?? true);
   if (filters.level) base = base.eq('nivel_educativo', filters.level);
   if (filters.grade) {
     const { gradeFilterValues } = await import('@/lib/utils/gradeAliases');
@@ -85,7 +87,7 @@ export function useStudentsQuery(filters: StudentsListFilters = {}) {
         level: filters.level,
         grade: filters.grade,
         section: filters.section,
-        active: true,
+        active: filters.active ?? true,
         page,
         pageSize,
         withReincidence: true,
@@ -112,6 +114,7 @@ export function useStudentsQuery(filters: StudentsListFilters = {}) {
         level: filters.level,
         grade: filters.grade,
         section: filters.section,
+        active: filters.active,
       }),
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
@@ -132,7 +135,7 @@ export function useStudentsQuery(filters: StudentsListFilters = {}) {
           level: filters.level,
           grade: filters.grade,
           section: filters.section,
-          active: true,
+          active: filters.active ?? true,
           page: nextPage,
           pageSize,
           withReincidence: true,
@@ -143,7 +146,7 @@ export function useStudentsQuery(filters: StudentsListFilters = {}) {
       staleTime: 2 * 60 * 1000,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listQuery.data, page, pageSize, totalPages, filters.search, filters.level, filters.grade, filters.section]);
+  }, [listQuery.data, page, pageSize, totalPages, filters.search, filters.level, filters.grade, filters.section, filters.active]);
 
   return {
     ...listQuery,

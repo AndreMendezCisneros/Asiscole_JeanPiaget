@@ -57,6 +57,8 @@ BEGIN
     JOIN public.estudiantes e ON e.id_estudiante = r.id_estudiante
     WHERE r.estado::text = ANY (v_estados)
       AND extract(isodow FROM r.fecha) < 6
+      -- Pendientes: sin alumnos retirados (las ya justificadas se conservan como historial).
+      AND (NOT v_pending OR coalesce(e.activo, true))
       AND (v_fecha IS NULL OR r.fecha = v_fecha)
       AND (v_nivel IS NULL OR e.nivel_educativo::text = v_nivel)
       AND (v_grado IS NULL OR e.grado = v_grado)

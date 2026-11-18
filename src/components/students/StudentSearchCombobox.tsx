@@ -32,10 +32,12 @@ type Props = {
   placeholder?: string;
   variant?: 'combobox' | 'search';
   id?: string;
+  /** Incluye alumnos retirados (reportes con historial). */
+  includeRetired?: boolean;
 };
 
 function studentOptionLabel(student: Student): string {
-  return `${student.fullName} — ${student.level} · ${CLASSROOM_FIELD_LABELS.grade} ${student.grade} · ${CLASSROOM_FIELD_LABELS.section} ${student.section}`;
+  return `${student.fullName}${student.active ? '' : ' (Retirado)'} — ${student.level} · ${CLASSROOM_FIELD_LABELS.grade} ${student.grade} · ${CLASSROOM_FIELD_LABELS.section} ${student.section}`;
 }
 
 export function StudentSearchCombobox({
@@ -47,6 +49,7 @@ export function StudentSearchCombobox({
   placeholder,
   variant = 'combobox',
   id,
+  includeRetired = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -75,9 +78,14 @@ export function StudentSearchCombobox({
     let cancelled = false;
     setLoading(true);
 
-    void studentsService.searchForTutorScanner(debounced, 30).then(({ students, error }) => {
+    const retiredSearch = includeRetired
+      ? studentsService.listLite({ active: false, search: debounced, limit: 30 })
+      : Promise.resolve({ students: [] as Student[], total: 0, error: null });
+    void Promise.all([studentsService.searchForTutorScanner(debounced, 30), retiredSearch]).then(([found, retired]) => {
       if (cancelled) return;
+      const error = found.error;
       if (error) toast.error(error);
+      const students = [...found.students, ...retired.students];
       const narrowed = sortStudentsForSearch(
         students.filter((student) => studentMatchesSearchTokens(student, tokens)),
         tokens,
@@ -89,7 +97,7 @@ export function StudentSearchCombobox({
     return () => {
       cancelled = true;
     };
-  }, [debounced, tokens]);
+  }, [debounced, tokens, includeRetired]);
 
   useEffect(() => {
     if (variant !== 'search') return;

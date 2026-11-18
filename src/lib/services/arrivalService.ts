@@ -793,6 +793,41 @@ function buildArrivalRecordsMap(
 }
 
 /**
+ * Alumnos para reportes de asistencia: activos + retirados (para conservar su historial).
+ * `retiredFrom` = id → fecha de retiro (o null si no tiene). Si la consulta de retirados falla
+ * (p. ej. aún sin PATCH_ESTUDIANTE_RETIRO), el reporte sigue solo con activos.
+ */
+async function listStudentsForReport(filters: {
+  level?: EducationalLevel;
+  grade?: string;
+  section?: string;
+}): Promise<{ students: Student[]; retiredFrom: Map<number, string | null>; error: string | null }> {
+  const [active, retired] = await Promise.all([
+    studentsService.listLite({ ...filters, active: true }),
+    studentsService.listLite({ ...filters, active: false }),
+  ]);
+  const retiredFrom = new Map<number, string | null>();
+  if (active.error) return { students: [], retiredFrom, error: active.error };
+  const students = [...active.students];
+  if (!retired.error) {
+    for (const st of retired.students) {
+      retiredFrom.set(st.id, st.retiredAt ?? null);
+      students.push(st);
+    }
+  }
+  return { students, retiredFrom, error: null };
+}
+
+/**
+ * Alumno retirado: los días sin registro desde su retiro (o todos, si no hay fecha) no son faltas.
+ */
+function isRetiredDay(retiredFrom: Map<number, string | null>, studentId: number, dateKey: string): boolean {
+  if (!retiredFrom.has(studentId)) return false;
+  const from = retiredFrom.get(studentId);
+  return from == null || dateKey >= from;
+}
+
+/**
  * Obtener reporte mensual de asistencia
  */
 export async function getMonthlyAttendance(filters: {
@@ -811,9 +846,8 @@ export async function getMonthlyAttendance(filters: {
     const startStr = startDate.toISOString().split('T')[0];
     const endStr = endDate.toISOString().split('T')[0];
 
-    // Obtener estudiantes del filtro (consulta directa, sin JOIN pesado)
-    const { students: studentsList, error: studentsError } = await studentsService.listLite({
-      active: true,
+    // Obtener estudiantes del filtro (consulta directa, sin JOIN pesado); incluye retirados con historial
+    const { students: studentsList, retiredFrom, error: studentsError } = await listStudentsForReport({
       level: filters.level,
       grade: filters.grade,
       section: filters.section,
@@ -854,7 +888,12 @@ export async function getMonthlyAttendance(filters: {
 
     const recordsMap = buildArrivalRecordsMap(arrivalsData);
 
-    const rows: MonthlyAttendanceRow[] = (studentsData || []).map((student) => {
+    // Retirados: solo si tienen registros en el periodo (historial); si no, no aparecen.
+    const reportStudents = (studentsData || []).filter(
+      (st) => !retiredFrom.has(st.id_estudiante) || (recordsMap.get(studentRecordId(st.id_estudiante))?.size ?? 0) > 0,
+    );
+
+    const rows: MonthlyAttendanceRow[] = reportStudents.map((student) => {
       const dayStatusMap = recordsMap.get(studentRecordId(student.id_estudiante)) || new Map();
       const totals = emptyAttendanceTotals();
 
@@ -862,10 +901,13 @@ export async function getMonthlyAttendance(filters: {
         const day = idx + 1;
         const dateKey = `${filters.year}-${String(filters.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         const record = dayStatusMap.get(dateKey);
-        const status = resolveReportStatusForDay(dateKey, record?.estado, todayKey, {
-          hasRecord: Boolean(record),
-          arrivalTime: record?.hora_llegada,
-        });
+        const status =
+          !record && isRetiredDay(retiredFrom, student.id_estudiante, dateKey)
+            ? 'Sin_registro'
+            : resolveReportStatusForDay(dateKey, record?.estado, todayKey, {
+                hasRecord: Boolean(record),
+                arrivalTime: record?.hora_llegada,
+              });
         tallyAttendanceStatus(totals, status);
         return {
           day,
@@ -946,8 +988,7 @@ export async function getRangeAttendance(filters: {
   for (let key = startStr; key <= endStr; key = shiftDateKey(key, 1)) allDates.push(key);
   const daysInBimestre = allDates.length;
   try {
-    const { students: listed, error: studentsError } = await studentsService.listLite({
-      active: true,
+    const { students: listed, retiredFrom, error: studentsError } = await listStudentsForReport({
       level: filters.level,
       grade: filters.grade,
       section: filters.section,
@@ -989,16 +1030,24 @@ export async function getRangeAttendance(filters: {
 
     const recordsMap = buildArrivalRecordsMap(arrivalsData);
 
-    const rows: MonthlyAttendanceRow[] = (studentsData || []).map((student) => {
+    // Retirados: solo si tienen registros en el periodo (historial); si no, no aparecen.
+    const reportStudents = (studentsData || []).filter(
+      (st) => !retiredFrom.has(st.id_estudiante) || (recordsMap.get(studentRecordId(st.id_estudiante))?.size ?? 0) > 0,
+    );
+
+    const rows: MonthlyAttendanceRow[] = reportStudents.map((student) => {
       const dayStatusMap = recordsMap.get(studentRecordId(student.id_estudiante)) || new Map();
       const totals = emptyAttendanceTotals();
 
       const days = allDates.map((dateStr) => {
         const record = dayStatusMap.get(dateStr);
-        const status = resolveReportStatusForDay(dateStr, record?.estado, todayKey, {
-          hasRecord: Boolean(record),
-          arrivalTime: record?.hora_llegada,
-        });
+        const status =
+          !record && isRetiredDay(retiredFrom, student.id_estudiante, dateStr)
+            ? 'Sin_registro'
+            : resolveReportStatusForDay(dateStr, record?.estado, todayKey, {
+                hasRecord: Boolean(record),
+                arrivalTime: record?.hora_llegada,
+              });
         const day = Number(dateStr.slice(8, 10));
         tallyAttendanceStatus(totals, status);
         return {

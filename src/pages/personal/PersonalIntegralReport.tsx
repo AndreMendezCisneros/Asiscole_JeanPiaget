@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { AlertTriangle, CheckCircle2, Clock, FileDown, Loader2, Timer, UserSquare2, UserX } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, FileCheck, FileDown, Loader2, Timer, UserSquare2, UserX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -58,6 +58,7 @@ interface MonthRow {
   onTime: number;
   late: number;
   absent: number;
+  absentJustified: number;
   unauthorized: number;
   workedMin: number;
   overtimeMin: number;
@@ -173,6 +174,7 @@ export const PersonalIntegralReport = () => {
         onTime: s.onTime,
         late: s.late + s.lateJustified,
         absent: s.absent + s.noRecord,
+        absentJustified: s.absentJustified,
         unauthorized: unauthorizedDepartures(selected, recs).length,
         workedMin: computeWorkedTime(selected.id, recs, tall, today).workedMin,
         overtimeMin: computeOvertime([selected], recs, tall, today)[0].totalMin,
@@ -203,10 +205,12 @@ export const PersonalIntegralReport = () => {
       { label: 'A tiempo', value: summary.onTime, tone: 'success' },
       { label: 'Tardanzas', value: summary.late + summary.lateJustified, tone: 'warning' },
       { label: 'Faltas', value: summary.absent + summary.noRecord, tone: 'error' },
-      { label: 'H. trabajadas', value: formatMinutes(worked.workedMin), tone: 'primary' },
+      { label: 'Inasist. justificadas', value: summary.absentJustified, tone: 'primary' },
       { label: 'H. adicionales', value: formatMinutes(overtime.totalMin), tone: 'info' },
     ]);
     const kv = [
+      { label: 'Horas trabajadas', value: formatMinutes(worked.workedMin) },
+      { label: 'Días trabajados', value: String(worked.daysWorked) },
       { label: 'Días programados', value: String(summary.scheduledDays) },
       { label: 'Puntualidad', value: summary.punctuality == null ? '—' : `${summary.punctuality}%` },
       { label: 'Salidas sin autorización', value: String(unauthorized.length) },
@@ -242,9 +246,10 @@ export const PersonalIntegralReport = () => {
           { header: 'Mes', dataKey: 'mes', width: 30 },
           { header: 'A tiempo', dataKey: 'atiempo', width: 18, align: 'center' },
           { header: 'Tard.', dataKey: 'tard', width: 16, align: 'center' },
-          { header: 'Faltas', dataKey: 'faltas', width: 16, align: 'center' },
-          { header: 'Sal. sin aut.', dataKey: 'sinaut', width: 20, align: 'center' },
-          { header: 'H. trabajadas', dataKey: 'trab', width: 24, align: 'center' },
+          { header: 'Faltas', dataKey: 'faltas', width: 14, align: 'center' },
+          { header: 'F. just.', dataKey: 'fjust', width: 14, align: 'center' },
+          { header: 'Sal. sin aut.', dataKey: 'sinaut', width: 18, align: 'center' },
+          { header: 'H. trabajadas', dataKey: 'trab', width: 22, align: 'center' },
           { header: 'H. adicionales', dataKey: 'extra', width: 20, align: 'center' },
           { header: 'Incid.', dataKey: 'inc', align: 'center' },
         ],
@@ -253,6 +258,7 @@ export const PersonalIntegralReport = () => {
           atiempo: String(m.onTime),
           tard: String(m.late),
           faltas: String(m.absent),
+          fjust: String(m.absentJustified),
           sinaut: String(m.unauthorized),
           trab: formatMinutes(m.workedMin),
           extra: formatMinutes(m.overtimeMin),
@@ -469,12 +475,12 @@ export const PersonalIntegralReport = () => {
           <div className="app-kpi-grid !grid-cols-2 sm:!grid-cols-5">
             <StaffKpiStat label="A tiempo" value={summary.onTime} hint={`De ${summary.scheduledDays} días programados`} icon={CheckCircle2} tone="success" />
             <StaffKpiStat label="Tardanzas" value={summary.late + summary.lateJustified} hint={`${summary.lateJustified} justificadas`} icon={AlertTriangle} tone="warning" />
-            <StaffKpiStat label="Faltas" value={summary.absent + summary.noRecord} hint={`${summary.absentJustified} justificadas aparte`} icon={UserX} tone="accent" />
+            <StaffKpiStat label="Faltas" value={summary.absent + summary.noRecord} hint="Sin justificar" icon={UserX} tone="accent" />
             <StaffKpiStat
-              label="Horas trabajadas"
-              value={formatMinutes(worked.workedMin)}
-              hint={worked.noDepartureDays > 0 ? `${worked.noDepartureDays} días sin salida marcada` : `${worked.daysWorked} días`}
-              icon={Clock}
+              label="Inasistencias justificadas"
+              value={summary.absentJustified}
+              hint="Con motivo registrado"
+              icon={FileCheck}
               tone="primary"
             />
             <StaffKpiStat
@@ -487,8 +493,11 @@ export const PersonalIntegralReport = () => {
           </div>
 
           <StaffDataPanel>
-            <StaffDataPanelHeader title="Resumen" description="Puntualidad, salidas, tiempo no trabajado y horas adicionales" />
+            <StaffDataPanelHeader title="Resumen" description="Horas trabajadas, puntualidad, salidas, tiempo no trabajado y horas adicionales" />
             <div className="grid gap-2 p-4 pt-0 text-sm sm:grid-cols-3 sm:p-5 sm:pt-0">
+              <p>Horas trabajadas: <strong>{formatMinutes(worked.workedMin)}</strong></p>
+              <p>Días trabajados: <strong>{worked.daysWorked}</strong></p>
+              <p>Días sin salida marcada: <strong>{worked.noDepartureDays}</strong></p>
               <p>Días programados: <strong>{summary.scheduledDays}</strong></p>
               <p>Puntualidad: <strong>{summary.punctuality == null ? '—' : `${summary.punctuality}%`}</strong></p>
               <p>Salidas sin autorización: <strong>{unauthorized.length}</strong></p>
@@ -523,6 +532,7 @@ export const PersonalIntegralReport = () => {
                         <TableHead className="text-center">A tiempo</TableHead>
                         <TableHead className="text-center">Tardanzas</TableHead>
                         <TableHead className="text-center">Faltas</TableHead>
+                        <TableHead className="text-center">F. justificadas</TableHead>
                         <TableHead className="text-center">Sal. sin aut.</TableHead>
                         <TableHead className="text-center">H. trabajadas</TableHead>
                         <TableHead className="text-center">H. adicionales</TableHead>
@@ -536,6 +546,7 @@ export const PersonalIntegralReport = () => {
                           <TableCell className="text-center">{m.onTime}</TableCell>
                           <TableCell className="text-center">{m.late}</TableCell>
                           <TableCell className="text-center">{m.absent}</TableCell>
+                          <TableCell className="text-center">{m.absentJustified}</TableCell>
                           <TableCell className="text-center">{m.unauthorized}</TableCell>
                           <TableCell className="text-center font-mono">{formatMinutes(m.workedMin)}</TableCell>
                           <TableCell className="text-center font-mono">{formatMinutes(m.overtimeMin)}</TableCell>

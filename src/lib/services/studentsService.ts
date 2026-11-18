@@ -47,6 +47,26 @@ function mapRpcStudent(raw: Record<string, unknown>): Student {
   };
 }
 
+const LITE_COLUMNS =
+  'id_estudiante, codigo_barras, nombre_completo, grado, seccion, nivel_educativo, foto_perfil, activo, telefono_contacto, email_contacto, nombre_responsable, parentesco_responsable, telefono_emergencia, cuidado_especial, condicion_especial_nota';
+
+async function callStudentStatusRpc(
+  fn: 'sie_estudiante_retirar' | 'sie_estudiante_reactivar',
+  args: Record<string, unknown>,
+): Promise<{ success: boolean; error: string | null }> {
+  const token = requireApiToken();
+  if (!token) return { success: false, error: 'Sesión expirada. Vuelva a iniciar sesión.' };
+  try {
+    const { data, error } = await supabase.rpc(fn, { p_token: token, ...args });
+    if (error) return { success: false, error: error.message };
+    const payload = data as { ok?: boolean; error?: string | null };
+    if (payload?.error) return { success: false, error: payload.error };
+    return { success: payload?.ok !== false, error: null };
+  } catch (error: unknown) {
+    return { success: false, error: error instanceof Error ? error.message : 'Error al actualizar estudiante' };
+  }
+}
+
 function mapRpcStudents(rows: unknown): Student[] {
   if (!Array.isArray(rows)) return [];
   return rows.map((row) => mapRpcStudent(row as Record<string, unknown>));
@@ -454,11 +474,15 @@ export const studentsService = {
       const pageSize = filters?.pageSize ?? filters?.limit ?? (isPaginated ? 10 : 1000);
       const page = Math.max(1, filters?.page ?? 1);
 
+      // fecha_retiro/motivo_retiro solo al listar retirados (columnas de PATCH_ESTUDIANTE_RETIRO).
+      const columns: string =
+        filters?.active === false ? `${LITE_COLUMNS}, fecha_retiro, motivo_retiro` : LITE_COLUMNS;
+
       const buildBaseQuery = (from: number, to: number, withCount: boolean) => {
         let q = supabase
           .from('estudiantes')
           .select(
-            'id_estudiante, codigo_barras, nombre_completo, grado, seccion, nivel_educativo, foto_perfil, activo, telefono_contacto, email_contacto, nombre_responsable, parentesco_responsable, telefono_emergencia, cuidado_especial, condicion_especial_nota',
+            columns,
             withCount ? { count: 'exact' } : undefined,
           )
           .order('nombre_completo', { ascending: true })
@@ -493,6 +517,8 @@ export const studentsService = {
         estadoPension: 'sin_dato',
         cuidadoEspecial: row.cuidado_especial === true,
         condicionEspecialNota: (row.condicion_especial_nota as string | null) ?? null,
+        retiredAt: (row.fecha_retiro as string | null) ?? null,
+        retiredReason: (row.motivo_retiro as string | null) ?? null,
       });
 
       const enrichWithReincidence = async (students: Student[]): Promise<Student[]> => {
@@ -526,7 +552,7 @@ export const studentsService = {
         const to = from + pageSize - 1;
         const { data, error, count } = await buildBaseQuery(from, to, true);
         if (error) return { students: [], total: 0, error: error.message };
-        const rows = (data ?? []) as Array<Record<string, unknown>>;
+        const rows = (data ?? []) as unknown as Array<Record<string, unknown>>;
         const students = await enrichWithReincidence(rows.map(mapRow));
         return { students, total: count ?? students.length, error: null };
       }
@@ -537,7 +563,7 @@ export const studentsService = {
       for (let guard = 0; guard < 20; guard += 1) {
         const { data, error } = await buildBaseQuery(from, from + pageSize - 1, false);
         if (error) return { students: [], total: 0, error: error.message };
-        const rows = (data ?? []) as Array<Record<string, unknown>>;
+        const rows = (data ?? []) as unknown as Array<Record<string, unknown>>;
         all.push(...rows.map(mapRow));
         if (rows.length < pageSize) break;
         from += pageSize;
@@ -683,6 +709,16 @@ export const studentsService = {
       console.error('Error en uploadProfilePhoto:', error);
       return { url: null, error: message };
     }
+  },
+
+  /** Retira al alumno: deja de salir en controles y en la app; conserva su historial. */
+  async retire(id: number, date: string, reason: string): Promise<{ success: boolean; error: string | null }> {
+    return callStudentStatusRpc('sie_estudiante_retirar', { p_id: id, p_fecha: date, p_motivo: reason });
+  },
+
+  /** Vuelve a activar a un alumno retirado. */
+  async reactivate(id: number): Promise<{ success: boolean; error: string | null }> {
+    return callStudentStatusRpc('sie_estudiante_reactivar', { p_id: id });
   },
 
   async update(

@@ -247,7 +247,12 @@ export const IntegralStudentReport = () => {
           section: attendanceFilters.section,
         });
         if (list.error) throw new Error(list.error);
-        students = list.students;
+        // Retirados con asistencia en el periodo (vienen en morningRows) también se incluyen.
+        const activeIds = new Set(list.students.map((s) => s.id));
+        const retiredWithHistory = morningRows
+          .map((row) => row.student)
+          .filter((s) => !s.active && !activeIds.has(s.id));
+        students = [...list.students, ...retiredWithHistory];
       }
 
       const { blocks: nextBlocks, error } = await assembleIntegralBlocks({
@@ -707,6 +712,7 @@ export const IntegralStudentReport = () => {
             <StudentSearchCombobox
               variant="search"
               allowClear
+              includeRetired
               value={selectedStudent?.id ?? null}
               placeholder="Nombre completo del estudiante..."
               onChange={(_id, student) => setSelectedStudent(student)}

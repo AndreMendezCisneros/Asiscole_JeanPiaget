@@ -52,6 +52,8 @@ import {
   CheckCircle2,
   AlertCircle,
   AlertTriangle,
+  UserMinus,
+  UserCheck,
 } from 'lucide-react';
 import {
   StaffKpiStat,
@@ -75,6 +77,7 @@ import { Student, EducationalLevel } from '@/types';
 import { useStudentsQuery, useInvalidateStudents } from '@/hooks/queries/useStudentsQuery';
 import { useTablePagination } from '@/hooks/useTablePagination';
 import { TABLE_PAGE_SIZE } from '@/lib/constants/tablePagination';
+import { getLimaTodayDate } from '@/lib/utils/limaDateTime';
 
 import { CLASSROOM_GRADES, CLASSROOM_SECTIONS } from '@/lib/constants/classrooms';
 
@@ -111,6 +114,14 @@ export const StudentsList = () => {
   const [levelFilter, setLevelFilter] = useState<'all' | EducationalLevel>('all');
   const [gradeFilter, setGradeFilter] = useState<'all' | string>('all');
   const [sectionFilter, setSectionFilter] = useState<'all' | string>('all');
+  const [statusFilter, setStatusFilter] = useState<'active' | 'retired'>('active');
+  // Retiro / reactivación (solo Admin y Director)
+  const [retireTarget, setRetireTarget] = useState<Student | null>(null);
+  const [retireDate, setRetireDate] = useState('');
+  const [retireReason, setRetireReason] = useState('');
+  const [retireStep, setRetireStep] = useState<1 | 2>(1);
+  const [reactivateTarget, setReactivateTarget] = useState<Student | null>(null);
+  const [statusSaving, setStatusSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
@@ -184,7 +195,7 @@ export const StudentsList = () => {
 
   // Al cambiar búsqueda o filtros se consulta la página 1 en el mismo render: si se esperaba
   // a resetPage(), salía una consulta con la página anterior (offset fuera de rango → 416).
-  const filterKey = `${debouncedSearch}|${levelFilter}|${gradeFilter}|${sectionFilter}`;
+  const filterKey = `${debouncedSearch}|${levelFilter}|${gradeFilter}|${sectionFilter}|${statusFilter}`;
   const [pageFilterKey, setPageFilterKey] = useState(filterKey);
   const effectivePage = pageFilterKey === filterKey ? currentPage : 1;
 
@@ -200,10 +211,11 @@ export const StudentsList = () => {
       level: levelFilter === 'all' ? undefined : levelFilter,
       grade: gradeFilter === 'all' ? undefined : gradeFilter,
       section: sectionFilter === 'all' ? undefined : sectionFilter,
+      active: statusFilter === 'active',
       page: effectivePage,
       pageSize,
     }),
-    [debouncedSearch, levelFilter, gradeFilter, sectionFilter, effectivePage, pageSize]
+    [debouncedSearch, levelFilter, gradeFilter, sectionFilter, statusFilter, effectivePage, pageSize]
   );
 
   const {
@@ -415,15 +427,65 @@ export const StudentsList = () => {
     }
   };
 
+  const openRetire = (student: Student) => {
+    setRetireTarget(student);
+    setRetireDate(getLimaTodayDate());
+    setRetireReason('');
+    setRetireStep(1);
+  };
+
+  const confirmRetire = async () => {
+    if (!retireTarget) return;
+    if (retireStep === 1) {
+      if (!retireDate) {
+        toast.error('Indique la fecha de retiro');
+        return;
+      }
+      if (!retireReason.trim()) {
+        toast.error('Indique el motivo del retiro');
+        return;
+      }
+      setRetireStep(2);
+      return;
+    }
+    setStatusSaving(true);
+    const { success, error } = await studentsService.retire(retireTarget.id, retireDate, retireReason.trim());
+    setStatusSaving(false);
+    if (!success) {
+      toast.error(error || 'No se pudo retirar al alumno');
+      return;
+    }
+    toast.success(`${retireTarget.fullName} quedó como retirado. Su historial se conserva.`);
+    setRetireTarget(null);
+    void invalidateStudents();
+  };
+
+  const confirmReactivate = async () => {
+    if (!reactivateTarget) return;
+    setStatusSaving(true);
+    const { success, error } = await studentsService.reactivate(reactivateTarget.id);
+    setStatusSaving(false);
+    if (!success) {
+      toast.error(error || 'No se pudo reactivar al alumno');
+      return;
+    }
+    toast.success(`${reactivateTarget.fullName} volvió a estar activo`);
+    setReactivateTarget(null);
+    void invalidateStudents();
+  };
+
+  const formatRetiredDate = (d?: string | null) => (d ? d.split('-').reverse().join('/') : '');
+
   const handleExportExcel = async () => {
     const filterParts: string[] = [];
+    if (statusFilter === 'retired') filterParts.push('Retirados');
     if (levelFilter !== 'all') filterParts.push(`Nivel: ${levelFilter}`);
     if (gradeFilter !== 'all') filterParts.push(`Grado: ${gradeFilter}`);
     if (sectionFilter !== 'all') filterParts.push(`Sección: ${sectionFilter}`);
     if (searchTerm) filterParts.push(`Búsqueda: ${searchTerm}`);
     const filters = filterParts.length > 0 ? filterParts.join(' · ') : undefined;
     const { students: allRows, error } = await studentsService.listLite({
-      active: true,
+      active: statusFilter === 'active',
       search: debouncedSearch || undefined,
       level: levelFilter === 'all' ? undefined : levelFilter,
       grade: gradeFilter === 'all' ? undefined : gradeFilter,
@@ -781,10 +843,19 @@ export const StudentsList = () => {
                       <Label className="text-muted-foreground">Estado</Label>
                       <div className="mt-1">
                         <Badge variant={selectedStudent.active ? 'default' : 'secondary'}>
-                          {selectedStudent.active ? 'Activo' : 'Inactivo'}
+                          {selectedStudent.active ? 'Activo' : 'Retirado'}
                         </Badge>
                       </div>
                     </div>
+                    {!selectedStudent.active && (
+                      <div>
+                        <Label className="text-muted-foreground">Retiro</Label>
+                        <p className="text-sm font-semibold">
+                          {formatRetiredDate(selectedStudent.retiredAt) || '—'}
+                          {selectedStudent.retiredReason ? ` · ${selectedStudent.retiredReason}` : ''}
+                        </p>
+                      </div>
+                    )}
                     {selectedStudent.cuidadoEspecial ? (
                       <div>
                         <Label className="text-muted-foreground">Cuidado especial</Label>
@@ -1136,7 +1207,7 @@ export const StudentsList = () => {
         <StaffKpiStat
           label="En listado"
           value={stats.total}
-          hint="Activos que coinciden con el filtro"
+          hint={statusFilter === 'active' ? 'Activos que coinciden con el filtro' : 'Retirados que coinciden con el filtro'}
           icon={Users}
           tone="info"
         />
@@ -1231,6 +1302,18 @@ export const StudentsList = () => {
             </SelectContent>
           </Select>
         </div>
+        <div className="space-y-2">
+          <Label>Estado</Label>
+          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'active' | 'retired')}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Activos</SelectItem>
+              <SelectItem value="retired">Retirados</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <div className="flex items-end">
           <Button variant="outline" onClick={() => refetch()} className="w-full" disabled={isFetching}>
             <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
@@ -1310,8 +1393,11 @@ export const StudentsList = () => {
                     </TableCell>
                     <TableCell>
                       <Badge variant={student.active ? 'default' : 'secondary'}>
-                        {student.active ? 'Activo' : 'Inactivo'}
+                        {student.active ? 'Activo' : 'Retirado'}
                       </Badge>
+                      {!student.active && student.retiredAt ? (
+                        <p className="mt-1 text-xs text-muted-foreground">{formatRetiredDate(student.retiredAt)}</p>
+                      ) : null}
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
@@ -1333,6 +1419,28 @@ export const StudentsList = () => {
                         >
                           <Edit className="w-4 h-4" aria-hidden="true" />
                         </Button>
+                        {canEditSpecialCare && student.active && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openRetire(student)}
+                            aria-label={`Retirar a ${student.fullName}`}
+                            title="Retirar alumno del colegio"
+                          >
+                            <UserMinus className="w-4 h-4 text-destructive" aria-hidden="true" />
+                          </Button>
+                        )}
+                        {canEditSpecialCare && !student.active && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setReactivateTarget(student)}
+                            aria-label={`Reactivar a ${student.fullName}`}
+                            title="Reactivar alumno"
+                          >
+                            <UserCheck className="w-4 h-4" aria-hidden="true" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1356,6 +1464,78 @@ export const StudentsList = () => {
           )}
         </div>
       </StaffDataPanel>
+
+      <Dialog open={retireTarget !== null} onOpenChange={(open) => { if (!open && !statusSaving) setRetireTarget(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Retirar alumno</DialogTitle>
+            <DialogDescription>
+              {retireTarget?.fullName} · {retireTarget?.level} {retireTarget?.grade} {retireTarget?.section}
+            </DialogDescription>
+          </DialogHeader>
+          {retireStep === 1 ? (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Se conserva todo su historial (asistencias, incidencias, justificaciones y reportes). Dejará de
+                aparecer en control de llegadas, salidas, justificaciones y compromisos de alarma, y su apoderado ya no
+                recibirá avisos de este alumno en la app. Los hermanos no se ven afectados.
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="retire-date">Fecha de retiro</Label>
+                <Input id="retire-date" type="date" value={retireDate} onChange={(e) => setRetireDate(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="retire-reason">Motivo</Label>
+                <Textarea
+                  id="retire-reason"
+                  value={retireReason}
+                  maxLength={300}
+                  onChange={(e) => setRetireReason(e.target.value)}
+                  placeholder="Ej.: Traslado a otro colegio"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+              ¿Confirma retirar a <strong>{retireTarget?.fullName}</strong> con fecha{' '}
+              <strong>{formatRetiredDate(retireDate)}</strong>? Motivo: {retireReason.trim()}
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={statusSaving}
+              onClick={() => (retireStep === 2 ? setRetireStep(1) : setRetireTarget(null))}
+            >
+              {retireStep === 2 ? 'Volver' : 'Cancelar'}
+            </Button>
+            <Button variant="destructive" disabled={statusSaving} onClick={() => void confirmRetire()}>
+              {statusSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {retireStep === 1 ? 'Continuar' : 'Sí, retirar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={reactivateTarget !== null} onOpenChange={(open) => { if (!open && !statusSaving) setReactivateTarget(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reactivar alumno</DialogTitle>
+            <DialogDescription>
+              {reactivateTarget?.fullName} volverá a aparecer en los controles y en la app del apoderado.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" disabled={statusSaving} onClick={() => setReactivateTarget(null)}>
+              Cancelar
+            </Button>
+            <Button variant="success" disabled={statusSaving} onClick={() => void confirmReactivate()}>
+              {statusSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Reactivar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

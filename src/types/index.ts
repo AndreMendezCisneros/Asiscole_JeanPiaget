@@ -253,6 +253,9 @@ export interface Student {
   /** Alerta interna de puerta; no se envía a padres. */
   cuidadoEspecial?: boolean;
   condicionEspecialNota?: string | null;
+  /** Alumno retirado (activo = false): fecha y motivo del retiro. */
+  retiredAt?: string | null;
+  retiredReason?: string | null;
 }
 
 export interface FaultType {
