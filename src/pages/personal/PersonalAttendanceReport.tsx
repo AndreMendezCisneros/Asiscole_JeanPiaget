@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { AlertTriangle, CheckCircle2, ClipboardList, FileDown, FileSpreadsheet, RefreshCw, UserX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,7 +20,11 @@ import { matchesPersonalFilter, type CategoryFilter } from '@/lib/utils/personal
 import { usePersonalAttendance } from '@/hooks/usePersonalAttendance';
 import { useTablePagination } from '@/hooks/useTablePagination';
 import { TABLE_PAGE_SIZE } from '@/lib/constants/tablePagination';
-import { getLimaTodayDate } from '@/lib/utils/limaDateTime';
+import { getLimaNow, getLimaTodayDate } from '@/lib/utils/limaDateTime';
+import { computeLostTime, formatMinutes } from '@/lib/utils/personalLostTime';
+import { computeOvertime } from '@/lib/utils/personalOvertime';
+import { personalTallerService } from '@/lib/services/personalTallerService';
+import type { PersonalTallerRecord } from '@/types/personal';
 import { dateKeysBetween, monthStartOf, resolveDayStatus } from '@/lib/utils/personalAttendanceRows';
 import { scheduleForDate } from '@/lib/utils/personalSchedule';
 import { summarizePersonalAttendance, totalsOf } from '@/lib/utils/personalReportStats';
@@ -43,7 +48,8 @@ export const PersonalAttendanceReport = () => {
   const today = getLimaTodayDate();
   const [from, setFrom] = useState(monthStartOf(today));
   const [to, setTo] = useState(today);
-  const { personal, records, loading, refreshing, reload } = usePersonalAttendance(from, to);
+  const { personal, records, absenceAfterMin, loading, refreshing, reload } = usePersonalAttendance(from, to);
+  const [talleres, setTalleres] = useState<PersonalTallerRecord[]>([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<CategoryFilter>('all');
   const [employeeId, setEmployeeId] = useState<number | null>(null);
@@ -61,6 +67,36 @@ export const PersonalAttendanceReport = () => {
   );
   const totals = totalsOf(summary);
 
+  const loadTalleres = useCallback(async () => {
+    const res = await personalTallerService.getRecords({ from, to });
+    if (res.error) toast.error(res.error);
+    setTalleres(res.records);
+  }, [from, to]);
+
+  useEffect(() => {
+    void loadTalleres();
+  }, [loadTalleres]);
+
+  // Horas no trabajadas (total) y horas adicionales por empleado, en minutos.
+  const lostById = useMemo(() => {
+    const list = computeLostTime(
+      summary.map((s) => s.personal),
+      records,
+      from,
+      to,
+      today,
+      getLimaNow().time,
+      absenceAfterMin,
+    );
+    return new Map(list.map((l) => [l.personal.id, l.lostTotalMin]));
+  }, [summary, records, from, to, today, absenceAfterMin]);
+  const overtimeById = useMemo(() => {
+    const list = computeOvertime(summary.map((s) => s.personal), records, talleres, today);
+    return new Map(list.map((o) => [o.personal.id, o.totalMin]));
+  }, [summary, records, talleres, today]);
+  const lostOf = (id: number) => formatMinutes(lostById.get(id) ?? 0);
+  const overtimeOf = (id: number) => formatMinutes(overtimeById.get(id) ?? 0);
+
   const { page, pageSize, totalPages, goToPage, nextPage, prevPage, changePageSize, resetPage } =
     useTablePagination({ totalItems: summary.length, initialPageSize: TABLE_PAGE_SIZE });
 
@@ -76,15 +112,15 @@ export const PersonalAttendanceReport = () => {
 
   const summaryRow = (s: (typeof summary)[number]) => ({
     empleado: s.personal.fullName,
-    categoria: s.personal.category,
+    cargo: s.personal.position || '—',
     programados: s.scheduledDays,
     atiempo: s.onTime,
     tarde: s.late,
     tj: s.lateJustified,
     faltas: s.absent + s.noRecord,
     fj: s.absentJustified,
-    fh: s.offSchedule,
-    anticipadas: s.earlyDepartures,
+    noTrabajadas: lostOf(s.personal.id),
+    adicionales: overtimeOf(s.personal.id),
     puntualidad: s.punctuality == null ? '—' : `${s.punctuality}%`,
   });
 
@@ -101,21 +137,21 @@ export const PersonalAttendanceReport = () => {
     doc.drawTable(
       [
         { header: 'Empleado', dataKey: 'empleado' },
-        { header: 'Categoría', dataKey: 'categoria', width: 40 },
+        { header: 'Cargo', dataKey: 'cargo', width: 40 },
         { header: 'Días programados', dataKey: 'programados', width: 22, align: 'center' },
         { header: 'A tiempo', dataKey: 'atiempo', width: 16, align: 'center' },
         { header: 'Tarde', dataKey: 'tarde', width: 14, align: 'center' },
         { header: 'TJ', dataKey: 'tj', width: 12, align: 'center' },
         { header: 'Faltas', dataKey: 'faltas', width: 14, align: 'center' },
         { header: 'FJ', dataKey: 'fj', width: 12, align: 'center' },
-        { header: 'Fuera de horario', dataKey: 'fh', width: 22, align: 'center' },
-        { header: 'Salidas anticipadas', dataKey: 'anticipadas', width: 24, align: 'center' },
+        { header: 'Horas no trabajadas', dataKey: 'noTrabajadas', width: 24, align: 'center' },
+        { header: 'Horas adicionales', dataKey: 'adicionales', width: 24, align: 'center' },
         { header: 'Puntualidad', dataKey: 'puntualidad', width: 22, align: 'center' },
       ],
       summary.map(summaryRow),
       { fontSize: 7.5 },
     );
-    doc.drawParagraph('A = a tiempo · T = tarde · TJ = tarde justificada · F = falta · FJ = falta justificada · FH = fuera de horario');
+    doc.drawParagraph('TJ = tarde justificada · FJ = falta justificada · Horas no trabajadas = tardanzas + inasistencias + salidas anticipadas (incluye justificadas) · Horas adicionales = salida después de hora + taller + día sin horario');
     await doc.finalize(`reporte-asistencia-personal-${from}-a-${to}.pdf`);
   };
 
@@ -127,7 +163,7 @@ export const PersonalAttendanceReport = () => {
         'Resumen',
         'Asistencia del personal — resumen',
         subtitle,
-        ['Empleado', 'Categoría', 'Días programados', 'A tiempo', 'Tarde', 'Tarde justif.', 'Faltas', 'Falta justif.', 'Fuera de horario', 'Salidas anticipadas', 'Puntualidad'],
+        ['Empleado', 'Cargo', 'Días programados', 'A tiempo', 'Tarde', 'Tarde justif.', 'Faltas', 'Falta justif.', 'Horas no trabajadas', 'Horas adicionales', 'Puntualidad'],
         summary.map((s) => Object.values(summaryRow(s))),
       );
       const days = dateKeysBetween(from, to);
@@ -221,8 +257,8 @@ export const PersonalAttendanceReport = () => {
                       <TableHead className="text-center">TJ</TableHead>
                       <TableHead className="text-center">Faltas</TableHead>
                       <TableHead className="text-center">FJ</TableHead>
-                      <TableHead className="text-center">Fuera de horario</TableHead>
-                      <TableHead className="text-center">Salidas anticipadas</TableHead>
+                      <TableHead className="text-center">Horas no trabajadas</TableHead>
+                      <TableHead className="text-center">Horas adicionales</TableHead>
                       <TableHead className="text-center">Puntualidad</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -231,7 +267,7 @@ export const PersonalAttendanceReport = () => {
                       <TableRow key={s.personal.id}>
                         <TableCell>
                           <p className="font-medium">{s.personal.fullName}</p>
-                          <p className="text-xs text-muted-foreground">{s.personal.category}</p>
+                          <p className="text-xs text-muted-foreground">{s.personal.position || '—'}</p>
                         </TableCell>
                         <TableCell className="text-center">{s.scheduledDays}</TableCell>
                         <TableCell className="text-center">{s.onTime}</TableCell>
@@ -239,8 +275,8 @@ export const PersonalAttendanceReport = () => {
                         <TableCell className="text-center">{s.lateJustified}</TableCell>
                         <TableCell className="text-center font-semibold">{s.absent + s.noRecord}</TableCell>
                         <TableCell className="text-center">{s.absentJustified}</TableCell>
-                        <TableCell className="text-center">{s.offSchedule}</TableCell>
-                        <TableCell className="text-center">{s.earlyDepartures}</TableCell>
+                        <TableCell className="text-center font-mono">{lostOf(s.personal.id)}</TableCell>
+                        <TableCell className="text-center font-mono">{overtimeOf(s.personal.id)}</TableCell>
                         <TableCell className="text-center">{s.punctuality == null ? '—' : `${s.punctuality}%`}</TableCell>
                       </TableRow>
                     ))}

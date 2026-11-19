@@ -205,7 +205,7 @@ export const PersonalIntegralReport = () => {
       { label: 'A tiempo', value: summary.onTime, tone: 'success' },
       { label: 'Tardanzas', value: summary.late + summary.lateJustified, tone: 'warning' },
       { label: 'Faltas', value: summary.absent + summary.noRecord, tone: 'error' },
-      { label: 'Inasist. justificadas', value: summary.absentJustified, tone: 'primary' },
+      { label: 'F. justificadas', value: summary.absentJustified, tone: 'primary' },
       { label: 'H. adicionales', value: formatMinutes(overtime.totalMin), tone: 'info' },
     ]);
     const kv = [
@@ -477,7 +477,7 @@ export const PersonalIntegralReport = () => {
             <StaffKpiStat label="Tardanzas" value={summary.late + summary.lateJustified} hint={`${summary.lateJustified} justificadas`} icon={AlertTriangle} tone="warning" />
             <StaffKpiStat label="Faltas" value={summary.absent + summary.noRecord} hint="Sin justificar" icon={UserX} tone="accent" />
             <StaffKpiStat
-              label="Inasistencias justificadas"
+              label="Faltas justificadas"
               value={summary.absentJustified}
               hint="Con motivo registrado"
               icon={FileCheck}
@@ -580,7 +580,7 @@ export const PersonalIntegralReport = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {[...records].reverse().map((r) => (
+                      {records.map((r) => (
                         <TableRow key={r.id}>
                           <TableCell className="font-mono text-sm">{formatDate(r.date)}</TableCell>
                           <TableCell className="font-mono text-sm">{r.expectedEntry ?? '—'}</TableCell>
