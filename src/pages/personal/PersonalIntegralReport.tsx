@@ -41,6 +41,11 @@ import { DIAS_SEMANA, type Personal, type PersonalArrivalRecord, type PersonalTa
 
 type PeriodMode = 'month' | 'year' | 'range';
 
+function minutesOfTime(t: string): number {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + (m || 0);
+}
+
 function formatDate(dateKey: string): string {
   const [y, m, d] = dateKey.split('-');
   return `${d}/${m}/${y}`;
@@ -154,6 +159,17 @@ export const PersonalIntegralReport = () => {
     () => (overtime && lost ? computeNetOvertime([overtime], [lost])[0] : null),
     [overtime, lost],
   );
+  const tallerRows = useMemo(
+    () =>
+      [...talleres]
+        .sort((a, b) => a.date.localeCompare(b.date) || a.arrivalTime.localeCompare(b.arrivalTime))
+        .map((t) => ({
+          ...t,
+          minutes: t.departureTime ? Math.max(0, minutesOfTime(t.departureTime) - minutesOfTime(t.arrivalTime)) : null,
+        })),
+    [talleres],
+  );
+  const tallerTotalMin = useMemo(() => tallerRows.reduce((acc, t) => acc + (t.minutes ?? 0), 0), [tallerRows]);
   const overtimeItems = useMemo(
     () => (overtime ? [...overtime.items].sort((a, b) => a.date.localeCompare(b.date)) : []),
     [overtime],
@@ -293,6 +309,25 @@ export const PersonalIntegralReport = () => {
           : '—',
         estado: PERSONAL_STATUS_LABEL[r.status],
         motivo: r.justificationReason ?? r.departureReason ?? '',
+      })),
+      { fontSize: 7.5 },
+    );
+
+    doc.drawSectionTitle(`Talleres (${tallerRows.length} · ${formatMinutes(tallerTotalMin)})`);
+    doc.drawTable(
+      [
+        { header: 'Fecha', dataKey: 'fecha', width: 26 },
+        { header: 'Entró', dataKey: 'entro', width: 22, align: 'center' },
+        { header: 'Salió', dataKey: 'salio', width: 22, align: 'center' },
+        { header: 'Duración', dataKey: 'duracion', width: 26, align: 'center' },
+        { header: 'Observación', dataKey: 'obs' },
+      ],
+      tallerRows.map((t) => ({
+        fecha: formatDate(t.date),
+        entro: t.arrivalTime,
+        salio: t.departureTime ?? '—',
+        duracion: t.minutes == null ? '—' : formatMinutes(t.minutes),
+        obs: t.departureTime ? '' : 'No marcó salida del taller',
       })),
       { fontSize: 7.5 },
     );
@@ -600,6 +635,45 @@ export const PersonalIntegralReport = () => {
                             <Badge variant={PERSONAL_STATUS_BADGE[r.status]}>{PERSONAL_STATUS_LABEL[r.status]}</Badge>
                           </TableCell>
                           <TableCell className="max-w-xs text-sm">{r.justificationReason ?? r.departureReason ?? ''}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          </StaffDataPanel>
+
+          <StaffDataPanel>
+            <StaffDataPanelHeader
+              title={`Talleres (${tallerRows.length} ${tallerRows.length === 1 ? 'día' : 'días'} · ${formatMinutes(tallerTotalMin)})`}
+              description="Solo los días que tuvo taller"
+            />
+            <div className="p-4 pt-0 sm:p-5 sm:pt-0">
+              {tallerRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Sin talleres en el periodo.</p>
+              ) : (
+                <div className="app-table-wrap">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead>Entró</TableHead>
+                        <TableHead>Salió</TableHead>
+                        <TableHead>Duración</TableHead>
+                        <TableHead>Observación</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {tallerRows.map((t) => (
+                        <TableRow key={t.id}>
+                          <TableCell className="font-mono text-sm">{formatDate(t.date)}</TableCell>
+                          <TableCell className="font-mono text-sm">{t.arrivalTime}</TableCell>
+                          <TableCell className="font-mono text-sm">{t.departureTime ?? '—'}</TableCell>
+                          <TableCell className="font-mono text-sm">{t.minutes == null ? '—' : formatMinutes(t.minutes)}</TableCell>
+                          <TableCell className="text-sm">
+                            {!t.departureTime && <Badge variant="warning">No marcó salida del taller</Badge>}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
