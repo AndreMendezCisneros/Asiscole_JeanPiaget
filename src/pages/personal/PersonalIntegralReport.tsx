@@ -154,6 +154,10 @@ export const PersonalIntegralReport = () => {
     () => (overtime && lost ? computeNetOvertime([overtime], [lost])[0] : null),
     [overtime, lost],
   );
+  const overtimeItems = useMemo(
+    () => (overtime ? [...overtime.items].sort((a, b) => a.date.localeCompare(b.date)) : []),
+    [overtime],
+  );
   const unauthorized = useMemo(
     () => (selected ? unauthorizedDepartures(selected, records) : []),
     [selected, records],
@@ -320,9 +324,7 @@ export const PersonalIntegralReport = () => {
         { header: 'Tiempo', dataKey: 'tiempo', width: 22, align: 'center' },
         { header: 'Detalle', dataKey: 'detalle' },
       ],
-      [...overtime.items]
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .map((i) => ({
+      overtimeItems.map((i) => ({
           fecha: formatDate(i.date),
           tipo: i.kind,
           tiempo: formatMinutes(i.minutes),
@@ -665,7 +667,7 @@ export const PersonalIntegralReport = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {overtime.items.map((i, idx) => (
+                      {overtimeItems.map((i, idx) => (
                         <TableRow key={`${i.date}-${i.kind}-${idx}`}>
                           <TableCell className="font-mono text-sm">{formatDate(i.date)}</TableCell>
                           <TableCell>
