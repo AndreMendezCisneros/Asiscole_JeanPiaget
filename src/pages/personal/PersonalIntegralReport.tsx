@@ -319,7 +319,9 @@ export const PersonalIntegralReport = () => {
         { header: 'Fecha', dataKey: 'fecha', width: 26 },
         { header: 'Entró', dataKey: 'entro', width: 22, align: 'center' },
         { header: 'Salió', dataKey: 'salio', width: 22, align: 'center' },
-        { header: 'Duración', dataKey: 'duracion', width: 26, align: 'center' },
+        { header: 'Duración', dataKey: 'duracion', width: 22, align: 'center' },
+        { header: 'Marcó entrada', dataKey: 'porEntrada', width: 40 },
+        { header: 'Marcó salida', dataKey: 'porSalida', width: 40 },
         { header: 'Observación', dataKey: 'obs' },
       ],
       tallerRows.map((t) => ({
@@ -327,6 +329,8 @@ export const PersonalIntegralReport = () => {
         entro: t.arrivalTime,
         salio: t.departureTime ?? '—',
         duracion: t.minutes == null ? '—' : formatMinutes(t.minutes),
+        porEntrada: t.arrivalBy ?? '—',
+        porSalida: t.departureTime ? (t.departureBy ?? '—') : '—',
         obs: t.departureTime ? '' : 'No marcó salida del taller',
       })),
       { fontSize: 7.5 },
@@ -661,6 +665,8 @@ export const PersonalIntegralReport = () => {
                         <TableHead>Entró</TableHead>
                         <TableHead>Salió</TableHead>
                         <TableHead>Duración</TableHead>
+                        <TableHead>Marcó entrada</TableHead>
+                        <TableHead>Marcó salida</TableHead>
                         <TableHead>Observación</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -671,6 +677,8 @@ export const PersonalIntegralReport = () => {
                           <TableCell className="font-mono text-sm">{t.arrivalTime}</TableCell>
                           <TableCell className="font-mono text-sm">{t.departureTime ?? '—'}</TableCell>
                           <TableCell className="font-mono text-sm">{t.minutes == null ? '—' : formatMinutes(t.minutes)}</TableCell>
+                          <TableCell className="text-sm">{t.arrivalBy ?? '—'}</TableCell>
+                          <TableCell className="text-sm">{t.departureTime ? (t.departureBy ?? '—') : '—'}</TableCell>
                           <TableCell className="text-sm">
                             {!t.departureTime && <Badge variant="warning">No marcó salida del taller</Badge>}
                           </TableCell>

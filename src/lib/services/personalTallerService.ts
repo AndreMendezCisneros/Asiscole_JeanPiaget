@@ -8,9 +8,12 @@ type TallerRow = {
   fecha: string;
   hora_llegada: string;
   hora_salida: string | null;
+  registrado_por_nombre?: string | null;
+  registrado_salida_por_nombre?: string | null;
 };
 
-const SELECT_COLS = 'id_registro, id_personal, fecha, hora_llegada, hora_salida';
+const SELECT_COLS =
+  'id_registro, id_personal, fecha, hora_llegada, hora_salida, registrado_por_nombre, registrado_salida_por_nombre';
 
 function mapRow(row: TallerRow): PersonalTallerRecord {
   return {
@@ -19,6 +22,8 @@ function mapRow(row: TallerRow): PersonalTallerRecord {
     date: row.fecha,
     arrivalTime: row.hora_llegada.slice(0, 5),
     departureTime: row.hora_salida ? row.hora_salida.slice(0, 5) : null,
+    arrivalBy: row.registrado_por_nombre ?? null,
+    departureBy: row.registrado_salida_por_nombre ?? null,
   };
 }
 

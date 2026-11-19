@@ -131,6 +131,9 @@ export interface PersonalTallerRecord {
   date: string;
   arrivalTime: string;
   departureTime: string | null;
+  /** Quién marcó la entrada / la salida del taller (nombre guardado en el registro). */
+  arrivalBy?: string | null;
+  departureBy?: string | null;
 }
 
 export interface PersonalFormData {
