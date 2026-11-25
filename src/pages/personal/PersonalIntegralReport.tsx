@@ -37,6 +37,7 @@ import {
 import { formatScheduleSummary } from '@/lib/utils/personalSchedule';
 import { formatLimaDateTime, incidentMonthKey, summarizePersonalAttendance } from '@/lib/utils/personalReportStats';
 import { PdfReportDocument, buildFilterSubtitle } from '@/lib/utils/pdfReportBuilder';
+import { noveltyDays } from '@/lib/utils/personalNoveltyDays';
 import { DIAS_SEMANA, type Personal, type PersonalArrivalRecord, type PersonalTallerRecord } from '@/types/personal';
 
 type PeriodMode = 'month' | 'year' | 'range';
@@ -210,9 +211,10 @@ export const PersonalIntegralReport = () => {
       'Reporte Integral del Personal',
       buildFilterSubtitle([selected.fullName, periodLabel, periodMode !== 'range' && `Del ${from} al ${to}`]),
     );
+    const compact = { compact: true };
     await doc.drawCoverHeader();
-    doc.drawSectionTitle('Datos del empleado');
-    doc.drawKeyValueList([
+    doc.drawSectionTitle('Datos del empleado', compact);
+    doc.drawKeyValueGrid([
       { label: 'Nombre', value: selected.fullName },
       { label: 'DNI', value: selected.barcode },
       { label: 'Categoría', value: selected.category },
@@ -220,57 +222,66 @@ export const PersonalIntegralReport = () => {
       { label: 'Horario', value: formatScheduleSummary(selected.schedule) },
     ]);
 
-    doc.drawSectionTitle('Asistencia');
-    doc.drawKpiCards([
-      { label: 'A tiempo', value: summary.onTime, tone: 'success' },
-      { label: 'Tardanzas', value: summary.late + summary.lateJustified, tone: 'warning' },
-      { label: 'Faltas', value: summary.absent + summary.noRecord, tone: 'error' },
-      { label: 'F. justificadas', value: summary.absentJustified, tone: 'primary' },
-      { label: 'H. adicionales', value: formatMinutes(overtime.totalMin), tone: 'info' },
-    ]);
+    doc.drawSectionTitle('Asistencia', compact);
+    doc.drawKpiCards(
+      [
+        { label: 'A tiempo', value: summary.onTime, tone: 'success' },
+        { label: 'Tardanzas', value: summary.late + summary.lateJustified, tone: 'warning' },
+        { label: 'Inasistencias', value: summary.absent + summary.noRecord, tone: 'error' },
+        { label: 'Inasist. justificadas', value: summary.absentJustified, tone: 'primary' },
+        { label: 'H. adicionales', value: formatMinutes(overtime.totalMin), tone: 'info' },
+      ],
+      { height: 15 },
+    );
     const kv = [
       { label: 'Horas trabajadas', value: formatMinutes(worked.workedMin) },
       { label: 'Días trabajados', value: String(worked.daysWorked) },
       { label: 'Días programados', value: String(summary.scheduledDays) },
       { label: 'Puntualidad', value: summary.punctuality == null ? '—' : `${summary.punctuality}%` },
       { label: 'Salidas sin autorización', value: String(unauthorized.length) },
-      { label: 'Horas adicionales: salida después de hora', value: formatMinutes(overtime.afterExitMin) },
-      { label: 'Horas adicionales: taller', value: formatMinutes(overtime.tallerMin) },
-      { label: 'Horas adicionales: día sin horario', value: formatMinutes(overtime.offDayMin) },
+      { label: 'H. adic.: salida después de hora', value: formatMinutes(overtime.afterExitMin) },
+      { label: 'H. adic.: taller', value: formatMinutes(overtime.tallerMin) },
+      { label: 'H. adic.: día sin horario', value: formatMinutes(overtime.offDayMin) },
+      { label: 'Talleres (días · tiempo)', value: `${tallerRows.length} · ${formatMinutes(tallerTotalMin)}` },
     ];
+    const tallerSinSalida = tallerRows.filter((t) => !t.departureTime).length;
+    if (tallerSinSalida > 0) {
+      kv.push({ label: 'Talleres sin salida marcada', value: String(tallerSinSalida) });
+    }
     if (lost) {
       kv.push(
-        { label: 'Tiempo no trabajado (total)', value: formatMinutes(lost.lostTotalMin) },
-        { label: 'Justificado', value: formatMinutes(lost.lostJustifiedMin) },
+        { label: 'No trabajado (total)', value: formatMinutes(lost.lostTotalMin) },
+        { label: 'No trabajado justificado', value: formatMinutes(lost.lostJustifiedMin) },
         { label: 'No trabajado sin justificar', value: formatMinutes(lost.lostNetMin) },
       );
     }
     if (netOvertime) {
-      kv.push({
-        label: 'Horas adicionales reales (descontando lo no justificado)',
-        value: formatSignedMinutes(netOvertime.realMin),
-      });
+      kv.push({ label: 'H. adicionales reales', value: formatSignedMinutes(netOvertime.realMin) });
     }
     if (worked.noDepartureDays > 0) {
-      kv.push({ label: 'Días sin salida marcada (cuentan 0 h)', value: String(worked.noDepartureDays) });
+      kv.push({ label: 'Días sin salida marcada (0 h)', value: String(worked.noDepartureDays) });
     }
     if (overtime.daysWithoutExit > 0) {
-      kv.push({ label: 'Días sin hora de salida en su horario', value: String(overtime.daysWithoutExit) });
+      kv.push({ label: 'Días sin hora de salida en horario', value: String(overtime.daysWithoutExit) });
     }
-    doc.drawKeyValueList(kv);
+    doc.drawKeyValueGrid(kv);
+    doc.drawParagraph(
+      'H. adicional = salida real − salida programada (llegar antes no cuenta); taller y día sin horario = salida − entrada. H. adicionales reales = adicionales − lo no trabajado sin justificar. Horas trabajadas = salida − llegada reales.',
+      6.5,
+    );
 
     if (monthRows.length > 0) {
-      doc.drawSectionTitle('Resumen por mes');
+      doc.drawSectionTitle('Resumen por mes', compact);
       doc.drawTable(
         [
           { header: 'Mes', dataKey: 'mes', width: 30 },
-          { header: 'A tiempo', dataKey: 'atiempo', width: 18, align: 'center' },
-          { header: 'Tard.', dataKey: 'tard', width: 16, align: 'center' },
-          { header: 'Faltas', dataKey: 'faltas', width: 14, align: 'center' },
-          { header: 'F. just.', dataKey: 'fjust', width: 14, align: 'center' },
+          { header: 'A tiempo', dataKey: 'atiempo', width: 16, align: 'center' },
+          { header: 'Tard.', dataKey: 'tard', width: 14, align: 'center' },
+          { header: 'Inasist.', dataKey: 'faltas', width: 16, align: 'center' },
+          { header: 'Inas. just.', dataKey: 'fjust', width: 18, align: 'center' },
           { header: 'Sal. sin aut.', dataKey: 'sinaut', width: 18, align: 'center' },
           { header: 'H. trabajadas', dataKey: 'trab', width: 22, align: 'center' },
-          { header: 'H. adicionales', dataKey: 'extra', width: 20, align: 'center' },
+          { header: 'H. adicionales', dataKey: 'extra', width: 22, align: 'center' },
           { header: 'Incid.', dataKey: 'inc', align: 'center' },
         ],
         monthRows.map((m) => ({
@@ -284,22 +295,30 @@ export const PersonalIntegralReport = () => {
           extra: formatMinutes(m.overtimeMin),
           inc: String(m.incidents),
         })),
-        { fontSize: 7.5 },
+        compact,
       );
     }
 
-    doc.drawSectionTitle('Detalle de asistencia');
+    // Varios meses: solo días con novedad (los "a tiempo" ya cuentan en el resumen).
+    const multiMonth = monthRows.length > 0;
+    const detailRecords = multiMonth ? noveltyDays(records) : records;
+    doc.drawSectionTitle(
+      multiMonth
+        ? `Días con novedad (${detailRecords.length} de ${records.length} registrados)`
+        : 'Detalle de asistencia',
+      compact,
+    );
     doc.drawTable(
       [
-        { header: 'Fecha', dataKey: 'fecha', width: 22 },
-        { header: 'Entrada esp.', dataKey: 'esperada', width: 20, align: 'center' },
-        { header: 'Llegó', dataKey: 'llego', width: 16, align: 'center' },
-        { header: 'Salida esp.', dataKey: 'salidaEsp', width: 20, align: 'center' },
+        { header: 'Fecha', dataKey: 'fecha', width: 20 },
+        { header: 'Entrada esp.', dataKey: 'esperada', width: 17, align: 'center' },
+        { header: 'Llegó', dataKey: 'llego', width: 14, align: 'center' },
+        { header: 'Salida esp.', dataKey: 'salidaEsp', width: 17, align: 'center' },
         { header: 'Salió', dataKey: 'salio', width: 22, align: 'center' },
-        { header: 'Estado', dataKey: 'estado', width: 28 },
+        { header: 'Estado', dataKey: 'estado', width: 30 },
         { header: 'Motivo', dataKey: 'motivo' },
       ],
-      records.map((r) => ({
+      detailRecords.map((r) => ({
         fecha: formatDate(r.date),
         esperada: r.expectedEntry ?? '—',
         llego: r.arrivalTime ?? '—',
@@ -310,80 +329,38 @@ export const PersonalIntegralReport = () => {
         estado: PERSONAL_STATUS_LABEL[r.status],
         motivo: r.justificationReason ?? r.departureReason ?? '',
       })),
-      { fontSize: 7.5 },
+      compact,
     );
 
-    doc.drawSectionTitle(`Talleres (${tallerRows.length} · ${formatMinutes(tallerTotalMin)})`);
-    doc.drawTable(
-      [
-        { header: 'Fecha', dataKey: 'fecha', width: 26 },
-        { header: 'Entró', dataKey: 'entro', width: 22, align: 'center' },
-        { header: 'Salió', dataKey: 'salio', width: 22, align: 'center' },
-        { header: 'Duración', dataKey: 'duracion', width: 22, align: 'center' },
-        { header: 'Marcó entrada', dataKey: 'porEntrada', width: 40 },
-        { header: 'Marcó salida', dataKey: 'porSalida', width: 40 },
-        { header: 'Observación', dataKey: 'obs' },
-      ],
-      tallerRows.map((t) => ({
-        fecha: formatDate(t.date),
-        entro: t.arrivalTime,
-        salio: t.departureTime ?? '—',
-        duracion: t.minutes == null ? '—' : formatMinutes(t.minutes),
-        porEntrada: t.arrivalBy ?? '—',
-        porSalida: t.departureTime ? (t.departureBy ?? '—') : '—',
-        obs: t.departureTime ? '' : 'No marcó salida del taller',
-      })),
-      { fontSize: 7.5 },
-    );
-
-    doc.drawSectionTitle(`Salidas sin autorización (${unauthorized.length})`);
-    doc.drawTable(
-      [
-        { header: 'Fecha', dataKey: 'fecha', width: 26 },
-        { header: 'Hora de salida', dataKey: 'esperada', width: 28, align: 'center' },
-        { header: 'Salió', dataKey: 'salio', width: 22, align: 'center' },
-        { header: 'Tiempo antes', dataKey: 'antes', width: 28, align: 'center' },
-        { header: 'Motivo', dataKey: 'motivo' },
-      ],
-      unauthorized.map((u) => ({
-        fecha: formatDate(u.date),
-        esperada: u.expectedExit ?? '—',
-        salio: u.departureTime,
-        antes: u.minutesEarly == null ? '—' : formatMinutes(u.minutesEarly),
-        motivo: u.reason ?? '',
-      })),
-      { fontSize: 7.5 },
-    );
-
-    doc.drawSectionTitle(`Horas adicionales (${formatMinutes(overtime.totalMin)})`);
-    doc.drawTable(
-      [
-        { header: 'Fecha', dataKey: 'fecha', width: 26 },
-        { header: 'Tipo', dataKey: 'tipo', width: 30 },
-        { header: 'Tiempo', dataKey: 'tiempo', width: 22, align: 'center' },
-        { header: 'Detalle', dataKey: 'detalle' },
-      ],
-      overtimeItems.map((i) => ({
-          fecha: formatDate(i.date),
-          tipo: i.kind,
-          tiempo: formatMinutes(i.minutes),
-          detalle: i.detail,
+    if (unauthorized.length > 0) {
+      doc.drawSectionTitle(`Salidas sin autorización (${unauthorized.length})`, compact);
+      doc.drawTable(
+        [
+          { header: 'Fecha', dataKey: 'fecha', width: 24 },
+          { header: 'Hora de salida', dataKey: 'esperada', width: 24, align: 'center' },
+          { header: 'Salió', dataKey: 'salio', width: 18, align: 'center' },
+          { header: 'Tiempo antes', dataKey: 'antes', width: 24, align: 'center' },
+          { header: 'Motivo', dataKey: 'motivo' },
+        ],
+        unauthorized.map((u) => ({
+          fecha: formatDate(u.date),
+          esperada: u.expectedExit ?? '—',
+          salio: u.departureTime,
+          antes: u.minutesEarly == null ? '—' : formatMinutes(u.minutesEarly),
+          motivo: u.reason ?? '',
         })),
-      { fontSize: 7.5 },
-    );
-    doc.drawParagraph(
-      'Hora adicional = hora en que salió − su hora de salida (ej.: sale a las 14:00 y se va a las 15:00 = 1 h). Llegar antes no cuenta. Taller y días sin horario suman salida − entrada. Horas trabajadas = salida − llegada reales; sin salida marcada cuenta 0.',
-      7.5,
-    );
+        compact,
+      );
+    }
 
-    doc.drawSectionTitle(`Incidencias (${activeIncidents.length})`);
+    doc.drawSectionTitle(`Incidencias (${activeIncidents.length})`, compact);
     doc.drawTable(
       [
-        { header: 'Fecha', dataKey: 'fecha', width: 32 },
-        { header: 'Falta', dataKey: 'falta' },
-        { header: 'Estado', dataKey: 'estado', width: 24 },
+        { header: 'Fecha', dataKey: 'fecha', width: 28 },
+        { header: 'Falta', dataKey: 'falta', width: 34 },
+        { header: 'Estado', dataKey: 'estado', width: 20 },
         { header: 'Observación', dataKey: 'obs' },
-        { header: 'Registró', dataKey: 'registro', width: 36 },
+        { header: 'Registró', dataKey: 'registro', width: 32 },
       ],
       activeIncidents.map((i) => ({
         fecha: formatLimaDateTime(i.registeredAt),
@@ -392,7 +369,7 @@ export const PersonalIntegralReport = () => {
         obs: i.observations ?? '',
         registro: i.registeredByName ?? '—',
       })),
-      { fontSize: 7.5 },
+      compact,
     );
     const tag = periodMode === 'month' ? monthValue : periodMode === 'year' ? `anual-${yearValue}` : `${from}-a-${to}`;
     await doc.finalize(`reporte-integral-${selected.barcode}-${tag}.pdf`);
@@ -516,9 +493,9 @@ export const PersonalIntegralReport = () => {
           <div className="app-kpi-grid !grid-cols-2 sm:!grid-cols-5">
             <StaffKpiStat label="A tiempo" value={summary.onTime} hint={`De ${summary.scheduledDays} días programados`} icon={CheckCircle2} tone="success" />
             <StaffKpiStat label="Tardanzas" value={summary.late + summary.lateJustified} hint={`${summary.lateJustified} justificadas`} icon={AlertTriangle} tone="warning" />
-            <StaffKpiStat label="Faltas" value={summary.absent + summary.noRecord} hint="Sin justificar" icon={UserX} tone="accent" />
+            <StaffKpiStat label="Inasistencias" value={summary.absent + summary.noRecord} hint="Sin justificar" icon={UserX} tone="accent" />
             <StaffKpiStat
-              label="Faltas justificadas"
+              label="Inasistencias justificadas"
               value={summary.absentJustified}
               hint="Con motivo registrado"
               icon={FileCheck}
@@ -572,8 +549,8 @@ export const PersonalIntegralReport = () => {
                         <TableHead>Mes</TableHead>
                         <TableHead className="text-center">A tiempo</TableHead>
                         <TableHead className="text-center">Tardanzas</TableHead>
-                        <TableHead className="text-center">Faltas</TableHead>
-                        <TableHead className="text-center">F. justificadas</TableHead>
+                        <TableHead className="text-center">Inasistencias</TableHead>
+                        <TableHead className="text-center">Inasist. justificadas</TableHead>
                         <TableHead className="text-center">Sal. sin aut.</TableHead>
                         <TableHead className="text-center">H. trabajadas</TableHead>
                         <TableHead className="text-center">H. adicionales</TableHead>

@@ -28,7 +28,13 @@ import {
 } from '@/components/staff';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { PageLoader } from '@/components/ui/page-loader';
-import { PersonalCategorySelect, PersonalEmployeeFilter, PersonalSearchField } from '@/components/personal/PersonalFilters';
+import {
+  PersonalCategorySelect,
+  PersonalEmployeeFilter,
+  PersonalSearchField,
+  PersonalSortSelect,
+} from '@/components/personal/PersonalFilters';
+import { PERSONAL_SORT_LABEL, sortPersonalRows, type PersonalSortBy } from '@/lib/utils/personalSort';
 import { matchesPersonalFilter, type CategoryFilter } from '@/lib/utils/personalFilter';
 import { usePersonalAttendance } from '@/hooks/usePersonalAttendance';
 import { useTablePagination } from '@/hooks/useTablePagination';
@@ -59,6 +65,7 @@ export const PersonalOvertimeReport = () => {
   const [to, setTo] = useState(now.date);
   const { personal, records, absenceAfterMin, loading, refreshing, reload } = usePersonalAttendance(from, to);
   const [view, setView] = useState<'adicionales' | 'reales'>('adicionales');
+  const [sortBy, setSortBy] = useState<PersonalSortBy>('nombre');
   const [talleres, setTalleres] = useState<PersonalTallerRecord[]>([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<CategoryFilter>('all');
@@ -82,7 +89,7 @@ export const PersonalOvertimeReport = () => {
         records,
         talleres,
         now.date,
-      ).sort((a, b) => b.totalMin - a.totalMin || a.personal.fullName.localeCompare(b.personal.fullName)),
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [personal, records, talleres, search, category, employeeId],
   );
@@ -138,16 +145,14 @@ export const PersonalOvertimeReport = () => {
     [netById],
   );
 
+  // Orden elegido por el usuario: se aplica a pantalla, PDF y Excel.
+  // "Más/Menos horas" usa el total adicional, o las reales en la vista Reales.
   const rows = useMemo(
     () =>
-      view === 'reales'
-        ? [...summary].sort(
-            (a, b) =>
-              (netById.get(b.personal.id)?.realMin ?? 0) - (netById.get(a.personal.id)?.realMin ?? 0) ||
-              a.personal.fullName.localeCompare(b.personal.fullName),
-          )
-        : summary,
-    [summary, netById, view],
+      sortPersonalRows(summary, sortBy, (x) =>
+        view === 'reales' ? (netById.get(x.personal.id)?.realMin ?? 0) : x.totalMin,
+      ),
+    [summary, netById, view, sortBy],
   );
 
   const { page, pageSize, totalPages, goToPage, nextPage, prevPage, changePageSize, resetPage } =
@@ -155,7 +160,7 @@ export const PersonalOvertimeReport = () => {
 
   useEffect(() => {
     resetPage();
-  }, [search, category, employeeId, from, to, view]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, category, employeeId, from, to, view, sortBy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pageRows = rows.slice((page - 1) * pageSize, page * pageSize);
   const employeeName = employeeId !== null ? personal.find((p) => p.id === employeeId)?.fullName : null;
@@ -165,6 +170,7 @@ export const PersonalOvertimeReport = () => {
     employeeName,
     search.trim() && `Búsqueda: ${search.trim()}`,
     view === 'reales' && 'Reales: descontando lo no justificado',
+    `Orden: ${PERSONAL_SORT_LABEL[sortBy]}`,
   ]);
   const netOf = (id: number): NetOvertimeSummary =>
     netById.get(id) ?? { personal: summary[0].personal, overtimeMin: 0, lateMin: 0, absenceMin: 0, earlyMin: 0, discountMin: 0, realMin: 0 };
@@ -243,7 +249,7 @@ export const PersonalOvertimeReport = () => {
         { header: 'Día sin horario', dataKey: 'dia', width: 28, align: 'center' },
         { header: 'Total adicional', dataKey: 'total', width: 28, align: 'center' },
       ],
-      summary.map(rowFor),
+      rows.map(rowFor),
       { fontSize: 8 },
     );
     doc.drawParagraph(
@@ -261,7 +267,7 @@ export const PersonalOvertimeReport = () => {
         'Horas adicionales — resumen',
         subtitle,
         ['Empleado', 'Categoría', 'Salida tarde', 'Taller', 'Día sin horario', 'Total adicional', 'Total (min)', 'Días sin marcar salida', 'Días sin hora de salida'],
-        summary.map((s) => [...Object.values(rowFor(s)), s.totalMin, s.missingDepartureDays, s.daysWithoutExit]),
+        rows.map((s) => [...Object.values(rowFor(s)), s.totalMin, s.missingDepartureDays, s.daysWithoutExit]),
       );
       await addDataSheet(
         wb,
@@ -269,7 +275,7 @@ export const PersonalOvertimeReport = () => {
         'Horas adicionales — detalle por día',
         subtitle,
         ['Fecha', 'Empleado', 'Motivo', 'Detalle', 'Tiempo', 'Minutos'],
-        summary.flatMap((s) =>
+        rows.flatMap((s) =>
           s.items.map((i) => [formatDate(i.date), s.personal.fullName, i.kind, i.detail, formatMinutes(i.minutes), i.minutes]),
         ),
       );
@@ -340,7 +346,7 @@ export const PersonalOvertimeReport = () => {
       </div>
       )}
 
-      <StaffToolbar title="Filtros" description="Rango, nombre o categoría">
+      <StaffToolbar title="Filtros" description="Rango, nombre, categoría y orden del reporte">
         <div className="space-y-2">
           <Label htmlFor="pot-from">Desde</Label>
           <Input id="pot-from" type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value || from)} />
@@ -352,6 +358,7 @@ export const PersonalOvertimeReport = () => {
         <PersonalSearchField id="pot-search" value={search} onChange={setSearch} />
         <PersonalEmployeeFilter employees={personal} value={employeeId} onChange={setEmployeeId} />
         <PersonalCategorySelect value={category} onChange={setCategory} />
+        <PersonalSortSelect value={sortBy} onChange={setSortBy} />
         <div className="flex items-end">
           <Button
             variant="outline"

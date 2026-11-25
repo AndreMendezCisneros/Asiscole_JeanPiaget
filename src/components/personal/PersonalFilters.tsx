@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PERSONAL_CATEGORIAS } from '@/types/personal';
 import type { CategoryFilter } from '@/lib/utils/personalFilter';
+import { PERSONAL_SORT_LABEL, type PersonalSortBy } from '@/lib/utils/personalSort';
 
 interface SearchFieldProps {
   id: string;
@@ -141,3 +142,27 @@ export const PersonalEmployeeFilter = ({ employees, value, onChange }: EmployeeF
     </div>
   );
 };
+
+interface SortSelectProps {
+  value: PersonalSortBy;
+  onChange: (value: PersonalSortBy) => void;
+}
+
+/** Orden del reporte: se aplica a la tabla, al PDF y al Excel. */
+export const PersonalSortSelect = ({ value, onChange }: SortSelectProps) => (
+  <div className="space-y-2">
+    <Label>Ordenar por</Label>
+    <Select value={value} onValueChange={(v) => onChange(v as PersonalSortBy)}>
+      <SelectTrigger aria-label="Ordenar por">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {(Object.keys(PERSONAL_SORT_LABEL) as PersonalSortBy[]).map((k) => (
+          <SelectItem key={k} value={k}>
+            {PERSONAL_SORT_LABEL[k]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
+);

@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Eye, Printer, Camera, FileSpreadsheet, FileText, AlertCircle, CheckCircle2, Sparkles, Loader2, Check, X } from 'lucide-react';
+import { Search, Eye, Pencil, Printer, Camera, FileSpreadsheet, FileText, AlertCircle, CheckCircle2, Sparkles, Loader2, Check, X } from 'lucide-react';
 import {
   StaffKpiStat,
   StaffToolbar,
@@ -47,6 +47,7 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useTablePagination } from '@/hooks/useTablePagination';
 import { TABLE_PAGE_SIZE } from '@/lib/constants/tablePagination';
 import { incidentsService, evidenceService, authService } from '@/lib/services';
+import { EditIncidentDialog } from '@/components/incidents/EditIncidentDialog';
 import { revisadoAppEstado, type RevisadoAppEstado } from '@/lib/utils/revisadoAppEstado';
 import { REINCIDENCE_LEVELS } from '@/lib/utils/reincidenceUtils';
 import { getLimaTodayDate } from '@/lib/utils/limaDateTime';
@@ -96,6 +97,8 @@ export const IncidentsList = () => {
   const [justificationReason, setJustificationReason] = useState('');
   const [justifying, setJustifying] = useState(false);
   const [printingId, setPrintingId] = useState<number | null>(null);
+  const [editingIncident, setEditingIncident] = useState<Incident | null>(null);
+  const isAdmin = authService.getCurrentUser()?.role === 'Admin';
 
   const invalidateIncidents = useInvalidateIncidents();
 
@@ -775,6 +778,18 @@ export const IncidentsList = () => {
                               Justificar
                             </Button>
                           ) : null}
+                          {isAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="hover:bg-primary/10 hover:text-primary"
+                              onClick={() => setEditingIncident(incident)}
+                              aria-label={`Editar incidencia ${incident.id}`}
+                              title="Editar incidencia"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -969,7 +984,20 @@ export const IncidentsList = () => {
                 </p>
               </div>
 
-              <DialogFooter className="pt-2">
+              <DialogFooter className="gap-2 pt-2">
+                {isAdmin && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setEditingIncident(detailIncident);
+                      setDetailOpen(false);
+                    }}
+                  >
+                    <Pencil className="w-4 h-4 mr-2" />
+                    Editar
+                  </Button>
+                )}
                 <Button
                   type="button"
                   onClick={() => void handlePrintPdf(detailIncident)}
@@ -992,6 +1020,37 @@ export const IncidentsList = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {editingIncident && (
+        <EditIncidentDialog
+          open={editingIncident !== null}
+          onOpenChange={(open) => !open && setEditingIncident(null)}
+          subtitle={`${editingIncident.student?.fullName ?? 'Alumno'} · ${format(new Date(editingIncident.registeredAt), "dd/MM/yyyy HH:mm")}`}
+          faultId={editingIncident.faultTypeId}
+          observation={editingIncident.observations ?? ''}
+          loadEvidences={() => evidenceService.getByIncident(editingIncident.id)}
+          onUpload={async (file) => {
+            const user = authService.getCurrentUser();
+            if (!user) return { error: 'Sesión expirada' };
+            const { error } = await evidenceService.upload(editingIncident.id, file, user.id);
+            return { error };
+          }}
+          onDeleteEvidence={async (evidenceId) => {
+            const { error } = await evidenceService.delete(evidenceId);
+            if (error) return { error };
+            const sync = await incidentsService.syncEvidenceCount(editingIncident.id);
+            return { error: sync.error };
+          }}
+          onSave={async ({ faultId, observation }) => {
+            const { error } = await incidentsService.update(editingIncident.id, {
+              faultId,
+              observations: observation,
+            });
+            return { error };
+          }}
+          onChanged={() => invalidateIncidents()}
+        />
+      )}
 
       {/* Justificar */}
       <Dialog open={justifyOpen} onOpenChange={setJustifyOpen}>

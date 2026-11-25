@@ -36,10 +36,10 @@ const STATUS_SHORT: Record<string, string> = {
   'A tiempo': 'A',
   Tarde: 'T',
   'Tarde justificada': 'TJ',
-  Falta: 'F',
-  'Falta justificada': 'FJ',
+  Falta: 'I',
+  'Falta justificada': 'IJ',
   'Fuera de horario': 'FH',
-  'Sin llegada': 'F',
+  'Sin llegada': 'I',
   Pendiente: '',
   'No le toca': '-',
 };
@@ -142,8 +142,8 @@ export const PersonalAttendanceReport = () => {
         { header: 'A tiempo', dataKey: 'atiempo', width: 16, align: 'center' },
         { header: 'Tarde', dataKey: 'tarde', width: 14, align: 'center' },
         { header: 'TJ', dataKey: 'tj', width: 12, align: 'center' },
-        { header: 'Faltas', dataKey: 'faltas', width: 14, align: 'center' },
-        { header: 'FJ', dataKey: 'fj', width: 12, align: 'center' },
+        { header: 'Inasist.', dataKey: 'faltas', width: 16, align: 'center' },
+        { header: 'IJ', dataKey: 'fj', width: 12, align: 'center' },
         { header: 'Horas no trabajadas', dataKey: 'noTrabajadas', width: 24, align: 'center' },
         { header: 'Horas adicionales', dataKey: 'adicionales', width: 24, align: 'center' },
         { header: 'Puntualidad', dataKey: 'puntualidad', width: 22, align: 'center' },
@@ -151,7 +151,7 @@ export const PersonalAttendanceReport = () => {
       summary.map(summaryRow),
       { fontSize: 7.5 },
     );
-    doc.drawParagraph('TJ = tarde justificada · FJ = falta justificada · Horas no trabajadas = tardanzas + inasistencias + salidas anticipadas (incluye justificadas) · Horas adicionales = salida después de hora + taller + día sin horario');
+    doc.drawParagraph('TJ = tarde justificada · I = inasistencia · IJ = inasistencia justificada · Horas no trabajadas = tardanzas + inasistencias + salidas anticipadas (incluye justificadas) · Horas adicionales = salida después de hora + taller + día sin horario');
     await doc.finalize(`reporte-asistencia-personal-${from}-a-${to}.pdf`);
   };
 
@@ -163,7 +163,7 @@ export const PersonalAttendanceReport = () => {
         'Resumen',
         'Asistencia del personal — resumen',
         subtitle,
-        ['Empleado', 'Cargo', 'Días programados', 'A tiempo', 'Tarde', 'Tarde justif.', 'Faltas', 'Falta justif.', 'Horas no trabajadas', 'Horas adicionales', 'Puntualidad'],
+        ['Empleado', 'Cargo', 'Días programados', 'A tiempo', 'Tarde', 'Tarde justif.', 'Inasistencias', 'Inasistencias justif.', 'Horas no trabajadas', 'Horas adicionales', 'Puntualidad'],
         summary.map((s) => Object.values(summaryRow(s))),
       );
       const days = dateKeysBetween(from, to);
@@ -172,7 +172,7 @@ export const PersonalAttendanceReport = () => {
         wb,
         'Detalle diario',
         'Asistencia del personal — detalle por día',
-        `${subtitle} · A, T, TJ, F, FJ, FH; - = no le toca`,
+        `${subtitle} · A, T, TJ, I, IJ, FH; - = no le toca`,
         ['Empleado', ...days.map((d) => d.slice(8, 10) + '/' + d.slice(5, 7))],
         summary.map((s) => [
           s.personal.fullName,
@@ -239,7 +239,7 @@ export const PersonalAttendanceReport = () => {
       <StaffDataPanel>
         <StaffDataPanelHeader
           title={`Resumen por empleado (${summary.length})`}
-          description="Faltas = inasistencias del cierre + días sin registro. Puntualidad = a tiempo / llegadas."
+          description="Inasistencias = las del cierre automático + días sin registro. Puntualidad = a tiempo / llegadas."
         />
         <div className="p-4 pt-0 sm:p-5 sm:pt-0">
           {summary.length === 0 ? (
@@ -255,8 +255,8 @@ export const PersonalAttendanceReport = () => {
                       <TableHead className="text-center">A tiempo</TableHead>
                       <TableHead className="text-center">Tarde</TableHead>
                       <TableHead className="text-center">TJ</TableHead>
-                      <TableHead className="text-center">Faltas</TableHead>
-                      <TableHead className="text-center">FJ</TableHead>
+                      <TableHead className="text-center">Inasistencias</TableHead>
+                      <TableHead className="text-center">IJ</TableHead>
                       <TableHead className="text-center">Horas no trabajadas</TableHead>
                       <TableHead className="text-center">Horas adicionales</TableHead>
                       <TableHead className="text-center">Puntualidad</TableHead>

@@ -96,22 +96,27 @@ export class PdfReportDocument {
     this.pdf.setTextColor(...PDF_THEME.text);
   }
 
-  drawSectionTitle(title: string): void {
-    this.ensureSpace(14);
+  drawSectionTitle(title: string, options?: { compact?: boolean }): void {
+    const compact = options?.compact ?? false;
+    const barH = compact ? 6 : 8;
+    const lineY = compact ? 7.5 : 10;
+    const advance = compact ? 10 : 14;
+    // Con título compacto se reserva algo de espacio para que no quede solo al pie.
+    this.ensureSpace(compact ? 22 : 14);
     const [r, g, b] = PDF_THEME.primary;
     this.pdf.setFillColor(r, g, b);
-    this.pdf.rect(this.margin, this.y, 3, 8, 'F');
+    this.pdf.rect(this.margin, this.y, 3, barH, 'F');
 
     this.pdf.setFont('helvetica', 'bold');
-    this.pdf.setFontSize(11);
+    this.pdf.setFontSize(compact ? 10 : 11);
     this.pdf.setTextColor(...PDF_THEME.text);
-    this.pdf.text(title, this.margin + 6, this.y + 6);
+    this.pdf.text(title, this.margin + 6, this.y + (compact ? 4.6 : 6));
 
     this.pdf.setDrawColor(...PDF_THEME.border);
     this.pdf.setLineWidth(0.2);
-    this.pdf.line(this.margin, this.y + 10, this.pageWidth - this.margin, this.y + 10);
+    this.pdf.line(this.margin, this.y + lineY, this.pageWidth - this.margin, this.y + lineY);
 
-    this.y += 14;
+    this.y += advance;
   }
 
   drawParagraph(text: string, fontSize = 9): void {
@@ -125,9 +130,9 @@ export class PdfReportDocument {
     this.pdf.setTextColor(...PDF_THEME.text);
   }
 
-  drawKpiCards(cards: KpiCard[]): void {
+  drawKpiCards(cards: KpiCard[], options?: { height?: number }): void {
     if (cards.length === 0) return;
-    const cardH = 22;
+    const cardH = options?.height ?? 22;
     this.ensureSpace(cardH + 4);
 
     const gap = 4;
@@ -154,15 +159,15 @@ export class PdfReportDocument {
       this.pdf.setFontSize(7.5);
       this.pdf.setTextColor(...PDF_THEME.textMuted);
       const labelLines = this.pdf.splitTextToSize(card.label.toUpperCase(), cardW - 4);
-      this.pdf.text(labelLines, x + cardW / 2, this.y + 7, { align: 'center' });
+      this.pdf.text(labelLines, x + cardW / 2, this.y + (cardH < 20 ? 5.5 : 7), { align: 'center' });
 
       this.pdf.setFont('helvetica', 'bold');
-      this.pdf.setFontSize(14);
+      this.pdf.setFontSize(cardH < 20 ? 12 : 14);
       this.pdf.setTextColor(...colors.fg);
-      this.pdf.text(String(card.value), x + cardW / 2, this.y + 17, { align: 'center' });
+      this.pdf.text(String(card.value), x + cardW / 2, this.y + cardH - (cardH < 20 ? 3.5 : 5), { align: 'center' });
     });
 
-    this.y += cardH + 8;
+    this.y += cardH + (cardH < 20 ? 5 : 8);
     this.pdf.setTextColor(...PDF_THEME.text);
   }
 
@@ -192,15 +197,65 @@ export class PdfReportDocument {
     this.y += 4;
   }
 
+  /**
+   * Datos clave en varias columnas (más compacto que drawKeyValueList).
+   * Cada celda: etiqueta a la izquierda y valor en negrita a la derecha.
+   */
+  drawKeyValueGrid(
+    items: { label: string; value: string }[],
+    options?: { columns?: number; fontSize?: number; rowHeight?: number }
+  ): void {
+    if (items.length === 0) return;
+    const cols = Math.max(1, options?.columns ?? 2);
+    const fontSize = options?.fontSize ?? 8;
+    const rowH = options?.rowHeight ?? 5.5;
+    const gap = 4;
+    const colW = (this.contentWidth - gap * (cols - 1)) / cols;
+    const rows = Math.ceil(items.length / cols);
+    this.ensureSpace(Math.min(rows * rowH + 3, 60));
+
+    for (let r = 0; r < rows; r++) {
+      this.ensureSpace(rowH);
+      for (let c = 0; c < cols; c++) {
+        const item = items[r * cols + c];
+        if (!item) continue;
+        const x = this.margin + c * (colW + gap);
+        if (r % 2 === 0) {
+          this.pdf.setFillColor(248, 250, 252);
+          this.pdf.rect(x, this.y - 0.8, colW, rowH, 'F');
+        }
+        this.pdf.setFontSize(fontSize);
+        this.pdf.setFont('helvetica', 'bold');
+        const value = String(item.value);
+        const valueW = this.pdf.getTextWidth(value);
+        this.pdf.setFont('helvetica', 'normal');
+        this.pdf.setTextColor(...PDF_THEME.textMuted);
+        const label = this.pdf.splitTextToSize(item.label, Math.max(colW - valueW - 6, 20))[0] ?? '';
+        this.pdf.text(label, x + 1.5, this.y + rowH * 0.62);
+        this.pdf.setFont('helvetica', 'bold');
+        this.pdf.setTextColor(...PDF_THEME.text);
+        this.pdf.text(value, x + colW - 1.5, this.y + rowH * 0.62, { align: 'right' });
+      }
+      this.y += rowH;
+    }
+    this.y += 3;
+  }
+
   drawTable(
     columns: PdfTableColumn[],
     rows: Record<string, string | number>[],
-    options?: { fontSize?: number; maxRows?: number }
+    options?: { fontSize?: number; maxRows?: number; compact?: boolean }
   ): void {
     if (rows.length === 0) {
+      if (options?.compact) {
+        this.drawParagraph('Sin registros.', 7.5);
+        return;
+      }
       this.drawParagraph('Sin registros para mostrar.');
       return;
     }
+    const compact = options?.compact ?? false;
+    const baseFont = options?.fontSize ?? (compact ? 7 : 8);
 
     const limited = options?.maxRows ? rows.slice(0, options.maxRows) : rows;
     const head = [columns.map((c) => c.header)];
@@ -225,8 +280,10 @@ export class PdfReportDocument {
       theme: 'plain',
       styles: {
         font: 'helvetica',
-        fontSize: options?.fontSize ?? 8,
-        cellPadding: { top: 2.5, right: 3, bottom: 2.5, left: 3 },
+        fontSize: baseFont,
+        cellPadding: compact
+          ? { top: 1.1, right: 2, bottom: 1.1, left: 2 }
+          : { top: 2.5, right: 3, bottom: 2.5, left: 3 },
         textColor: PDF_THEME.text,
         lineColor: PDF_THEME.border,
         lineWidth: 0.1,
@@ -235,7 +292,7 @@ export class PdfReportDocument {
         fillColor: PDF_THEME.primary,
         textColor: PDF_THEME.white,
         fontStyle: 'bold',
-        fontSize: (options?.fontSize ?? 8) + 0.5,
+        fontSize: baseFont + 0.5,
       },
       alternateRowStyles: {
         fillColor: [248, 250, 252],
@@ -248,7 +305,7 @@ export class PdfReportDocument {
 
     const finalY = (this.pdf as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
       ?.finalY;
-    this.y = (finalY ?? this.y) + 8;
+    this.y = (finalY ?? this.y) + (compact ? 5 : 8);
   }
 
   ensureSpace(neededMm: number): void {

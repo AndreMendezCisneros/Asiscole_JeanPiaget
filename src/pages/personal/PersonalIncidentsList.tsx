@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { AlertTriangle, CheckCircle2, FileSpreadsheet, FileText, Loader2, Printer, RefreshCw, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, FileSpreadsheet, FileText, Loader2, Pencil, Printer, RefreshCw, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -29,7 +29,14 @@ import { PageLoader } from '@/components/ui/page-loader';
 import { PersonalCategorySelect, PersonalEmployeeFilter, PersonalSearchField } from '@/components/personal/PersonalFilters';
 import { type CategoryFilter } from '@/lib/utils/personalFilter';
 import { authService } from '@/lib/services';
-import { personalIncidentsService, type PersonalIncident } from '@/lib/services/personalIncidentsService';
+import {
+  joinAutoObservation,
+  personalFaultLabel,
+  personalIncidentsService,
+  splitAutoObservation,
+  type PersonalIncident,
+} from '@/lib/services/personalIncidentsService';
+import { EditIncidentDialog } from '@/components/incidents/EditIncidentDialog';
 import { useTablePagination } from '@/hooks/useTablePagination';
 import { TABLE_PAGE_SIZE } from '@/lib/constants/tablePagination';
 import { getLimaTodayDate } from '@/lib/utils/limaDateTime';
@@ -68,6 +75,9 @@ export const PersonalIncidentsList = () => {
   const [detailEvidences, setDetailEvidences] = useState<IncidentEvidence[]>([]);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [printingId, setPrintingId] = useState<number | null>(null);
+  const [editing, setEditing] = useState<PersonalIncident | null>(null);
+  const isRrhh = authService.getCurrentUser()?.role === 'RRHH';
+  const editObs = useMemo(() => splitAutoObservation(editing?.observations ?? null), [editing]);
 
   const load = useCallback(
     async (silent = false) => {
@@ -343,6 +353,17 @@ export const PersonalIncidentsList = () => {
                                 </Button>
                               </>
                             )}
+                            {isRrhh && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setEditing(i)}
+                                title="Editar incidencia"
+                                aria-label={`Editar incidencia ${i.id}`}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"
@@ -467,7 +488,20 @@ export const PersonalIncidentsList = () => {
                   ))}
                 </div>
               )}
-              <DialogFooter className="pt-2">
+              <DialogFooter className="gap-2 pt-2">
+                {isRrhh && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setEditing(detail);
+                      setDetail(null);
+                    }}
+                  >
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Editar
+                  </Button>
+                )}
                 <Button type="button" onClick={() => void handlePrintPdf(detail)} disabled={printingId === detail.id}>
                   {printingId === detail.id ? (
                     <>
@@ -486,6 +520,37 @@ export const PersonalIncidentsList = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {editing && (
+        <EditIncidentDialog
+          open={editing !== null}
+          onOpenChange={(open) => !open && setEditing(null)}
+          subtitle={`${editing.personalName} · ${formatLimaDateTime(editing.registeredAt)}`}
+          faultId={editing.faultId}
+          observation={editObs.note}
+          fixedPrefix={editObs.prefix || undefined}
+          faultLabel={personalFaultLabel}
+          loadEvidences={() => personalIncidentsService.listEvidences(editing.id)}
+          onUpload={async (file) => {
+            const user = authService.getCurrentUser();
+            if (!user) return { error: 'Sesión expirada' };
+            const { error } = await personalIncidentsService.uploadEvidence(editing.id, file, user.id);
+            return { error };
+          }}
+          onDeleteEvidence={async (evidenceId) => {
+            const { error } = await personalIncidentsService.deleteEvidence(evidenceId);
+            return { error };
+          }}
+          onSave={async ({ faultId, observation }) => {
+            const { error } = await personalIncidentsService.update(editing.id, {
+              faultId,
+              observations: joinAutoObservation(editObs.prefix, observation),
+            });
+            return { error };
+          }}
+          onChanged={() => void load(true)}
+        />
+      )}
     </div>
   );
 };

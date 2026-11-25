@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../supabaseClient', () => ({ supabase: {} }));
 
-import { resolveRegisteredByName } from './personalIncidentsService';
+import {
+  joinAutoObservation,
+  personalFaultLabel,
+  resolveRegisteredByName,
+  splitAutoObservation,
+} from './personalIncidentsService';
 
 describe('resolveRegisteredByName', () => {
   it('usa el nombre guardado al registrar (RRHH no lee usuarios)', () => {
@@ -33,5 +38,35 @@ describe('resolveRegisteredByName', () => {
 
   it('devuelve null si no hay dato', () => {
     expect(resolveRegisteredByName({ registrado_por_nombre: '  ', usuarios_registro: null, observaciones: null })).toBeNull();
+  });
+});
+
+describe('personalFaultLabel', () => {
+  it('muestra «Falta» como «Inasistencia» y deja las demás', () => {
+    expect(personalFaultLabel('Falta')).toBe('Inasistencia');
+    expect(personalFaultLabel(' falta ')).toBe('Inasistencia');
+    expect(personalFaultLabel('Falta de respeto')).toBe('Falta de respeto');
+  });
+});
+
+describe('split/joinAutoObservation', () => {
+  const auto = 'Generada automáticamente: sin registro de entrada 120 min después de su hora de entrada.';
+
+  it('observación manual: todo es editable', () => {
+    expect(splitAutoObservation('Llegó tarde')).toEqual({ prefix: '', note: 'Llegó tarde' });
+    expect(joinAutoObservation('', '  ')).toBeNull();
+    expect(joinAutoObservation('', ' Nota ')).toBe('Nota');
+  });
+
+  it('automática: el prefijo se conserva y solo se edita la nota', () => {
+    expect(splitAutoObservation(auto)).toEqual({ prefix: auto, note: '' });
+    const withNote = `${auto} Avisó por teléfono`;
+    expect(splitAutoObservation(withNote)).toEqual({ prefix: auto, note: 'Avisó por teléfono' });
+    expect(joinAutoObservation(auto, 'Otra nota')).toBe(`${auto} Otra nota`);
+    expect(joinAutoObservation(auto, '')).toBe(auto);
+  });
+
+  it('null queda vacío', () => {
+    expect(splitAutoObservation(null)).toEqual({ prefix: '', note: '' });
   });
 });

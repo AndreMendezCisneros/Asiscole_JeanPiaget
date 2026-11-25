@@ -762,6 +762,42 @@ export const incidentsService = {
   },
 
   /**
+   * Editar falta y observación de una incidencia (Admin). No reenvía el aviso a la app
+   * (asis_trg_incidencia es solo AFTER INSERT); la auditoría registra el cambio.
+   */
+  async update(
+    id: number,
+    input: { faultId: number; observations: string | null },
+  ): Promise<{ success: boolean; error: string | null }> {
+    const { data, error } = await supabase
+      .from('incidencias')
+      .update({ id_falta: input.faultId, observaciones: input.observations?.trim() || null })
+      .eq('id_incidencia', id)
+      .select('id_incidencia');
+    if (error) return { success: false, error: error.message };
+    if (!data?.length) return { success: false, error: 'No se pudo editar la incidencia (sin permiso o ya no existe).' };
+    return { success: true, error: null };
+  },
+
+  /**
+   * Recalcula cantidad_fotos / estado_evidencia tras quitar o agregar fotos al editar.
+   */
+  async syncEvidenceCount(id: number): Promise<{ success: boolean; error: string | null }> {
+    const { count, error: countError } = await supabase
+      .from('evidencias_fotograficas')
+      .select('id_evidencia', { count: 'exact', head: true })
+      .eq('id_incidencia', id);
+    if (countError) return { success: false, error: countError.message };
+    const n = count ?? 0;
+    const { error } = await supabase
+      .from('incidencias')
+      .update({ cantidad_fotos: n, estado_evidencia: n > 0 ? 'Con evidencia' : 'Sin evidencia' })
+      .eq('id_incidencia', id);
+    if (error) return { success: false, error: error.message };
+    return { success: true, error: null };
+  },
+
+  /**
    * Registrar impresión de incidencia
    */
   async registerPrint(id: number): Promise<{ success: boolean; error: string | null }> {

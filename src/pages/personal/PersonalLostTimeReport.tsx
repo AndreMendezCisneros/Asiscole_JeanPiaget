@@ -26,7 +26,13 @@ import {
 } from '@/components/staff';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { PageLoader } from '@/components/ui/page-loader';
-import { PersonalCategorySelect, PersonalEmployeeFilter, PersonalSearchField } from '@/components/personal/PersonalFilters';
+import {
+  PersonalCategorySelect,
+  PersonalEmployeeFilter,
+  PersonalSearchField,
+  PersonalSortSelect,
+} from '@/components/personal/PersonalFilters';
+import { PERSONAL_SORT_LABEL, sortPersonalRows, type PersonalSortBy } from '@/lib/utils/personalSort';
 import { matchesPersonalFilter, type CategoryFilter } from '@/lib/utils/personalFilter';
 import { usePersonalAttendance } from '@/hooks/usePersonalAttendance';
 import { useTablePagination } from '@/hooks/useTablePagination';
@@ -63,9 +69,10 @@ export const PersonalLostTimeReport = () => {
   const [category, setCategory] = useState<CategoryFilter>('all');
   const [employeeId, setEmployeeId] = useState<number | null>(null);
   const [view, setView] = useState<LostTimeView>('total');
+  const [sortBy, setSortBy] = useState<PersonalSortBy>('nombre');
   const [expanded, setExpanded] = useState<number | null>(null);
 
-  const summary = useMemo(
+  const computed = useMemo(
     () =>
       computeLostTime(
         personal.filter((p) => matchesPersonalFilter(p, search, category, employeeId)),
@@ -75,10 +82,17 @@ export const PersonalLostTimeReport = () => {
         now.date,
         now.time,
         absenceAfterMin,
-      ).sort((a, b) => lostFor(b, view) - lostFor(a, view) || a.personal.fullName.localeCompare(b.personal.fullName)),
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [personal, records, from, to, search, category, employeeId, view, absenceAfterMin],
+    [personal, records, from, to, search, category, employeeId, absenceAfterMin],
   );
+
+  // Orden elegido (pantalla, PDF y Excel); "más/menos horas" según la vista (total o descontando justificadas).
+  const sorted = useMemo(
+    () => sortPersonalRows(computed, sortBy, (s) => lostFor(s, view)),
+    [computed, sortBy, view],
+  );
+  const summary = sorted;
 
   const totals = useMemo(
     () =>
@@ -102,12 +116,13 @@ export const PersonalLostTimeReport = () => {
 
   useEffect(() => {
     resetPage();
-  }, [search, category, employeeId, from, to, view]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, category, employeeId, from, to, view, sortBy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pageRows = summary.slice((page - 1) * pageSize, page * pageSize);
   const subtitle = buildFilterSubtitle([`Del ${from} al ${to}`, category !== 'all' && category, VIEW_LABEL[view],
     employeeId !== null && personal.find((p) => p.id === employeeId)?.fullName,
     search.trim() && `Búsqueda: ${search.trim()}`,
+    `Orden: ${PERSONAL_SORT_LABEL[sortBy]}`,
   ]);
 
   const rowFor = (s: LostTimeSummary) => ({
@@ -236,7 +251,7 @@ export const PersonalLostTimeReport = () => {
         />
       </div>
 
-      <StaffToolbar title="Filtros" description="Rango, nombre o categoría">
+      <StaffToolbar title="Filtros" description="Rango, nombre, categoría y orden del reporte">
         <div className="space-y-2">
           <Label htmlFor="plt-from">Desde</Label>
           <Input id="plt-from" type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value || from)} />
@@ -248,6 +263,7 @@ export const PersonalLostTimeReport = () => {
         <PersonalSearchField id="plt-search" value={search} onChange={setSearch} />
         <PersonalEmployeeFilter employees={personal} value={employeeId} onChange={setEmployeeId} />
         <PersonalCategorySelect value={category} onChange={setCategory} />
+        <PersonalSortSelect value={sortBy} onChange={setSortBy} />
         <div className="flex items-end">
           <Button variant="outline" onClick={() => void reload(true)} className="w-full" disabled={refreshing}>
             <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />

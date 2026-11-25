@@ -56,6 +56,31 @@ const SELECT = `
 
 const AUTO_PREFIX = 'Generada automáticamente';
 
+/** En Personal el ítem «Falta» del catálogo (compartido con alumnos) se muestra como «Inasistencia». */
+export function personalFaultLabel(name: string): string {
+  return name.trim().toLowerCase() === 'falta' ? 'Inasistencia' : name;
+}
+
+/**
+ * Observación de una incidencia automática: el prefijo «Generada automáticamente…»
+ * (hasta el primer punto) marca la incidencia como automática y no se edita.
+ * Devuelve { prefix, note } con la parte fija y la nota editable.
+ */
+export function splitAutoObservation(observations: string | null): { prefix: string; note: string } {
+  const text = observations ?? '';
+  if (!text.startsWith(AUTO_PREFIX)) return { prefix: '', note: text };
+  const dot = text.indexOf('.');
+  if (dot < 0) return { prefix: text, note: '' };
+  return { prefix: text.slice(0, dot + 1), note: text.slice(dot + 1).trim() };
+}
+
+/** Vuelve a unir la parte fija con la nota editada. */
+export function joinAutoObservation(prefix: string, note: string): string | null {
+  const n = note.trim();
+  if (!prefix) return n || null;
+  return n ? `${prefix} ${n}` : prefix;
+}
+
 /**
  * Quién registró la incidencia. RRHH no puede leer la tabla usuarios (RLS), por
  * eso se usa primero el nombre guardado al insertar (registrado_por_nombre).
@@ -79,7 +104,7 @@ function mapRow(row: Row): PersonalIncident {
     personalBarcode: row.personal?.codigo_barras ?? '',
     personalCategory: row.personal?.categoria ?? null,
     faultId: row.id_falta,
-    faultName: row.catalogo_faltas?.nombre_falta ?? `Falta #${row.id_falta}`,
+    faultName: personalFaultLabel(row.catalogo_faltas?.nombre_falta ?? `Falta #${row.id_falta}`),
     faultCategory: row.catalogo_faltas?.categoria ?? null,
     isSerious: Boolean(row.catalogo_faltas?.es_grave),
     registeredAt: row.fecha_hora_registro,
@@ -214,6 +239,36 @@ export const personalIncidentsService = {
       },
       error: null,
     };
+  },
+
+  /** Edita falta y observación (solo RR.HH. por RLS). */
+  async update(
+    id: number,
+    input: { faultId: number; observations: string | null },
+  ): Promise<{ success: boolean; error: string | null }> {
+    const { data, error } = await supabase
+      .from('incidencias_personal')
+      .update({ id_falta: input.faultId, observaciones: input.observations?.trim() || null })
+      .eq('id_incidencia', id)
+      .select('id_incidencia');
+    if (error) return { success: false, error: error.message };
+    if (!data?.length) return { success: false, error: 'No se pudo editar la incidencia (sin permiso o ya no existe).' };
+    return { success: true, error: null };
+  },
+
+  /** Quita una foto de evidencia (RPC solo RR.HH.) y borra el archivo si se puede. */
+  async deleteEvidence(evidenceId: number): Promise<{ success: boolean; error: string | null }> {
+    const { data, error } = await supabase.rpc('sie_eliminar_evidencia_personal', { p_id_evidencia: evidenceId });
+    if (error) return { success: false, error: error.message };
+    const ruta = (data as { ruta_archivo?: string } | null)?.ruta_archivo;
+    if (ruta) {
+      try {
+        await supabase.storage.from(EVIDENCE_BUCKET).remove([ruta]);
+      } catch {
+        // El registro ya se borró; el archivo huérfano no afecta.
+      }
+    }
+    return { success: true, error: null };
   },
 
   /** Justifica (o anula) una incidencia activa con su motivo. */

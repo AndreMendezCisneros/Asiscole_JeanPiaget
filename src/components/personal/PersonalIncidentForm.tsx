@@ -11,7 +11,7 @@ import { StaffDataPanel, StaffDataPanelHeader, StaffWorkflowSteps } from '@/comp
 import { StudentPhoto } from '@/components/shared/StudentPhoto';
 import { authService } from '@/lib/services';
 import { personalService } from '@/lib/services/personalService';
-import { personalIncidentsService } from '@/lib/services/personalIncidentsService';
+import { personalFaultLabel, personalIncidentsService } from '@/lib/services/personalIncidentsService';
 import { useFaultsQuery } from '@/hooks/queries/useFaultsQuery';
 import { formatScheduleSummary } from '@/lib/utils/personalSchedule';
 import type { Personal } from '@/types/personal';
@@ -248,7 +248,7 @@ export const PersonalIncidentForm = ({ initialPersonal = null, onDone, onCancel 
                 <SelectContent>
                   {faults.map((f) => (
                     <SelectItem key={f.id} value={String(f.id)}>
-                      {f.name} {f.severity === 'Grave' ? '· Grave' : ''} ({f.category})
+                      {personalFaultLabel(f.name)} {f.severity === 'Grave' ? '· Grave' : ''} ({f.category})
                     </SelectItem>
                   ))}
                 </SelectContent>
