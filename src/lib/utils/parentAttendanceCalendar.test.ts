@@ -69,6 +69,15 @@ describe('parentAttendanceCalendar', () => {
     expect(metrics.absent).toBe(0);
   });
 
+  it('no cuenta la inasistencia justificada como falta', () => {
+    const byDate = new Map<string, ArrivalRecord>([
+      ['2026-06-02', record('2026-06-02', 'Falta justificada')],
+      ['2026-06-03', record('2026-06-03', 'Falta')],
+    ]);
+    const metrics = computeMonthMetrics(2026, 6, byDate, '2026-06-05');
+    expect(metrics.absent).toBe(1);
+  });
+
   it('muestra llegada y salida pendiente si no hay hora_salida', () => {
     expect(formatClassAttendanceLines(record('2026-09-07', 'Tarde'))).toEqual([
       'Llegada: 8:00 a.m. (Tarde)',

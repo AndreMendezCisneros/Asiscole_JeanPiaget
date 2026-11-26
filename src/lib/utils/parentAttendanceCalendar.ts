@@ -219,7 +219,8 @@ export function computeMonthMetrics(
     const status = resolveDayStatus(key, byDate.get(key), todayKey, ctx);
     if (status === 'present') present++;
     else if (status === 'late' || status === 'late_justified') late++;
-    else if (status === 'absent' || status === 'absent_justified') absent++;
+    // La inasistencia justificada (IJ) se ve en el calendario, pero no cuenta como falta.
+    else if (status === 'absent') absent++;
   }
   return { present, late, absent };
 }
